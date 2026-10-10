@@ -77,6 +77,9 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
   // Claude Code in Cursor's terminal: the same hooks as Claude Code.
   { id: "agent_cursor", name: "Cursor", color: "#C0C4CC", category: "workspace",
     subtitle: N_("Integration"), source: "agent", support: "yes", connect: hooks },
+  // Claude Code in PhpStorm's terminal: the same hooks as Claude Code.
+  { id: "agent_phpstorm", name: "PhpStorm", color: "#B07DFF", category: "workspace",
+    subtitle: N_("Integration"), source: "agent", support: "yes", connect: hooks },
   { id: "agent_antigravity", name: "Antigravity", color: "#E879F9", category: "workspace",
     subtitle: N_("Integration"), source: "agent", support: "yes", connect: hooks },
   { id: "agent_codex", name: "Codex", color: "#2DD4BF", category: "workspace",
@@ -130,9 +133,10 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: key("stripe-api-key") },
   { id: "integration_music", name: "Apple Music", color: "#FA2D48", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "no", connect: none },
-  // Spotify's MPRIS interface on the session bus (src-tauri/src/spotify.rs).
+  // Any media player's MPRIS interface on the session bus (src-tauri/src/spotify.rs):
+  // Spotify, a browser, VLC… The id stays the one it always had.
   // Windows has nothing to read it from yet.
-  { id: "integration_spotify", name: "Spotify", color: "#1DB954", category: "service",
+  { id: "integration_spotify", name: "Media", color: "#1DB954", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "linux", connect: none },
 ];
 
@@ -173,11 +177,17 @@ export function mainPillChoices(os: HostOs = HOST_OS): PillDefinition[] {
   return availablePills(os).filter((p) => p.category === "workspace" && p.support !== "soon");
 }
 
+/** The editor a pill's sessions open in, when it is not VS Code. */
+export function editorOf(id: string | undefined): string | undefined {
+  return id === "agent_phpstorm" ? "phpstorm" : undefined;
+}
+
 /** PillDefinition.sessionSubtitle — next to the name in a live session's card. */
 export function sessionSubtitle(id: string): string {
   switch (id) {
     case "integration_claude": return "Claude Code";
     case "agent_cursor": return "Cursor";
+    case "agent_phpstorm": return "PhpStorm";
     case "agent_codex": return "Codex";
     case "agent_hermes": return "Hermes";
     case "agent_claude-desktop": return "Claude Desktop";

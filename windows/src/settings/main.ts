@@ -10,6 +10,7 @@ import {
   recordPress, type Binding,
 } from "../core/shortcuts";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
+import { HOST_OS } from "../core/pills";
 import { SOUND_NAMES } from "../core/sound";
 import {
   MAX_DECLARED, PILL_CATEGORIES, availablePills, chooseMainPill, isComingSoon, mainPillChoices,
@@ -774,7 +775,7 @@ const INTEGRATIONS: IntegrationDef[] = [
   { id: "integration_calcom", name: "Cal.com", color: "#C9956A",
     fields: [{ key: "calcom-api-key", label: N_("API key"), placeholder: "cal_…", secret: true }] },
   // Nothing to enter: Spotify is read over D-Bus (Linux only, see core/pills.ts).
-  { id: "integration_spotify", name: "Spotify", color: "#1DB954", fields: [] },
+  { id: "integration_spotify", name: "Media", color: "#1DB954", fields: [] },
 ];
 
 const MAX_ACTIVE = MAX_DECLARED;
@@ -949,6 +950,18 @@ function generalSection(): HTMLElement {
       toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
+    ...(HOST_OS === "linux" ? [
+      h("div", { class: "row" },
+        h("label", { text: t("Dance to the beat") }),
+        toggle(settings.beatSync, (v) => { settings.beatSync = v; void save(); }),
+      ),
+      h("div", { class: "row" },
+        h("label", { text: t("Chat memory") }),
+        toggle(settings.chatMemory, (v) => { settings.chatMemory = v; void save(); }),
+      ),
+      h("div", { class: "hint", text: t("The Claude Code chat shares your memory notes (the Obsidian vault's .agent/memory folder, or COUCOU_MEMORY_DIR): it reads them and can save new ones there, nowhere else.") }),
+      h("div", { class: "hint", text: t("While Spotify plays, Coucou listens to your speakers' output (not the microphone) to find the beat, so Mochi dances in time. Nothing is recorded or sent anywhere. Needs PipeWire.") }),
+    ] : []),
     h("div", { class: "row" },
       h("label", { text: t("Auto-close") }),
       autoClose,

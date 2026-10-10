@@ -3,6 +3,7 @@
 
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
+import { resetBeat } from "../mochi/beat";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -12,6 +13,7 @@ import {
 } from "../core/layout";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
+import { editorOf } from "../core/pills";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
@@ -173,7 +175,7 @@ export class Island {
         const task = State.focusTask;
         // Sessions from the Claude desktop app live there, not in a terminal.
         if (task?.id === CLAUDE_DESKTOP_ID) void Bridge.openClaudeDesktop();
-        else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null);
+        else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null, editorOf(task?.id));
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
       openTarget: () => {
@@ -189,7 +191,7 @@ export class Island {
         };
         if (task.id === CLAUDE_DESKTOP_ID) void Bridge.openClaudeDesktop();
         else if (task.id === "integration_claude" || task.sessionId) {
-          void Bridge.openSession(task.sessionId ?? null, task.sessionCwd ?? null);
+          void Bridge.openSession(task.sessionId ?? null, task.sessionCwd ?? null, editorOf(task.id));
         } else if (task.id === "integration_n8n") void Bridge.openN8n();
         else if (task.id === SPOTIFY_ID) void Bridge.spotifyOpen();
         else if (urls[task.id]) void Bridge.openUrl(urls[task.id]);
@@ -696,6 +698,16 @@ export class Island {
     return { x: (PANEL_W - w) / 2, y: 0, w, h: hh };
   }
 
+  /** Listening for the beat while music plays and the setting is on (beat.rs). */
+  private beatWanted = false;
+
+  private syncBeat(wanted: boolean) {
+    if (wanted === this.beatWanted) return;
+    this.beatWanted = wanted;
+    if (!wanted) resetBeat();
+    void Bridge.beatEnable(wanted);
+  }
+
   // ── Window collapse (hidden → tiny wake strip, zero polling) ────────────────
 
   private updateWindowCollapsed() {
@@ -1096,6 +1108,8 @@ export class Island {
       view: State.view,
       focusId: State.focusTask?.id,
     }));
+
+    this.syncBeat(State.settings.beatSync && State.spotifyPlaying);
 
     this.engine.update(dt);
     ctx.setTransform(dpr, 0, 0, dpr, BOT_SIDE * dpr, 0);

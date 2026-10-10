@@ -74,14 +74,21 @@ export const Bridge = {
    * "Open terminal": the window the session runs in when Rust found it
    * (Windows; Linux on X11 and KDE Plasma), else the folder in VS Code.
    */
-  openSession: (sessionId: string | null, path: string | null) =>
-    call<boolean>("open_session", { sessionId, path }),
+  openSession: (sessionId: string | null, path: string | null, editor?: string) =>
+    call<boolean>("open_session", { sessionId, path, ...(editor ? { editor } : {}) }),
+
+  /** The same as openInVSCode, for PhpStorm. */
+  openInPhpStorm: (path: string | null) => call<boolean>("open_in_phpstorm", { path }),
 
   /** The Claude desktop app, for the Claude Desktop pill (Windows only). */
   openClaudeDesktop: () => call<boolean>("open_claude_desktop"),
 
   /** The diff card's ↗: an existing file, in VS Code; never launched by its type. */
   openFileInVSCode: (path: string) => call<boolean>("open_file_in_vscode", { path }),
+
+  /** The same, in the editor the session runs in (`editorOf`). */
+  openFileInEditor: (path: string, editor?: string) =>
+    call<boolean>(editor === "phpstorm" ? "open_file_in_phpstorm" : "open_file_in_vscode", { path }),
 
   quit: () => call<void>("quit_app"),
 
@@ -211,6 +218,9 @@ export const Bridge = {
   /** Asleep, the cursor poll stops. */
   desktopSetAsleep: (asleep: boolean) => call<void>("desktop_mochi_set_asleep", { asleep }),
 
+  // ── Beat (src-tauri/src/beat.rs, Linux) ───────────────────────────────────
+  /** Listens to the speakers' output for the beat, or stops. False when it cannot (or the setting is off). */
+  beatEnable: (on: boolean) => call<boolean>("beat_enable", { on }),
   // ── Spotify (src-tauri/src/spotify.rs, Linux) ─────────────────────────────
   /** Reads the player again (the card came on screen) and reports it. */
   spotifyRefresh: () => call<SpotifyState | null>("spotify_refresh"),
