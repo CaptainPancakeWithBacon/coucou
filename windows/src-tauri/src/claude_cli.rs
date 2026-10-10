@@ -124,6 +124,20 @@ fn is_message_start(line: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// What an error from Claude Code means to the user: a login that has run out
+/// gets the one thing to do about it, anything else is shown as it came.
+fn friendly(error: String) -> String {
+    let lower = error.to_lowercase();
+    let logged_out = ["failed to authenticate", "oauth", "not logged in", "/login", "invalid api key"]
+        .iter()
+        .any(|needle| lower.contains(needle));
+    if logged_out {
+        t("Claude Code is logged out: run `claude` in a terminal, type /login, then try again.")
+    } else {
+        error
+    }
+}
+
 /// The final `result` line: the full answer, or the error Claude Code ended on.
 fn final_result(line: &str) -> Option<Result<String, String>> {
     let v: Value = serde_json::from_str(line).ok()?;
@@ -132,7 +146,7 @@ fn final_result(line: &str) -> Option<Result<String, String>> {
     }
     let text = v["result"].as_str().unwrap_or_default().to_string();
     if v["is_error"].as_bool().unwrap_or(false) {
-        return Some(Err(if text.is_empty() { "Claude Code failed.".into() } else { text }));
+        return Some(Err(friendly(if text.is_empty() { "Claude Code failed.".into() } else { text })));
     }
     Some(Ok(text))
 }
@@ -307,8 +321,17 @@ mod tests {
         assert_eq!(delta_text(r#"{"type":"system"}"#), None);
         let done = r#"{"type":"result","is_error":false,"result":"Hi there"}"#;
         assert_eq!(final_result(done), Some(Ok("Hi there".into())));
-        let bad = r#"{"type":"result","is_error":true,"result":"Not logged in"}"#;
-        assert_eq!(final_result(bad), Some(Err("Not logged in".into())));
+        let bad = r#"{"type":"result","is_error":true,"result":"Rate limit reached"}"#;
+        assert_eq!(final_result(bad), Some(Err("Rate limit reached".into())));
+    }
+
+    #[test]
+    fn a_lapsed_login_says_what_to_do() {
+        let msg = friendly("Failed to authenticate: OAuth session expired and could not be refreshed".into());
+        assert!(msg.contains("/login"), "{msg}");
+        assert_eq!(friendly("Rate limit reached".into()), "Rate limit reached");
+        let line = r#"{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}"#;
+        assert!(matches!(final_result(line), Some(Err(m)) if m.contains("/login")));
     }
 
     #[test]
