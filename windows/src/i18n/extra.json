@@ -3437,6 +3437,17 @@
    "pt-BR": "Abrir o PhpStorm",
    "ru": "Открыть PhpStorm",
    "id": "Buka PhpStorm"
+  },
+  "Claude Code is logged out: run `claude` in a terminal, type /login, then try again.": {
+   "zh-Hans": "Claude Code 已退出登录：请在终端运行 `claude`，输入 /login，然后重试。",
+   "hi": "Claude Code लॉग आउट है: टर्मिनल में `claude` चलाएँ, /login लिखें, फिर दोबारा कोशिश करें।",
+   "es": "Claude Code ha cerrado la sesión: ejecuta `claude` en una terminal, escribe /login y vuelve a intentarlo.",
+   "ar": "تم تسجيل خروج Claude Code: شغّل `claude` في الطرفية واكتب /login ثم حاول مرة أخرى.",
+   "fr": "Claude Code est déconnecté : lancez `claude` dans un terminal, tapez /login, puis réessayez.",
+   "bn": "Claude Code লগ আউট হয়ে গেছে: টার্মিনালে `claude` চালান, /login লিখুন, তারপর আবার চেষ্টা করুন।",
+   "pt-BR": "O Claude Code foi desconectado: execute `claude` em um terminal, digite /login e tente de novo.",
+   "ru": "Claude Code вышел из аккаунта: запустите `claude` в терминале, введите /login и повторите попытку.",
+   "id": "Claude Code telah keluar: jalankan `claude` di terminal, ketik /login, lalu coba lagi."
   }
  }
 }
