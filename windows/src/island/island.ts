@@ -86,6 +86,7 @@ export class Island {
   private rafId = 0;
   private dirty = true;
   private canvasPx = 0;
+  private canvasDpr = 0;
 
   // Rust starts the window at full size so the launch greeting has room.
   private collapsed = false;
@@ -995,6 +996,7 @@ export class Island {
     const off =
       Math.abs(parseFloat(style.width) - wantW) > 2 ||
       Math.abs(parseFloat(style.left) - (p.cx - wantW / 2)) > 2 ||
+      this.botCanvas.width !== Math.round(wantW * Math.min(2, window.devicePixelRatio || 1)) ||
       !this.botSize.settled || !this.botCx.settled || !this.botCy.settled;
     if (!off) {
       this.botOffSince = 0;
@@ -1008,7 +1010,7 @@ export class Island {
     if (now - this.botOffSince < 1500) return;
     this.botOffSince = 0;
     void Bridge.log(
-      `Mochi off after the fold: canvas ${style.width}x${style.height} at ${style.left},${style.top}; ` +
+      `Mochi off after the fold: canvas ${style.width}x${style.height} (${this.botCanvas.width}x${this.botCanvas.height} px, ratio ${window.devicePixelRatio}) at ${style.left},${style.top}; ` +
       `size ${this.botSize.value.toFixed(1)}->${this.botSize.target.toFixed(1)} ` +
       `cx ${this.botCx.value.toFixed(1)}->${this.botCx.target} cy ${this.botCy.value.toFixed(1)}->${this.botCy.target}; ` +
       `view ${State.view} state ${State.effectiveState} running ${this.running} frame ${Math.round(now - this.lastFrame)} ms ago`,
@@ -1017,6 +1019,7 @@ export class Island {
     this.botCx.set(p.cx);
     this.botCy.set(p.cy);
     this.canvasPx = 0;
+    this.canvasDpr = 0;
     if (this.running) this.frame(now);
     else this.ensureRunning();
   }
@@ -1143,8 +1146,12 @@ export class Island {
     const hCss = w + BOT_OVERHANG;
     const wCss = w + BOT_SIDE * 2;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    if (this.canvasPx !== w) {
+    // The backing store follows the pixel ratio too: made at 1 and drawn at 1.5
+    // (the window moved to another screen, or GTK changed its scale after the
+    // canvas was made), Mochi came out 1.5 times too big and clipped.
+    if (this.canvasPx !== w || this.canvasDpr !== dpr) {
       this.canvasPx = w;
+      this.canvasDpr = dpr;
       this.botCanvas.width = Math.round(wCss * dpr);
       this.botCanvas.height = Math.round(hCss * dpr);
       this.botCanvas.style.width = `${wCss}px`;
