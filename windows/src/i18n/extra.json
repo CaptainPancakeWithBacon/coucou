@@ -3998,6 +3998,7 @@
    "pt-BR": "As notificações da área de trabalho de todos os apps também aparecem na ilha, como a pílula Notificações. O Coucou só as lê quando chegam e não guarda nada. Desative os avisos da própria área de trabalho para não vê-las duas vezes.",
    "ru": "Уведомления рабочего стола от всех приложений также показываются в острове в виде капсулы «Уведомления». Coucou читает их только в момент появления и ничего не хранит. Отключите собственные баннеры рабочего стола, чтобы не видеть их дважды.",
    "id": "Notifikasi desktop dari semua aplikasi juga tampil di pulau, sebagai pil Notifikasi. Coucou hanya membacanya saat masuk dan tidak menyimpan apa pun. Matikan banner bawaan desktop agar tidak muncul dua kali."
+  },
   "Claude Code is logged out: run `claude` in a terminal, type /login, then try again.": {
    "zh-Hans": "Claude Code 已退出登录：请在终端运行 `claude`，输入 /login，然后重试。",
    "hi": "Claude Code लॉग आउट है: टर्मिनल में `claude` चलाएँ, /login लिखें, फिर दोबारा कोशिश करें।",
