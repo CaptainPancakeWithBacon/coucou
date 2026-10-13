@@ -24,6 +24,8 @@ pub struct Settings {
     pub beat_sync: bool,
     /// The Claude Code chat shares the user's memory notes (claude_cli.rs).
     pub chat_memory: bool,
+    /// Desktop notifications shown in the island (notifications.rs, Linux).
+    pub show_notifications: bool,
     pub absence_interval: f64,
     pub active_integrations: Vec<String>,
     /// The always-on workspace pill (src/core/pills.ts checks it is one).
@@ -106,6 +108,7 @@ impl Default for Settings {
             open_on_hover: false,
             beat_sync: false,
             chat_memory: false,
+            show_notifications: false,
             absence_interval: 180.0,
             active_integrations: vec![
                 "integration_resend".into(),
@@ -390,6 +393,7 @@ mod tests {
   "openOnHover": true,
   "beatSync": true,
   "chatMemory": false,
+  "showNotifications": false,
   "absenceInterval": 60.0,
   "activeIntegrations": ["integration_notion"],
   "mainPill": "agent_cursor",
@@ -795,6 +799,7 @@ mod tests {
                 "openOnHover",
                 "beatSync",
                 "chatMemory",
+                "showNotifications",
                 "absenceInterval",
                 "activeIntegrations",
                 "mainPill",

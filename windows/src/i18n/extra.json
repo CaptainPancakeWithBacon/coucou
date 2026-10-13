@@ -3437,6 +3437,28 @@
    "pt-BR": "Abrir o PhpStorm",
    "ru": "Открыть PhpStorm",
    "id": "Buka PhpStorm"
+  },
+  "Notifications in the island": {
+   "zh-Hans": "在岛上显示通知",
+   "hi": "आइलैंड में सूचनाएँ",
+   "es": "Notificaciones en la isla",
+   "ar": "الإشعارات في الجزيرة",
+   "fr": "Notifications dans l'îlot",
+   "bn": "আইল্যান্ডে বিজ্ঞপ্তি",
+   "pt-BR": "Notificações na ilha",
+   "ru": "Уведомления в острове",
+   "id": "Notifikasi di pulau"
+  },
+  "Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.": {
+   "zh-Hans": "所有应用的桌面通知也会在岛上以“通知”胶囊显示。Coucou 只在通知到达时读取，不会保存任何内容。若不想看到两次，请关闭桌面自带的横幅。",
+   "hi": "हर ऐप की डेस्कटॉप सूचनाएँ आइलैंड में \"सूचनाएँ\" पिल के रूप में भी दिखती हैं। Coucou उन्हें सिर्फ़ आते समय पढ़ता है और कुछ सहेजता नहीं। दो बार दिखने से बचने के लिए डेस्कटॉप के अपने बैनर बंद कर दें।",
+   "es": "Las notificaciones del escritorio de todas las apps también aparecen en la isla, como la píldora Notificaciones. Coucou solo las lee al llegar y no guarda nada. Desactiva los avisos del propio escritorio para no verlos dos veces.",
+   "ar": "تظهر إشعارات سطح المكتب من كل التطبيقات أيضًا في الجزيرة على شكل حبة الإشعارات. يقرؤها Coucou عند وصولها فقط ولا يخزّن شيئًا. أوقف لافتات سطح المكتب لتفادي ظهورها مرتين.",
+   "fr": "Les notifications du bureau de toutes les applis s'affichent aussi dans l'îlot, sous forme de la pastille Notifications. Coucou ne les lit qu'à leur arrivée et ne garde rien. Désactive les bannières du bureau pour ne pas les voir en double.",
+   "bn": "সব অ্যাপের ডেস্কটপ বিজ্ঞপ্তি আইল্যান্ডেও \"বিজ্ঞপ্তি\" পিল হিসেবে দেখায়। Coucou এগুলো আসার সময় শুধু পড়ে, কিছু জমা রাখে না। দু'বার দেখা এড়াতে ডেস্কটপের নিজস্ব ব্যানার বন্ধ করুন।",
+   "pt-BR": "As notificações da área de trabalho de todos os apps também aparecem na ilha, como a pílula Notificações. O Coucou só as lê quando chegam e não guarda nada. Desative os avisos da própria área de trabalho para não vê-las duas vezes.",
+   "ru": "Уведомления рабочего стола от всех приложений также показываются в острове в виде капсулы «Уведомления». Coucou читает их только в момент появления и ничего не хранит. Отключите собственные баннеры рабочего стола, чтобы не видеть их дважды.",
+   "id": "Notifikasi desktop dari semua aplikasi juga tampil di pulau, sebagai pil Notifikasi. Coucou hanya membacanya saat masuk dan tidak menyimpan apa pun. Matikan banner bawaan desktop agar tidak muncul dua kali."
   }
  }
 }

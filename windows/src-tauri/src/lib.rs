@@ -19,6 +19,8 @@ mod island;
 mod local_chat;
 mod log;
 mod net;
+#[cfg(target_os = "linux")]
+mod notifications;
 mod openai_compat;
 mod pipe;
 mod platform;
@@ -822,6 +824,8 @@ pub fn run() {
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
+            #[cfg(target_os = "linux")]
+            notifications::start(handle.clone());
             integrations::start(handle.clone());
             spotify::sync(&handle, &loaded.active_integrations);
             shortcuts::apply(&handle, &loaded.shortcuts);

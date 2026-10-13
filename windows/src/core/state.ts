@@ -107,6 +107,8 @@ export interface Settings {
   beatSync: boolean;
   /** The Claude Code chat shares the user's memory notes (Linux; claude_cli.rs). */
   chatMemory: boolean;
+  /** Desktop notifications shown in the island (Linux; notifications.rs). */
+  showNotifications: boolean;
   absenceInterval: number;
   /** Declared pills next to the main one (at most 4), in the order they were added. */
   activeIntegrations: string[];
@@ -164,6 +166,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openOnHover: false,
   beatSync: false,
   chatMemory: false,
+  showNotifications: false,
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",

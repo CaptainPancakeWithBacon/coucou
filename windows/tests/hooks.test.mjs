@@ -712,3 +712,40 @@ test("a declined permission request leaves the stop timer running", () => {
   assert.deepEqual(sent("approval_decline"), [{ requestId: "r1" }, { requestId: "r2" }]);
   assert.equal(task().state, "idle");
 });
+
+// ── Desktop notifications ─────────────────────────────────────────────────────
+
+import { registerNotificationHandlers } from "../src/island/notifications.ts";
+registerNotificationHandlers(island);
+const notice = (n) => emit("desktop-notification", n);
+
+test("a desktop notification peeks on the Notifications pill and the old pill returns", () => {
+  State.settings.showNotifications = true;
+  State.setFocus(CLAUDE);
+  notice({ app: "Discord", summary: "Anna", body: "hey!" });
+  assert.equal(State.focusId, "agent_notifications");
+  assert.equal(task("agent_notifications").state, "finished");
+  assert.deepEqual(task("agent_notifications").steps, ["Discord: Anna — hey!"]);
+  assert.deepEqual(asked, ["reveal"]);
+  seconds(9);
+  assert.equal(State.focusId, CLAUDE);
+  assert.equal(task("agent_notifications").state, "idle");
+});
+
+test("notifications are ignored while the setting is off or Coucou is paused", () => {
+  notice({ app: "Discord", summary: "Anna", body: "hey!" });
+  assert.equal(task("agent_notifications"), undefined);
+  State.settings.showNotifications = true;
+  State.paused = true;
+  notice({ app: "Discord", summary: "Anna", body: "hey!" });
+  assert.equal(task("agent_notifications"), undefined);
+});
+
+test("a notification never covers a card waiting for an answer", () => {
+  State.settings.showNotifications = true;
+  State.setFocus(CLAUDE);
+  State.pendingApproval = { requestId: "r", sessionId: "", pillId: CLAUDE, tool: "Bash", command: "ls" };
+  notice({ app: "Discord", summary: "Anna", body: "hey!" });
+  assert.equal(State.focusId, CLAUDE);
+  assert.equal(task("agent_notifications").pillBadge, "finished");
+});
