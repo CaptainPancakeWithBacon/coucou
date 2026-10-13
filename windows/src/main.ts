@@ -10,6 +10,7 @@ import { registerHookHandlers } from "./island/hooks";
 import { registerPhoneLink } from "./island/phone-link";
 import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
 import { registerNotificationHandlers } from "./island/notifications";
+import { foldedFrom, repaintAfterFold } from "./island/repaint";
 import { registerShortcutHandlers } from "./island/shortcuts";
 import { applySpotify, registerSpotifyHandlers } from "./island/spotify";
 import { SPOTIFY_ID } from "./core/spotify";
@@ -99,6 +100,12 @@ async function main() {
     // A new main tool comes to the front, as on macOS.
     if (State.mainPillId !== previousMain) State.setFocus(State.mainPillId);
     void refreshConfigured();
+  });
+
+  let lastMode = State.mode;
+  State.subscribe(() => {
+    if (foldedFrom(lastMode, State.mode)) repaintAfterFold();
+    lastMode = State.mode;
   });
 
   registerHookHandlers(island);

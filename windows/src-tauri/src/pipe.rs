@@ -220,6 +220,8 @@ async fn handle(app: AppHandle, mut pipe: impl Relay) {
         // The status line relay calls in with every Claude Code update: not log-worthy.
         if event != "StatusLine" {
             log::line(format!("hook {event}"));
+        } else {
+            crate::hooks::note_status_line_seen();
         }
         let _ = app.emit_to(WINDOW_LABEL, "hook", payload);
         pipe.finish();
