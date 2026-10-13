@@ -7,6 +7,7 @@ import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
 import { registerHookHandlers } from "./island/hooks";
+import { registerPhoneLink } from "./island/phone-link";
 import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
 import { registerNotificationHandlers } from "./island/notifications";
 import { registerShortcutHandlers } from "./island/shortcuts";
@@ -101,6 +102,7 @@ async function main() {
   });
 
   registerHookHandlers(island);
+  registerPhoneLink(island);
   registerIntegrationHandlers(island);
   registerNotificationHandlers(island);
   registerShortcutHandlers(island, () => setPaused(false));
