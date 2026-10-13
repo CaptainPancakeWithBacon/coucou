@@ -989,11 +989,15 @@ export class Island {
    */
   private logStackAtBot() {
     if (this.stackLogged >= 40) return;
-    const stack = [...document.querySelectorAll("canvas")].map((el) => {
+    const stack = ["greeting-canvas", "upload-canvas", "bot-canvas"].map((id) => {
+      const el = document.getElementById(id) as HTMLCanvasElement | null;
+      if (!el) return `${id}: none`;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
-      const where = el.parentElement ? `${el.parentElement.tagName.toLowerCase()}${el.parentElement.id ? "#" + el.parentElement.id : ""}` : "";
-      return `canvas${el.id ? "#" + el.id : ""}.${typeof el.className === "string" ? el.className.split(" ").join(".") : ""} in ${where} ${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.left)},${Math.round(r.top)} px ${el.width}x${el.height} op=${cs.opacity} disp=${cs.display}`;
+      const p = el.parentElement;
+      const ps = p ? getComputedStyle(p) : null;
+      const q = (n: number) => Math.round(n / 4) * 4;
+      return `${id} ${q(r.width)}x${q(r.height)}@${q(r.left)},${q(r.top)} op=${cs.opacity} disp=${cs.display} parent[${p?.id}.${p?.className}] op=${ps?.opacity} disp=${ps?.display} vis=${ps?.visibility}`;
     }).join(" | ");
     if (stack === this.stackSeen) return;
     this.stackSeen = stack;
