@@ -267,6 +267,11 @@ pub struct Listener {
     run: Mutex<Option<Running>>,
 }
 
+/// Nothing listens off Linux; lib.rs still manages one so the setup is the same.
+#[cfg(not(target_os = "linux"))]
+#[derive(Default)]
+pub struct Listener;
+
 #[cfg(target_os = "linux")]
 struct Running {
     stop: Arc<AtomicBool>,
