@@ -719,14 +719,14 @@ import { registerNotificationHandlers } from "../src/island/notifications.ts";
 registerNotificationHandlers(island);
 const notice = (n) => emit("desktop-notification", n);
 
-test("a desktop notification peeks on the Notifications pill and the old pill returns", () => {
+test("a desktop notification opens the Notifications card and the old pill returns", () => {
   State.settings.showNotifications = true;
   State.setFocus(CLAUDE);
   notice({ app: "Discord", summary: "Anna", body: "hey!" });
   assert.equal(State.focusId, "agent_notifications");
   assert.equal(task("agent_notifications").state, "finished");
   assert.deepEqual(task("agent_notifications").steps, ["Discord: Anna — hey!"]);
-  assert.deepEqual(asked, ["reveal"]);
+  assert.deepEqual(asked, ["alert:finished"]);
   seconds(9);
   assert.equal(State.focusId, CLAUDE);
   assert.equal(task("agent_notifications").state, "idle");

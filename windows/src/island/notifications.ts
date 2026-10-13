@@ -1,6 +1,6 @@
 // Desktop notifications (notifications.rs, Linux) → the island. They arrive as
-// one "Notifications" pill: each one is a step on it, the island peeks with the
-// newest, and the pill you were on comes back a few seconds later.
+// one "Notifications" pill: each one is a step on it, the island opens its card
+// with the newest, and the pill you were on comes back a few seconds later.
 
 import { onEvent } from "../core/bridge";
 import { toOneLine } from "../core/diff";
@@ -51,7 +51,9 @@ function handle(island: Island, n: DesktopNotification) {
   if (State.focusId !== NOTIFICATIONS_ID) before = State.focusId;
   State.setFocus(NOTIFICATIONS_ID);
   Sound.play("peek");
-  if (State.mode === "hidden") island.reveal();
+  // The compact island has no text: the card with the message opens, as it does
+  // when Claude Code finishes.
+  if (State.mode !== "expanded") island.alert("finished");
 
   if (restoreTimer != null) window.clearTimeout(restoreTimer);
   restoreTimer = window.setTimeout(() => {
