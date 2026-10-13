@@ -135,9 +135,9 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
     subtitle: N_("Integration"), source: "n8n", support: "no", connect: none },
   // Any media player's MPRIS interface on the session bus (src-tauri/src/spotify.rs):
   // Spotify, a browser, VLC… The id stays the one it always had.
-  // Windows has nothing to read it from yet.
+  // On Windows it is read from the system media controls (the same file).
   { id: "integration_spotify", name: "Media", color: "#1DB954", category: "service",
-    subtitle: N_("Integration"), source: "n8n", support: "linux", connect: none },
+    subtitle: N_("Integration"), source: "n8n", support: "yes", connect: none },
 ];
 
 /** The always-on pill unless the user picks another workspace tool. */
