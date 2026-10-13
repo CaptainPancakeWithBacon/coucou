@@ -45,12 +45,20 @@ futures-util = { version = "0.3", default-features = false, features = ["sink"] 
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+# The notification centre's database (notifications.rs): read only.
+rusqlite = { version = "0.32", features = ["bundled"] }
 # The island's file drop reads paths straight from WebView2 (webview_drop.rs).
 # Same versions as wry, so nothing new is compiled.
 webview2-com = "0.39"
 wv2_core = { package = "windows-core", version = "0.62" }
 windows = { version = "0.61", features = [
   "Win32_Foundation",
+  # The media controls (spotify.rs): what plays, and play/pause/next from the island.
+  "Foundation",
+  "Media",
+  "Media_Control",
+  "Storage_Streams",
+  "Win32_System_Com",
   "Win32_Security",
   "Win32_Security_Authorization",
   # "Open terminal": the relay's process tree leads to the session's window.

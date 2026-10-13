@@ -1,4 +1,4 @@
-// The Spotify pill — port of SpotifyController.swift, Linux only.
+// The Spotify pill — port of SpotifyController.swift, for Linux and Windows.
 //
 // The Mac listens to Spotify's distributed notification and drives it over
 // AppleScript. Linux has MPRIS instead: Spotify owns
@@ -13,7 +13,7 @@
 // the card comes on screen; the page runs it on from a timestamp while playing,
 // as the Mac's `position(at:)` does. Turning the pill off ends the thread.
 //
-// Windows has no music source yet: the commands answer "nothing playing".
+// Windows has the system media controls instead (`win` below).
 
 // The pure parts below are only reached from the Linux client and the tests.
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -427,7 +427,12 @@ pub async fn spotify_refresh(app: AppHandle) -> Option<PlayerState> {
     {
         tauri::async_runtime::spawn_blocking(move || linux::refresh(&linux::Out::App(app))).await.ok().flatten()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        let _ = app;
+        tauri::async_runtime::spawn_blocking(win::refresh).await.ok().flatten()
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = app;
         None
@@ -442,7 +447,12 @@ pub async fn spotify_control(app: AppHandle, action: String, value: Option<f64>)
     {
         tauri::async_runtime::spawn_blocking(move || linux::control(&linux::Out::App(app), &action, value)).await.unwrap_or(false)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        let _ = app;
+        tauri::async_runtime::spawn_blocking(move || win::control(&action, value)).await.unwrap_or(false)
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = (app, action, value);
         false
@@ -457,7 +467,11 @@ pub async fn spotify_open() -> bool {
     {
         tauri::async_runtime::spawn_blocking(linux::open).await.unwrap_or(false)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(win::open).await.unwrap_or(false)
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         false
     }
@@ -470,7 +484,11 @@ pub fn spotify_installed() -> bool {
     {
         linux::installed()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        true
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         false
     }
@@ -481,8 +499,227 @@ pub fn spotify_installed() -> bool {
 pub fn sync(app: &AppHandle, active_integrations: &[String]) {
     #[cfg(target_os = "linux")]
     linux::sync(app, active_integrations.iter().any(|id| id == PILL_ID));
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    win::sync(app, active_integrations.iter().any(|id| id == PILL_ID));
+    #[cfg(not(any(target_os = "linux", windows)))]
     let _ = (app, active_integrations);
+}
+
+// ── Windows: the system media controls ────────────────────────────────────────
+//
+// Windows publishes what plays, and takes play/pause/next/previous/seek,
+// through the System Media Transport Controls (the media overlay with the
+// volume keys): Spotify, a browser, VLC… whichever Windows calls the current
+// session. There is no signal to wait on that is worth the code, so while the
+// pill is declared one thread asks every 1.5 s and tells the island only when
+// something changed. Volume is not part of it: the slider does nothing here.
+
+#[cfg(windows)]
+mod win {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    use windows::Media::Control::{
+        GlobalSystemMediaTransportControlsSession as Session,
+        GlobalSystemMediaTransportControlsSessionManager as Manager,
+        GlobalSystemMediaTransportControlsSessionMediaProperties as Properties,
+        GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
+    };
+    use windows::Media::MediaPlaybackAutoRepeatMode;
+    use windows::Storage::Streams::DataReader;
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+
+    static ON: AtomicBool = AtomicBool::new(false);
+    static LAST: Mutex<Option<PlayerState>> = Mutex::new(None);
+
+    /// WinRT wants COM on the thread; a second call on a thread that has it is harmless.
+    fn com() {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        }
+    }
+
+    /// "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify" or "chrome.exe" → "Spotify", "Chrome".
+    fn player_name(id: &str) -> String {
+        let id = id.rsplit('!').next().unwrap_or(id);
+        let id = id.strip_suffix(".exe").or_else(|| id.strip_suffix(".EXE")).unwrap_or(id);
+        let mut chars = id.chars();
+        match chars.next() {
+            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            None => String::new(),
+        }
+    }
+
+    fn thumbnail(props: &Properties) -> Option<Vec<u8>> {
+        let stream = props.Thumbnail().ok()?.OpenReadAsync().ok()?.get().ok()?;
+        let size = stream.Size().ok()?;
+        if size == 0 || size as usize > ARTWORK_LIMIT {
+            return None;
+        }
+        let reader = DataReader::CreateDataReader(&stream.GetInputStreamAt(0).ok()?).ok()?;
+        reader.LoadAsync(size as u32).ok()?.get().ok()?;
+        let mut bytes = vec![0u8; size as usize];
+        reader.ReadBytes(&mut bytes).ok()?;
+        Some(bytes)
+    }
+
+    fn session() -> Option<Session> {
+        Manager::RequestAsync().ok()?.get().ok()?.GetCurrentSession().ok()
+    }
+
+    /// The player as it is now; the cover only when `with_art` asks for it.
+    fn read(with_art: bool) -> Option<(PlayerState, Option<Artwork>)> {
+        let session = session()?;
+        let props = session.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
+        let info = session.GetPlaybackInfo().ok()?;
+        let timeline = session.GetTimelineProperties().ok()?;
+        let title = props.Title().ok()?.to_string();
+        let artist = props.Artist().map(|s| s.to_string()).unwrap_or_default();
+        let album = props.AlbumTitle().map(|s| s.to_string()).unwrap_or_default();
+        let ticks = |t: windows::Foundation::TimeSpan| t.Duration as f64 / 1e7;
+        let duration = match (timeline.EndTime(), timeline.StartTime()) {
+            (Ok(end), Ok(start)) => (ticks(end) - ticks(start)).max(0.0),
+            _ => 0.0,
+        };
+        let id = format!("smtc:{title}|{artist}|{album}");
+        let art_url = format!("smtc:art:{title}|{artist}|{album}");
+        let artwork = if with_art {
+            thumbnail(&props).and_then(|bytes| data_url(&bytes)).map(|data| Artwork { art_url: art_url.clone(), data_url: data })
+        } else {
+            None
+        };
+        let has_title = !title.is_empty();
+        let state = PlayerState {
+            running: true,
+            installed: true,
+            track: has_title.then(|| Track { id, title, artist, album, duration, art_url: Some(art_url), object_path: String::new() }),
+            playing: info.PlaybackStatus().ok()? == Status::Playing,
+            position: ticks(timeline.Position().ok()?).max(0.0),
+            position_at: now_ms(),
+            shuffle: info.IsShuffleActive().ok().and_then(|r| r.Value().ok()).unwrap_or(false),
+            repeat: info
+                .AutoRepeatMode()
+                .ok()
+                .and_then(|r| r.Value().ok())
+                .is_some_and(|m| m != MediaPlaybackAutoRepeatMode::None),
+            volume: 50,
+            player: session.SourceAppUserModelId().map(|s| player_name(&s.to_string())).unwrap_or_default(),
+        };
+        Some((state, artwork))
+    }
+
+    fn nothing() -> PlayerState {
+        PlayerState { installed: true, ..PlayerState::default() }
+    }
+
+    /// Whether the island needs telling: anything but the position moving along.
+    fn changed(old: &PlayerState, new: &PlayerState) -> bool {
+        let seeked = (old.position_at_time(new.position_at) - new.position).abs() > 3.0;
+        old.running != new.running
+            || old.playing != new.playing
+            || old.shuffle != new.shuffle
+            || old.repeat != new.repeat
+            || old.player != new.player
+            || old.track.as_ref().map(|t| &t.id) != new.track.as_ref().map(|t| &t.id)
+            || seeked
+    }
+
+    pub fn refresh() -> Option<PlayerState> {
+        com();
+        let state = read(false).map(|(s, _)| s).unwrap_or_else(nothing);
+        *LAST.lock().unwrap() = Some(state.clone());
+        Some(state)
+    }
+
+    pub fn control(action: &str, value: Option<f64>) -> bool {
+        com();
+        let Some(session) = session() else { return false };
+        match action {
+            "playPause" => session.TryTogglePlayPauseAsync().ok().and_then(|op| op.get().ok()).unwrap_or(false),
+            "next" => session.TrySkipNextAsync().ok().and_then(|op| op.get().ok()).unwrap_or(false),
+            "previous" => session.TrySkipPreviousAsync().ok().and_then(|op| op.get().ok()).unwrap_or(false),
+            "seek" => value.is_some_and(|secs| {
+                session.TryChangePlaybackPositionAsync((secs * 1e7) as i64).ok().and_then(|op| op.get().ok()).unwrap_or(false)
+            }),
+            "shuffle" => session
+                .TryChangeShuffleActiveAsync(value.unwrap_or(0.0) >= 0.5)
+                .ok()
+                .and_then(|op| op.get().ok())
+                .unwrap_or(false),
+            "repeat" => {
+                let mode = if value.unwrap_or(0.0) >= 0.5 { MediaPlaybackAutoRepeatMode::List } else { MediaPlaybackAutoRepeatMode::None };
+                session.TryChangeAutoRepeatModeAsync(mode).ok().and_then(|op| op.get().ok()).unwrap_or(false)
+            }
+            _ => false,
+        }
+    }
+
+    /// "Open Spotify": the spotify: link starts it, or brings it forward.
+    pub fn open() -> bool {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", "spotify:"])
+            .creation_flags_hidden()
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    trait Hidden {
+        fn creation_flags_hidden(&mut self) -> &mut Self;
+    }
+    impl Hidden for std::process::Command {
+        fn creation_flags_hidden(&mut self) -> &mut Self {
+            use std::os::windows::process::CommandExt;
+            self.creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        }
+    }
+
+    pub fn sync(app: &AppHandle, on: bool) {
+        if !on {
+            ON.store(false, Ordering::Relaxed);
+            return;
+        }
+        if ON.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let app = app.clone();
+        std::thread::Builder::new()
+            .name("media-controls".into())
+            .spawn(move || {
+                com();
+                let mut sent: Option<PlayerState> = None;
+                while ON.load(Ordering::Relaxed) {
+                    let paused = crate::integrations::PAUSED.load(Ordering::Relaxed);
+                    if !paused {
+                        let track_changed = |old: &Option<PlayerState>, new: &PlayerState| {
+                            old.as_ref().and_then(|o| o.track.as_ref().map(|t| t.id.clone()))
+                                != new.track.as_ref().map(|t| t.id.clone())
+                        };
+                        let first = read(false);
+                        let state = first.map(|(s, _)| s).unwrap_or_else(nothing);
+                        if sent.as_ref().is_none_or(|old| changed(old, &state)) {
+                            let art = if track_changed(&sent, &state) && state.track.is_some() {
+                                read(true).and_then(|(_, a)| a)
+                            } else {
+                                None
+                            };
+                            *LAST.lock().unwrap() = Some(state.clone());
+                            emit_state(&app, &state);
+                            if let Some(art) = art {
+                                use tauri::Emitter;
+                                let _ = app.emit_to(crate::island::WINDOW_LABEL, ARTWORK_EVENT, art);
+                            }
+                            sent = Some(state);
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(1500));
+                }
+                // Turned off: the island hears that nothing plays.
+                emit_state(&app, &nothing());
+            })
+            .ok();
+    }
 }
 
 // ── Linux: MPRIS over D-Bus ───────────────────────────────────────────────────
