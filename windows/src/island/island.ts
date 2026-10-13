@@ -45,6 +45,9 @@ const PRE_PROGRESS = USC.T_PROG_START - USC.T_DROP;
 
 const modeOrder = (m: IslandMode) => (m === "hidden" ? 0 : m === "compact" ? 1 : 2);
 
+/** A frame loop silent for this long (ms) is stalled: normal frames come every ~16. */
+const STALLED_MS = 250;
+
 export class Island {
   readonly fsm = new IslandStateMachine();
   /** Mochi on the desktop: his life cycle and the drag out of the island. */
@@ -80,6 +83,7 @@ export class Island {
 
   private running = false;
   private lastFrame = 0;
+  private rafId = 0;
   private dirty = true;
   private canvasPx = 0;
 
@@ -117,6 +121,7 @@ export class Island {
 
   constructor(root: HTMLElement) {
     this.root = root;
+    window.setInterval(() => this.watchFrames(), STALLED_MS);
     this.desktop = new DesktopLink({
       reveal: () => this.reveal(),
       wardrobeFromDesktop: () => this.wardrobeFromDesktop(),
@@ -955,10 +960,24 @@ export class Island {
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
-    requestAnimationFrame(this.frame);
+    this.rafId = requestAnimationFrame(this.frame);
+  }
+
+  /**
+   * The web view can hold its animation frames back for a while (a transparent,
+   * non-activating window it thinks nobody sees). The loop then stalls with the
+   * springs half-way — Mochi stuck at the open island's size — and `running`
+   * stays true, so nothing restarts it. A timer notices and steps the loop
+   * itself until frames flow again.
+   */
+  private watchFrames() {
+    if (!this.running || performance.now() - this.lastFrame < STALLED_MS) return;
+    this.frame(performance.now());
   }
 
   private frame = (nowMs: number) => {
+    // One chain only: a frame forced by the watchdog replaces the pending one.
+    cancelAnimationFrame(this.rafId);
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
     this.lastFrame = nowMs;
 
@@ -1017,7 +1036,7 @@ export class Island {
         greetingActive || this.engine.busy || UploadSeq.isActive || viewAnimating;
 
     if (busy) {
-      requestAnimationFrame(this.frame);
+      this.rafId = requestAnimationFrame(this.frame);
     } else {
       this.running = false;
       Sound.idle();
