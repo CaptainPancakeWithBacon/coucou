@@ -19,7 +19,7 @@ mod island;
 mod local_chat;
 mod log;
 mod net;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 mod notifications;
 mod openai_compat;
 mod phone_link;
@@ -863,7 +863,7 @@ pub fn run() {
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             notifications::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
