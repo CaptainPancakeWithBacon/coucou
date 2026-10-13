@@ -979,6 +979,29 @@ export class Island {
 
   private botOffSince = 0;
   private botBigSince = 0;
+  private stackSeen = "";
+  private stackLogged = 0;
+
+  /**
+   * What is on screen where the folded Mochi is: the elements under that point,
+   * top first, with size, place and opacity. Logged when the list changes, so a
+   * second thing drawn there (a stale canvas, a leftover layer) shows up.
+   */
+  private logStackAtBot() {
+    if (this.stackLogged >= 40) return;
+    const rect = this.root.getBoundingClientRect();
+    const x = rect.left + rect.width / 2 - 144 + 40;
+    const stack = document.elementsFromPoint(x, 14).slice(0, 7).map((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const cls = typeof el.className === "string" ? el.className.split(" ").join(".") : "";
+      return `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}${cls ? "." + cls : ""} ${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.left)},${Math.round(r.top)} op=${cs.opacity} vis=${cs.visibility}`;
+    }).join(" | ");
+    if (stack === this.stackSeen) return;
+    this.stackSeen = stack;
+    this.stackLogged++;
+    void Bridge.log(`stack at Mochi (x=${Math.round(x)}): ${stack}`);
+  }
 
   /** Width in CSS px of what is drawn on the Mochi canvas (alpha above a threshold). */
   private drawnWidth(): number {
@@ -1011,6 +1034,7 @@ export class Island {
       this.botBigSince = 0;
       return;
     }
+    this.logStackAtBot();
     // Folded, the body is about 23 px wide; seen drawn at 35.
     const drawn = this.drawnWidth();
     if (drawn > 30) {
