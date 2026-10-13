@@ -636,20 +636,22 @@ mod win {
     pub fn control(action: &str, value: Option<f64>) -> bool {
         com();
         let Some(session) = session() else { return false };
-        let done = |r: windows::core::Result<windows::Foundation::IAsyncOperation<bool>>| {
-            r.ok().and_then(|op| op.get().ok()).unwrap_or(false)
-        };
         match action {
-            "playPause" => done(session.TryTogglePlayPauseAsync()),
-            "next" => done(session.TrySkipNextAsync()),
-            "previous" => done(session.TrySkipPreviousAsync()),
-            "seek" => value.is_some_and(|secs| done(session.TryChangePlaybackPositionAsync((secs * 1e7) as i64))),
-            "shuffle" => done(session.TryChangeShuffleActiveAsync(value.unwrap_or(0.0) >= 0.5)),
-            "repeat" => done(session.TryChangeAutoRepeatModeAsync(if value.unwrap_or(0.0) >= 0.5 {
-                MediaPlaybackAutoRepeatMode::List
-            } else {
-                MediaPlaybackAutoRepeatMode::None
-            })),
+            "playPause" => session.TryTogglePlayPauseAsync().ok().and_then(|op| op.get().ok()).unwrap_or(false),
+            "next" => session.TrySkipNextAsync().ok().and_then(|op| op.get().ok()).unwrap_or(false),
+            "previous" => session.TrySkipPreviousAsync().ok().and_then(|op| op.get().ok()).unwrap_or(false),
+            "seek" => value.is_some_and(|secs| {
+                session.TryChangePlaybackPositionAsync((secs * 1e7) as i64).ok().and_then(|op| op.get().ok()).unwrap_or(false)
+            }),
+            "shuffle" => session
+                .TryChangeShuffleActiveAsync(value.unwrap_or(0.0) >= 0.5)
+                .ok()
+                .and_then(|op| op.get().ok())
+                .unwrap_or(false),
+            "repeat" => {
+                let mode = if value.unwrap_or(0.0) >= 0.5 { MediaPlaybackAutoRepeatMode::List } else { MediaPlaybackAutoRepeatMode::None };
+                session.TryChangeAutoRepeatModeAsync(mode).ok().and_then(|op| op.get().ok()).unwrap_or(false)
+            }
             _ => false,
         }
     }
