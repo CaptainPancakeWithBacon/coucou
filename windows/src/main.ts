@@ -108,6 +108,10 @@ async function main() {
     lastMode = State.mode;
   });
 
+  // Anything the page throws outside the frame loop reaches coucou.log too.
+  window.addEventListener("error", (e) => void Bridge.log(`page error: ${e.message} @ ${e.filename?.split("/").pop()}:${e.lineno}`));
+  window.addEventListener("unhandledrejection", (e) => void Bridge.log(`page rejection: ${String(e.reason)}`));
+
   registerHookHandlers(island);
   registerPhoneLink(island);
   registerIntegrationHandlers(island);

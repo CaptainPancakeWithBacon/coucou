@@ -975,7 +975,27 @@ export class Island {
     this.frame(performance.now());
   }
 
+  /**
+   * One turn of the loop. An error inside it used to end the loop for good,
+   * leaving the island as the last good frame drew it (Mochi half-way between
+   * the open and the folded size): it is logged once per kind and the loop goes on.
+   */
   private frame = (nowMs: number) => {
+    try {
+      this.frameBody(nowMs);
+    } catch (err) {
+      const message = err instanceof Error ? `${err.message} @ ${err.stack?.split("\n")[1]?.trim() ?? "?"}` : String(err);
+      if (!this.loggedErrors.has(message) && this.loggedErrors.size < 5) {
+        this.loggedErrors.add(message);
+        void Bridge.log(`island frame error: ${message}`);
+      }
+      this.rafId = requestAnimationFrame(this.frame);
+    }
+  };
+
+  private loggedErrors = new Set<string>();
+
+  private frameBody = (nowMs: number) => {
     // One chain only: a frame forced by the watchdog replaces the pending one.
     cancelAnimationFrame(this.rafId);
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
