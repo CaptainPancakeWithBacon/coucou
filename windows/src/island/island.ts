@@ -971,8 +971,54 @@ export class Island {
    * itself until frames flow again.
    */
   private watchFrames() {
+    this.checkBot();
     if (!this.running || performance.now() - this.lastFrame < STALLED_MS) return;
     this.frame(performance.now());
+  }
+
+  private botOffSince = 0;
+
+  /**
+   * Folded, Mochi has one place and one size (botPosition). When the canvas is
+   * somewhere else for more than a second and a half — he was seen oversized and
+   * clipped at the top after a fold — the numbers are logged once and he is put
+   * back by hand, whatever left him there.
+   */
+  private checkBot() {
+    if (State.mode !== "compact" || this.width.animating || this.height.animating || this.uploadActive || State.mochiOnDesktop) {
+      this.botOffSince = 0;
+      return;
+    }
+    const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
+    const wantW = Math.round(p.diameter / 0.6) + BOT_SIDE * 2;
+    const style = this.botCanvas.style;
+    const off =
+      Math.abs(parseFloat(style.width) - wantW) > 2 ||
+      Math.abs(parseFloat(style.left) - (p.cx - wantW / 2)) > 2 ||
+      !this.botSize.settled || !this.botCx.settled || !this.botCy.settled;
+    if (!off) {
+      this.botOffSince = 0;
+      return;
+    }
+    const now = performance.now();
+    if (this.botOffSince === 0) {
+      this.botOffSince = now;
+      return;
+    }
+    if (now - this.botOffSince < 1500) return;
+    this.botOffSince = 0;
+    void Bridge.log(
+      `Mochi off after the fold: canvas ${style.width}x${style.height} at ${style.left},${style.top}; ` +
+      `size ${this.botSize.value.toFixed(1)}->${this.botSize.target.toFixed(1)} ` +
+      `cx ${this.botCx.value.toFixed(1)}->${this.botCx.target} cy ${this.botCy.value.toFixed(1)}->${this.botCy.target}; ` +
+      `view ${State.view} state ${State.effectiveState} running ${this.running} frame ${Math.round(now - this.lastFrame)} ms ago`,
+    );
+    this.botSize.set(p.diameter / 0.6);
+    this.botCx.set(p.cx);
+    this.botCy.set(p.cy);
+    this.canvasPx = 0;
+    if (this.running) this.frame(now);
+    else this.ensureRunning();
   }
 
   /**
