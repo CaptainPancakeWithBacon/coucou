@@ -198,7 +198,7 @@ pub fn status() -> HookStatus {
     let hook_path = settings::hook_exe_path();
     HookStatus {
         installed,
-        plan_relay_installed: plan_relay_installed(&current),
+        plan_relay_installed: plan_relay_installed(&current) || seen_within(&status_line_seen_path(), SEEN_FOR),
         settings_path: settings_path().to_string_lossy().to_string(),
         hook_ready: hook_path.exists(),
         hook_path: hook_path.to_string_lossy().to_string(),
@@ -245,6 +245,34 @@ pub fn status_line_previous_path() -> PathBuf {
 fn read_status_line_previous() -> Option<Value> {
     let bytes = std::fs::read(status_line_previous_path()).ok()?;
     serde_json::from_slice::<Value>(&bytes).ok().filter(Value::is_object)
+}
+
+/// Dropped beside the relay whenever it delivers plan limits. Another tool can
+/// own the `statusLine` (an ad or HUD status line that runs ours as the line it
+/// chains to): the relay then still gets its input, so the gauge works even
+/// though settings.json does not name us.
+fn status_line_seen_path() -> PathBuf {
+    settings::hook_exe_path().with_file_name("statusline-seen")
+}
+
+/// How long a delivery keeps the gauge on after the last one.
+const SEEN_FOR: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
+
+/// Called for every StatusLine event; touches the marker at most once a minute.
+pub fn note_status_line_seen() {
+    let path = status_line_seen_path();
+    if seen_within(&path, std::time::Duration::from_secs(60)) {
+        return;
+    }
+    let _ = std::fs::write(path, b"");
+}
+
+fn seen_within(path: &Path, window: std::time::Duration) -> bool {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|age| age <= window)
 }
 
 /// True when the `statusLine` in settings.json is Coucou's relay.
@@ -425,6 +453,19 @@ fn install_relay(src: &Path, dest: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recent_delivery_counts_and_an_old_or_missing_one_does_not() {
+        let dir = std::env::temp_dir().join(format!("coucou-seen-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("statusline-seen");
+        let hour = std::time::Duration::from_secs(3600);
+        assert!(!seen_within(&marker, hour), "no marker, no delivery");
+        std::fs::write(&marker, b"").unwrap();
+        assert!(seen_within(&marker, hour));
+        assert!(!seen_within(&marker, std::time::Duration::ZERO) || seen_within(&marker, hour));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_hooks_leave_the_status_line_alone() {

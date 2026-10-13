@@ -36,7 +36,7 @@ function wrapHalf(x: number): number {
 
 /** A new estimate from the listener. */
 export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
-  if (!(msg.bpm > 0) || !Number.isFinite(msg.beatAtMs)) return;
+  if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs)) return;
   const targetFrac = ((nowMs - msg.beatAtMs) / 60000) * msg.bpm;
   if (!fed) {
     fed = true;

@@ -107,6 +107,8 @@ export interface Settings {
   beatSync: boolean;
   /** The Claude Code chat shares the user's memory notes (Linux; claude_cli.rs). */
   chatMemory: boolean;
+  /** Desktop notifications shown in the island (Linux; notifications.rs). */
+  showNotifications: boolean;
   absenceInterval: number;
   /** Declared pills next to the main one (at most 4), in the order they were added. */
   activeIntegrations: string[];
@@ -150,6 +152,17 @@ export interface Settings {
    * else English), or one of src/i18n's ten codes ("fr", "pt-BR", "zh-Hans"…).
    */
   language: string;
+  /**
+   * The phone link for Coucou for Android is on. Rust owns it (only the switch in
+   * Settings → Android phone turns it on): whatever the page sends back is ignored.
+   */
+  phoneLink?: boolean;
+  /** The phone may chat through this computer's API keys. Rust owns it too. */
+  phoneChat?: boolean;
+  /** The phone may see session details (steps, last line, folder name, colour). Rust owns it too. */
+  phoneDetails?: boolean;
+  /** Which models the phone may use, "provider/model". Rust owns it too. */
+  phoneChatModels?: string[];
   /** Mochi on the desktop. Rust owns it: whatever the page sends back is ignored. */
   desktopMochi?: {
     onDesktop: boolean;
@@ -164,6 +177,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openOnHover: false,
   beatSync: false,
   chatMemory: false,
+  showNotifications: false,
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",

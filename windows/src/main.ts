@@ -7,7 +7,10 @@ import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
 import { registerHookHandlers } from "./island/hooks";
+import { registerPhoneLink } from "./island/phone-link";
 import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
+import { registerNotificationHandlers } from "./island/notifications";
+import { foldedFrom, repaintAfterFold } from "./island/repaint";
 import { registerShortcutHandlers } from "./island/shortcuts";
 import { applySpotify, registerSpotifyHandlers } from "./island/spotify";
 import { SPOTIFY_ID } from "./core/spotify";
@@ -99,8 +102,20 @@ async function main() {
     void refreshConfigured();
   });
 
+  let lastMode = State.mode;
+  State.subscribe(() => {
+    if (foldedFrom(lastMode, State.mode)) repaintAfterFold();
+    lastMode = State.mode;
+  });
+
+  // Anything the page throws outside the frame loop reaches coucou.log too.
+  window.addEventListener("error", (e) => void Bridge.log(`page error: ${e.message} @ ${e.filename?.split("/").pop()}:${e.lineno}`));
+  window.addEventListener("unhandledrejection", (e) => void Bridge.log(`page rejection: ${String(e.reason)}`));
+
   registerHookHandlers(island);
+  registerPhoneLink(island);
   registerIntegrationHandlers(island);
+  registerNotificationHandlers(island);
   registerShortcutHandlers(island, () => setPaused(false));
   registerSpotifyHandlers(island);
   // Rust may have read Spotify before this page listened: ask once.

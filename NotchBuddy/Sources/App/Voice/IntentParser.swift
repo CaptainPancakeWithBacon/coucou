@@ -15,6 +15,12 @@ enum IntentParser {
         let words = norm.split(separator: " ").map(String.init)
         guard !words.isEmpty else { return .unknown }
 
+        // Email, questions about the services, opening an app (VoiceQuery).
+        if let m = VoiceQuery.mail(of: raw) { return .mail(m) }
+        if let q = VoiceQuery.webQuery(of: raw) { return .webSearch(query: q) }
+        if let t = VoiceQuery.topic(of: raw) { return .query(t) }
+        if let app = VoiceQuery.appToOpen(raw) { return .openApp(name: app) }
+
         // rawWords: same splits as normalise but no diacritics strip, no letter filter, original case
         let rawWords0 = buildRawWords(raw)
         // defilter both arrays in parallel: ma→la, mon→le, strip filler words
@@ -23,7 +29,17 @@ enum IntentParser {
 
         // ── 0. Strip a trailing location: "… dans les pilules", "… dans le notch" ──
         (fwords, frawWords) = stripTrailingLocation(fwords, rawWords: frawWords)
+        // …and a trailing "à la place" / "instead" with nothing after it:
+        // "enlève GitHub et mets Stripe à la place" → "mets Stripe".
+        (fwords, frawWords) = stripTrailingInstead(fwords, rawWords: frawWords)
         guard !fwords.isEmpty else { return .unknown }
+
+        // ── 0. Strip spoken interjections from the start ─────────────────────
+        //    "merci tu peux…", "ouais mets…", "bon alors ajoute…"
+        while let first = fwords.first, interjections.contains(first), fwords.count > 1 {
+            fwords.removeFirst()
+            if !frawWords.isEmpty { frawWords.removeFirst() }
+        }
 
         // ── 0a. Strip politeness prefixes from the start ─────────────────────
         //    "tu peux", "est-ce que tu peux", "peux-tu", "can you", etc.
@@ -39,6 +55,32 @@ enum IntentParser {
         // ── 0b. Map infinitives → imperative forms ────────────────────────────
         //    "mettre" → "mets", "lancer" → "lance", "ajouter" → "ajoute", …
         fwords = fwords.map { infinitiveMap[$0] ?? $0 }
+
+        // ── 0c. "mets GitHub à la place de Notion" → replace Notion by GitHub ─
+        //    Before the music rules, or "mets X …" becomes a song search.
+        if let (old, new) = extractInsteadOf(fwords, pills: pills) {
+            return .pillReplace(old: old, new: new)
+        }
+
+        // ── 0d. "j'ai envie d'écouter du Drake", "je veux écouter Daft Punk" ──
+        if let i = fwords.lastIndex(where: { $0 == "ecouter" || $0 == "ecoute" }),
+           i > 0 || fwords.count > 1 {
+            let articles: Set<String> = ["du", "de", "des", "la", "le", "les", "l", "d", "un", "une"]
+            var restN = Array(fwords[(i + 1)...])
+            var restR = Array(frawWords[min(i + 1, frawWords.count)...])
+            while let f = restN.first, articles.contains(f) {
+                restN.removeFirst(); if !restR.isEmpty { restR.removeFirst() }
+            }
+            if !restN.isEmpty {
+                if musicGenericWords.contains(restN.joined(separator: " ")) {
+                    return .musicPlay(target: nil)
+                }
+                if restN != ["ca"] && restN != ["moi"] {
+                    let raw = restR.joined(separator: " ")
+                    return .musicPlaySearch(name: raw.isEmpty ? restN.joined(separator: " ") : raw)
+                }
+            }
+        }
 
         // ── 1. Explicit music-only patterns ──────────────────────────────────
         if matchesAny(fwords, in: pausePrefixes)   { return .musicPause }
@@ -118,6 +160,29 @@ enum IntentParser {
             let cleanRaw = stripArticlesRaw(match.raw)
             if !clean.isEmpty {
                 return .musicPlayPlaylist(name: cleanRaw.isEmpty ? clean : cleanRaw)
+            }
+            // "lance ma playlist" with no name: the runner asks which one.
+            return .musicPlayPlaylist(name: "")
+        }
+        // "tu peux lancer ma playlist" / "play my Focus playlist" (English puts the name
+        // before the word): take what sits between the verb and "playlist", or ask.
+        if fwords.last == "playlist" || fwords.last == "playlists",
+           let v = fwords.firstIndex(where: { ["lance", "mets", "met", "joue", "balance", "play", "start"].contains($0) }) {
+            let fillers: Set<String> = ["my", "the", "a", "la", "le", "les", "ma", "mon", "une", "un"]
+            let between = (v + 1)..<(fwords.count - 1)
+            let name = between.filter { !fillers.contains(fwords[$0]) }
+                .map { $0 < frawWords.count ? frawWords[$0] : fwords[$0] }
+                .joined(separator: " ")
+            return .musicPlayPlaylist(name: name)
+        }
+
+        // "make Cursor my main pill", "set Cursor as main pill", "switch the main pill to Cursor"
+        if fwords.contains("main") && (fwords.contains("pill") || fwords.contains("pilule")) {
+            let noise: Set<String> = ["make", "set", "as", "my", "the", "main", "pill", "to", "switch", "change",
+                                      "use", "put", "is", "be", "should", "please", "now"]
+            let rest = fwords.filter { !noise.contains($0) }.joined(separator: " ")
+            if !rest.isEmpty, let id = EntityResolver.resolve(rest, from: pills, category: .workspace) {
+                return .pillSetMain(id: id)
             }
         }
 
@@ -315,6 +380,18 @@ enum IntentParser {
         }
     }
 
+    /// Drops a trailing "à la place" / "à sa place" / "instead" (normalised: "a la place").
+    private static func stripTrailingInstead(
+        _ words: [String], rawWords: [String]
+    ) -> ([String], [String]) {
+        let tails: [[String]] = [["a", "la", "place"], ["a", "sa", "place"], ["instead"]]
+        for t in tails where words.count > t.count && Array(words.suffix(t.count)) == t {
+            let n = words.count - t.count
+            return (Array(words.prefix(n)), Array(rawWords.prefix(min(n, rawWords.count))))
+        }
+        return (words, rawWords)
+    }
+
     /// Drops a trailing "dans les pilules" / "dans le notch" / "dans la barre" (after defilter,
     /// so "piles" is already gone and "mes" is already "les").
     private static func stripTrailingLocation(
@@ -507,6 +584,26 @@ enum IntentParser {
         return nil
     }
 
+    /// "mets (la pilule) X à la place de Y" / "X au lieu de Y" / "X instead of Y" → (Y, X).
+    private static func extractInsteadOf(_ words: [String], pills: [PillDefinition]) -> (String, String)? {
+        let markers: [[String]] = [["a", "la", "place", "de"], ["a", "la", "place", "du"],
+                                   ["au", "lieu", "de"], ["au", "lieu", "du"], ["instead", "of"]]
+        let leadVerbs: Set<String> = ["mets", "met", "remets", "ajoute", "rajoute", "active",
+                                      "affiche", "put", "add", "use", "utilise", "prends"]
+        let noise: Set<String> = ["la", "le", "les", "l", "pilule", "pilules", "the", "pill", "me", "moi"]
+        for m in markers {
+            guard let i = indexOfSequence(m, in: words), i > 0, i + m.count < words.count else { continue }
+            let left  = words[..<i].filter { !leadVerbs.contains($0) && !noise.contains($0) }
+            let right = words[(i + m.count)...].filter { !noise.contains($0) }
+            guard !left.isEmpty, !right.isEmpty,
+                  let new = EntityResolver.resolve(left.joined(separator: " "), from: pills),
+                  let old = EntityResolver.resolve(right.joined(separator: " "), from: pills),
+                  new != old else { continue }
+            return (old, new)
+        }
+        return nil
+    }
+
     // MARK: - pillOnly extraction
 
     private static func extractOnly(_ words: [String], pills: [PillDefinition]) -> [String]? {
@@ -537,6 +634,10 @@ enum IntentParser {
 
     /// Polite prefix sequences stripped from the START of the word array (longest first).
     private static let politenessPrefixes: [[String]] = [
+        // "je veux que tu ajoutes…", "j'aimerais que tu…", "(il) faut que tu…"
+        // ("il" is already a filler, so "il faut que tu" arrives as "faut que tu")
+        ["je", "veux", "que", "tu"], ["je", "voudrais", "que", "tu"],
+        ["j", "aimerais", "que", "tu"], ["faut", "que", "tu"],
         ["est", "ce", "que", "tu", "peux"],
         ["est", "ce", "que", "tu", "pourrais"],
         ["tu", "peux"],
@@ -545,6 +646,12 @@ enum IntentParser {
         ["could", "you"],
         ["can", "you"],
         ["please"],
+    ]
+
+    /// Spoken interjections dropped from the start of a phrase (normalised).
+    private static let interjections: Set<String> = [
+        "merci", "ouais", "oui", "ok", "okay", "bon", "alors", "euh", "bah", "ben", "hein",
+        "voila", "donc", "hey", "yeah", "yes", "so", "well", "um", "uh", "thanks",
     ]
 
     /// Maps normalised infinitive forms → imperative/trigger forms.
@@ -565,10 +672,26 @@ enum IntentParser {
         "baisser":     "baisse",
         "couper":      "coupe",
         "arreter":     "arrete",
+        // 2nd person / subjunctive after "je veux que tu …"
+        "ajoutes":     "ajoute",
+        "rajoutes":    "rajoute",
+        "enleves":     "enleve",
+        "retires":     "retire",
+        "supprimes":   "supprime",
+        "mettes":      "mets",
+        "lances":      "lance",
+        "actives":     "active",
+        "desactives":  "desactive",
+        "remplaces":   "remplace",
+        // "démarre Apple Music" = "lance Apple Music"
+        "demarrer":    "lance",
+        "demarre":     "lance",
+        "demarres":    "lance",
     ]
 
     private static let pausePrefixes: [[String]] = [
         ["pause"], ["stop"], ["stoppe"], ["coupe"],
+        ["stop", "la", "musique"], ["stop", "la", "chanson"],
         ["mets", "en", "pause"], ["met", "en", "pause"],
         ["arrete", "la", "musique"], ["arrete", "la", "chanson"],
         ["arrete", "la", "lecture"],
@@ -637,7 +760,7 @@ enum IntentParser {
 
     // Bare music verbs (single word → musicPlay)
     private static let bareMusicVerbs: Set<String> = [
-        "joue", "lance", "play", "start", "demarre", "balance",
+        "joue", "lance", "lecture", "play", "start", "demarre", "balance",
         "reprends", "resume",
     ]
 
