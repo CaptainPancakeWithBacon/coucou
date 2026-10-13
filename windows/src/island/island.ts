@@ -34,6 +34,14 @@ const BOT_OVERHANG = 40;
 const CLAUDE_DESKTOP_ID = "agent_claude-desktop";
 /** Extra canvas on each side of Mochi, for the witch hat's brim and the Santa hat's tip. */
 const BOT_SIDE = 24;
+/**
+ * Mochi's canvas is made once at the biggest size he is ever drawn at and only
+ * drawn smaller or larger inside it. Resizing it on every fold left the web
+ * view showing the open island's Mochi in the folded island's place.
+ */
+const BOT_MAX = Math.ceil((Math.max(...Object.values(VIEW_LAYOUTS).map((l) => l.botDiameter)) / 0.6) * 1.3);
+const BOT_FULL_W = BOT_MAX + BOT_SIDE * 2;
+const BOT_FULL_H = BOT_MAX + BOT_OVERHANG;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
 const HIT_MARGIN = 14;
 
@@ -85,7 +93,6 @@ export class Island {
   private lastFrame = 0;
   private rafId = 0;
   private dirty = true;
-  private canvasPx = 0;
   private canvasDpr = 0;
 
   // Rust starts the window at full size so the launch greeting has room.
@@ -991,12 +998,9 @@ export class Island {
       return;
     }
     const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
-    const wantW = Math.round(p.diameter / 0.6) + BOT_SIDE * 2;
     const style = this.botCanvas.style;
     const off =
-      Math.abs(parseFloat(style.width) - wantW) > 2 ||
-      Math.abs(parseFloat(style.left) - (p.cx - wantW / 2)) > 2 ||
-      this.botCanvas.width !== Math.round(wantW * Math.min(2, window.devicePixelRatio || 1)) ||
+      Math.abs(parseFloat(style.left) - (p.cx - BOT_FULL_W / 2)) > 2 ||
       !this.botSize.settled || !this.botCx.settled || !this.botCy.settled;
     if (!off) {
       this.botOffSince = 0;
@@ -1018,7 +1022,6 @@ export class Island {
     this.botSize.set(p.diameter / 0.6);
     this.botCx.set(p.cx);
     this.botCy.set(p.cy);
-    this.canvasPx = 0;
     this.canvasDpr = 0;
     if (this.running) this.frame(now);
     else this.ensureRunning();
@@ -1142,23 +1145,21 @@ export class Island {
 
   private drawBot(dt: number) {
     const size = this.botSize.value;
-    const w = Math.max(1, Math.round(size));
+    const w = Math.min(BOT_MAX, Math.max(1, Math.round(size)));
     const hCss = w + BOT_OVERHANG;
-    const wCss = w + BOT_SIDE * 2;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    // The backing store follows the pixel ratio too: made at 1 and drawn at 1.5
-    // (the window moved to another screen, or GTK changed its scale after the
-    // canvas was made), Mochi came out 1.5 times too big and clipped.
-    if (this.canvasPx !== w || this.canvasDpr !== dpr) {
-      this.canvasPx = w;
+    // The backing store follows the pixel ratio: made at 1 and drawn at 1.5 (the
+    // window moved to another screen, or GTK changed its scale after the canvas
+    // was made), Mochi came out 1.5 times too big and clipped.
+    if (this.canvasDpr !== dpr) {
       this.canvasDpr = dpr;
-      this.botCanvas.width = Math.round(wCss * dpr);
-      this.botCanvas.height = Math.round(hCss * dpr);
-      this.botCanvas.style.width = `${wCss}px`;
-      this.botCanvas.style.height = `${hCss}px`;
+      this.botCanvas.width = Math.round(BOT_FULL_W * dpr);
+      this.botCanvas.height = Math.round(BOT_FULL_H * dpr);
+      this.botCanvas.style.width = `${BOT_FULL_W}px`;
+      this.botCanvas.style.height = `${BOT_FULL_H}px`;
     }
-    this.botCanvas.style.left = `${this.botCx.value - wCss / 2}px`;
-    this.botCanvas.style.top = `${this.botCy.value - BOT_OVERHANG / 2 - hCss / 2}px`;
+    this.botCanvas.style.left = `${this.botCx.value - BOT_FULL_W / 2}px`;
+    this.botCanvas.style.top = `${this.botCy.value - BOT_OVERHANG / 2 - BOT_FULL_H / 2}px`;
 
     const ctx = this.botCanvas.getContext("2d");
     if (!ctx) return;
@@ -1204,8 +1205,10 @@ export class Island {
     this.syncBeat(State.settings.beatSync && State.spotifyPlaying);
 
     this.engine.update(dt);
-    ctx.setTransform(dpr, 0, 0, dpr, BOT_SIDE * dpr, 0);
-    ctx.clearRect(-BOT_SIDE, 0, wCss, hCss);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, BOT_FULL_W, BOT_FULL_H);
+    // Mochi's box (w wide, hCss tall) sits in the middle of the fixed canvas.
+    ctx.setTransform(dpr, 0, 0, dpr, ((BOT_FULL_W - w) / 2) * dpr, ((BOT_FULL_H - hCss) / 2) * dpr);
     ctx.save();
     this.engine.applyDance(ctx, w, hCss);
     this.engine.draw(ctx, w, hCss);
