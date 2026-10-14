@@ -21,6 +21,8 @@ mod log;
 mod net;
 #[cfg(any(target_os = "linux", windows))]
 mod notifications;
+#[cfg(any(target_os = "linux", windows))]
+mod updates;
 mod openai_compat;
 mod phone_link;
 mod pipe;
@@ -304,6 +306,20 @@ fn open_session(session_id: Option<String>, path: Option<String>, editor: Option
     }
 }
 
+/// The notification card's button: opens the app the notification came from.
+#[tauri::command]
+fn open_notification_target(target: String) -> bool {
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        notifications::open_target(&target)
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        let _ = target;
+        false
+    }
+}
+
 /// The Claude Desktop pill's target: the Claude app (Windows only — it has no
 /// Linux build).
 #[tauri::command]
@@ -399,6 +415,36 @@ fn hooks_apply(
     };
     let _ = app.emit("settings-changed", updated);
     Ok(backup)
+}
+
+/// The very first launch on Windows, for people who will not open Settings:
+/// Coucou starts with Windows, and when Claude Code is there its hooks go in
+/// through the same checked writer as the Settings button (preview, fingerprint,
+/// dated backup); Settings shows and can undo both.
+fn first_run_setup(app: &AppHandle, loaded: &settings::Settings) {
+    if !cfg!(windows) {
+        return;
+    }
+    if loaded.autostart {
+        if let Err(err) = app.autolaunch().enable() {
+            log::line(format!("first run: autostart: {err}"));
+        }
+    }
+    let claude_code_is_here = hooks::settings_path().parent().is_some_and(|dir| dir.is_dir());
+    if !claude_code_is_here {
+        log::line("first run: no ~/.claude folder, so no Claude Code hooks".to_string());
+        return;
+    }
+    match hooks::preview(true).and_then(|plan| hooks::write(true, &plan.fingerprint)) {
+        Ok(_) => {
+            log::line("first run: Claude Code hooks installed (a backup of settings.json was made)".to_string());
+            let shared = app.state::<Shared>();
+            let mut current = shared.settings.lock().unwrap();
+            current.hooks_installed = true;
+            let _ = settings::save(&current);
+        }
+        Err(err) => log::line(format!("first run: Claude Code hooks not installed: {err}")),
+    }
 }
 
 // ── Other agents' hooks and plugins ──────────────────────────────────────────
@@ -694,7 +740,17 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     platform::prepare_environment();
-    let loaded = settings::load();
+    // The first launch of a build that sets itself up (see `first_run_setup`):
+    // no marker yet, even if an older install left a settings file behind.
+    let first_run = cfg!(windows) && !settings::setup_marker().exists();
+    let mut loaded = settings::load();
+    if first_run {
+        settings::apply_first_run_defaults(&mut loaded);
+        if let Err(err) = settings::save(&loaded) {
+            log::line(format!("could not save the first settings: {err}"));
+        }
+    }
+    let loaded = loaded;
     i18n::set_picked(&loaded.language);
     let gate = Arc::new(PollGate::new());
 
@@ -739,6 +795,7 @@ pub fn run() {
             open_in_phpstorm,
             open_session,
             open_claude_desktop,
+            open_notification_target,
             open_file_in_vscode,
             open_file_in_phpstorm,
             quit_app,
@@ -862,9 +919,19 @@ pub fn run() {
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
+            if first_run {
+                first_run_setup(&handle, &loaded);
+                let _ = std::fs::write(settings::setup_marker(), b"");
+            }
+            log::line(format!(
+                "settings: notifications={} autostart={} hooks={} pills={:?}",
+                loaded.show_notifications, loaded.autostart, loaded.hooks_installed, loaded.active_integrations
+            ));
             pipe::start(handle.clone());
             #[cfg(any(target_os = "linux", windows))]
             notifications::start(handle.clone());
+            #[cfg(any(target_os = "linux", windows))]
+            updates::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
             spotify::sync(&handle, &loaded.active_integrations);

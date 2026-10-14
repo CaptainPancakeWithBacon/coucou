@@ -2,10 +2,10 @@
 // one "Notifications" pill: each one is a step on it, the island opens its card
 // with the newest, and the pill you were on comes back a few seconds later.
 
-import { onEvent } from "../core/bridge";
+import { Bridge, onEvent } from "../core/bridge";
 import { toOneLine } from "../core/diff";
 import { Sound } from "../core/sound";
-import { State } from "../core/state";
+import { State, type AgentTask } from "../core/state";
 import type { Island } from "./island";
 
 export const NOTIFICATIONS_ID = "agent_notifications";
@@ -17,6 +17,14 @@ interface DesktopNotification {
   app: string;
   summary: string;
   body: string;
+  target?: string | null;
+}
+
+/** The notification card's button: the app that sent the newest one. */
+export function openNoticeTarget(task: AgentTask | null | undefined): boolean {
+  if (task?.id !== NOTIFICATIONS_ID || !task.noticeTarget) return false;
+  void Bridge.openNotificationTarget(task.noticeTarget);
+  return true;
 }
 
 let restoreTimer: number | null = null;
@@ -34,13 +42,18 @@ export function registerNotificationHandlers(island: Island) {
 }
 
 function handle(island: Island, n: DesktopNotification) {
-  if (State.paused || !State.settings.showNotifications) return;
+  // Coucou's own notices (a new version) show even with the mirroring off.
+  if (State.paused || (!State.settings.showNotifications && n.app !== "Coucou")) return;
   const line = noticeLine(n);
   if (!line) return;
   State.upsertExternalAgent(NOTIFICATIONS_ID, "Notifications", COLOR);
   State.appendStep(NOTIFICATIONS_ID, line);
   const task = State.tasks.find((t) => t.id === NOTIFICATIONS_ID);
-  if (task) task.finalLine = line;
+  if (task) {
+    task.finalLine = line;
+    task.noticeApp = n.app || null;
+    task.noticeTarget = n.target || null;
+  }
   State.updateTask(NOTIFICATIONS_ID, "finished");
 
   // A card waiting for an answer is never covered: the badge says it came.

@@ -1,0 +1,91 @@
+name: Friends release
+
+# A push to main (the fork's stable branch) builds the Windows installer and
+# publishes it as the rolling "friends-latest" release. The app looks at that
+# release (windows/src-tauri/src/updates.rs) and tells whoever runs an older
+# build that there is a new one. Day-to-day work happens on `develop`; see
+# docs/FORK-WORKFLOW.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'windows/**'
+      - '.github/workflows/fork-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: friends-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    env:
+      # Stamped into the program: it is what the update check compares with.
+      COUCOU_BUILD_SHA: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            windows/target
+          key: windows-cargo-${{ hashFiles('windows/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and pack the installer
+        id: pack
+        shell: pwsh
+        run: |
+          npm run pack
+          $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Get-ChildItem release | Format-Table Name, Length
+
+      - name: Publish the friends-latest release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.pack.outputs.version }}"
+          # Fixed names, so the download link never changes.
+          Copy-Item "release/Coucou-Windows-$v-setup.exe" "release/Coucou-Windows-setup.exe"
+          Copy-Item "release/Coucou-Windows-$v.msi" "release/Coucou-Windows.msi"
+          # What the update card shows: the merged pull request's title, else the commit's.
+          $headline = (git log -1 --pretty=%b | Where-Object { $_.Trim() } | Select-Object -First 1)
+          if (-not $headline) { $headline = (git log -1 --pretty=%s) }
+          $notes = @"
+          $headline
+
+          sha: ${{ github.sha }}
+
+          Install: download ``Coucou-Windows-setup.exe`` and run it. Windows warns about an unknown publisher (the installer is not signed): click **More info**, then **Run anyway**.
+          "@
+          gh release delete friends-latest --yes --cleanup-tag 2>$null
+          gh release create friends-latest `
+            "release/Coucou-Windows-setup.exe" `
+            "release/Coucou-Windows.msi" `
+            --title "Coucou (friends build)" `
+            --notes $notes `
+            --target "${{ github.sha }}" `
+            --latest=false
