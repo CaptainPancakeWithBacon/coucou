@@ -33,9 +33,12 @@ pub struct Notice {
     pub app: String,
     pub summary: String,
     pub body: String,
+    /// What opens the app that sent it: its desktop entry (Linux) or its
+    /// application id (Windows). `None` when the sender did not say.
+    pub target: Option<String>,
 }
 
-fn clean(app: &str, summary: &str, body: &str) -> Option<Notice> {
+fn clean(app: &str, summary: &str, body: &str, target: Option<String>) -> Option<Notice> {
     let app = app.trim();
     if IGNORED_APPS.contains(&app.to_lowercase().as_str()) {
         return None;
@@ -45,7 +48,7 @@ fn clean(app: &str, summary: &str, body: &str) -> Option<Notice> {
     if summary.is_empty() && body.is_empty() {
         return None;
     }
-    Some(Notice { app: app.to_string(), summary, body })
+    Some(Notice { app: app.to_string(), summary, body, target })
 }
 
 /// Notification bodies may carry a little HTML (`<b>`, `<a href>`, `&amp;`).
@@ -127,7 +130,44 @@ fn notice_of_toast(primary_id: &str, payload: &[u8]) -> Option<Notice> {
     let mut texts = texts.into_iter();
     let summary = texts.next()?;
     let body = texts.collect::<Vec<_>>().join(" ");
-    clean(&app_name_of(primary_id), &summary, &body)
+    let target = Some(primary_id.trim().to_string()).filter(|t| !t.is_empty());
+    clean(&app_name_of(primary_id), &summary, &body, target)
+}
+
+/// Opens (or brings forward) the app a notification came from. The id came off
+/// the bus or out of a database, so it only ever goes to a launcher as one
+/// argument, never through a shell, and only when it looks like an id.
+pub fn open_target(target: &str) -> bool {
+    let target = target.trim();
+    if target.is_empty() || target.len() > 260 || target.starts_with('-') || target.chars().any(char::is_control) {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::{Command, Stdio};
+        if !target.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+            return false;
+        }
+        return Command::new("gtk-launch")
+            .arg(target)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+    }
+    #[cfg(windows)]
+    {
+        if target.contains('"') {
+            return false;
+        }
+        let mut cmd = std::process::Command::new("explorer.exe");
+        cmd.arg(format!(r"shell:AppsFolder\{target}"));
+        // explorer answers 1 even when it did start something: spawning is the check.
+        return crate::platform::no_console(&mut cmd).spawn().is_ok();
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    false
 }
 
 /// Starts the listener thread (one per system); it only ever receives.
@@ -168,8 +208,22 @@ mod linux {
         if msg.msg_type() != MessageType::MethodCall || &*msg.member()? != "Notify" {
             return None;
         }
-        let (app, _replaces, _icon, summary, body): (&str, u32, &str, &str, &str) = msg.read5().ok()?;
-        clean(app, summary, body)
+        let mut args = msg.iter_init();
+        let app: &str = args.read().ok()?;
+        let _replaces: u32 = args.read().ok()?;
+        let _icon: &str = args.read().ok()?;
+        let summary: &str = args.read().ok()?;
+        let body: &str = args.read().ok()?;
+        let _actions: Vec<&str> = args.read().ok()?;
+        let hints: dbus::arg::PropMap = args.read().ok()?;
+        // The sender's desktop file name when it gives one, else its name.
+        let target = hints
+            .get("desktop-entry")
+            .and_then(|v| v.0.as_str())
+            .map(str::to_string)
+            .or_else(|| Some(app.to_lowercase()))
+            .filter(|t| !t.is_empty());
+        clean(app, summary, body, target)
     }
 
     /// Waits quietly on the bus and costs nothing while no notification arrives.
@@ -364,6 +418,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_target_that_is_not_an_id_is_not_launched() {
+        assert!(!open_target(""));
+        assert!(!open_target("--help"));
+        assert!(!open_target("a\nb"));
+        assert!(!open_target(&"x".repeat(300)));
+    }
+
+    #[test]
     fn markup_is_stripped_and_entities_read() {
         assert_eq!(strip_markup("<b>Anna</b> &amp; Bo: <a href=\"x\">hi</a>"), "Anna & Bo: hi");
         assert_eq!(strip_markup("  plain  "), "plain");
@@ -376,11 +438,11 @@ mod tests {
 
     #[test]
     fn empty_and_own_notifications_are_dropped() {
-        assert_eq!(clean("Discord", "", "  "), None);
-        assert_eq!(clean("Coucou", "Done", ""), None);
+        assert_eq!(clean("Discord", "", "  ", None), None);
+        assert_eq!(clean("Coucou", "Done", "", None), None);
         assert_eq!(
-            clean("Discord", "Anna", "hey!"),
-            Some(Notice { app: "Discord".into(), summary: "Anna".into(), body: "hey!".into() })
+            clean("Discord", "Anna", "hey!", None),
+            Some(Notice { app: "Discord".into(), summary: "Anna".into(), body: "hey!".into(), target: None })
         );
     }
 
@@ -417,7 +479,7 @@ mod tests {
         let xml = "<toast><visual><binding><text>Claude</text><text>Windows build done</text></binding></visual></toast>";
         assert_eq!(
             notice_of_toast("com.squirrel.claude.Claude", xml.as_bytes()),
-            Some(Notice { app: "Claude".into(), summary: "Claude".into(), body: "Windows build done".into() })
+            Some(Notice { app: "Claude".into(), summary: "Claude".into(), body: "Windows build done".into(), target: Some("com.squirrel.claude.Claude".into()) })
         );
         assert_eq!(notice_of_toast("Coucou", xml.as_bytes()), None);
         assert_eq!(notice_of_toast("x", b"<toast/>"), None);
@@ -430,10 +492,24 @@ mod tests {
         let call = |member: &str| {
             Message::new_method_call("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications", member).unwrap()
         };
-        let notify = call("Notify").append3("Discord", 0u32, "").append2("Anna", "hey");
+        use dbus::arg::{PropMap, RefArg, Variant};
+        let full = |hints: PropMap| {
+            call("Notify")
+                .append3("Discord", 0u32, "")
+                .append2("Anna", "hey")
+                .append2(Vec::<&str>::new(), hints)
+                .append1(-1i32)
+        };
+        // Without a desktop-entry hint the app's own name is the target.
         assert_eq!(
-            linux::notice_of(&notify),
-            Some(Notice { app: "Discord".into(), summary: "Anna".into(), body: "hey".into() })
+            linux::notice_of(&full(PropMap::new())),
+            Some(Notice { app: "Discord".into(), summary: "Anna".into(), body: "hey".into(), target: Some("discord".into()) })
+        );
+        let mut hints = PropMap::new();
+        hints.insert("desktop-entry".into(), Variant(Box::new("com.discordapp.Discord".to_string()) as Box<dyn RefArg>));
+        assert_eq!(
+            linux::notice_of(&full(hints)).and_then(|n| n.target),
+            Some("com.discordapp.Discord".to_string())
         );
         // Too few arguments, or another method: not a notice.
         assert_eq!(linux::notice_of(&call("Notify").append2("Discord", 0u32)), None);

@@ -694,8 +694,16 @@ function buildFinished(actions: ViewActions): ViewHost {
       const label = task?.id === "agent_claude-desktop" ? t("Open Claude") : t("Open terminal");
       const span = open.firstElementChild as HTMLElement;
       if (span.textContent !== label) span.textContent = label;
-      // A desktop notification has no terminal to open: only OK is left.
-      open.style.display = task?.id === "agent_notifications" ? "none" : "";
+      // A desktop notification opens the app it came from, when it said which;
+      // otherwise there is nothing to open and only OK is left.
+      if (task?.id === "agent_notifications") {
+        const app = task.noticeApp;
+        open.style.display = task.noticeTarget ? "" : "none";
+        const named = app ? t("Open {name}", { name: app }) : t("Open terminal");
+        if (span.textContent !== named) span.textContent = named;
+      } else {
+        open.style.display = "";
+      }
     },
   };
 }

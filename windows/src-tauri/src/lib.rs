@@ -304,6 +304,20 @@ fn open_session(session_id: Option<String>, path: Option<String>, editor: Option
     }
 }
 
+/// The notification card's button: opens the app the notification came from.
+#[tauri::command]
+fn open_notification_target(target: String) -> bool {
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        notifications::open_target(&target)
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        let _ = target;
+        false
+    }
+}
+
 /// The Claude Desktop pill's target: the Claude app (Windows only — it has no
 /// Linux build).
 #[tauri::command]
@@ -778,6 +792,7 @@ pub fn run() {
             open_in_phpstorm,
             open_session,
             open_claude_desktop,
+            open_notification_target,
             open_file_in_vscode,
             open_file_in_phpstorm,
             quit_app,

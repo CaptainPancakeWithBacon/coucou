@@ -14,6 +14,7 @@ import {
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { editorOf } from "../core/pills";
+import { openNoticeTarget } from "./notifications";
 import { SPOTIFY_ID, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
@@ -187,6 +188,7 @@ export class Island {
       openTerminal: () => {
         const task = State.focusTask;
         // Sessions from the Claude desktop app live there, not in a terminal.
+        if (openNoticeTarget(task)) return;
         if (task?.id === CLAUDE_DESKTOP_ID) void Bridge.openClaudeDesktop();
         else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null, editorOf(task?.id));
       },

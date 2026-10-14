@@ -13,6 +13,7 @@ import { cyclePill, islandKeyAction, navigate, pillByNumber, type IslandKeyActio
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { editorOf } from "../core/pills";
+import { openNoticeTarget } from "./notifications";
 
 const CLAUDE_DESKTOP_ID = "agent_claude-desktop";
 
@@ -94,7 +95,9 @@ export function runGlobalShortcut(host: ShortcutHost, action: string, resume: ()
     // in VS Code; the Claude app for a Claude Desktop session.
     case "jumpToTerminal": {
       const task = State.focusTask;
-      if (task?.id === CLAUDE_DESKTOP_ID) void Bridge.openClaudeDesktop();
+      if (openNoticeTarget(task)) {
+        // The notification's own app: nothing else to open.
+      } else if (task?.id === CLAUDE_DESKTOP_ID) void Bridge.openClaudeDesktop();
       else void Bridge.openSession(task?.sessionId ?? null, task?.sessionCwd ?? null, editorOf(task?.id));
       if (State.mode === "expanded") host.collapse();
       break;

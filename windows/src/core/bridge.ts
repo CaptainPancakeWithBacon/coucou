@@ -226,6 +226,9 @@ export const Bridge = {
   /** The same as openInVSCode, for PhpStorm. */
   openInPhpStorm: (path: string | null) => call<boolean>("open_in_phpstorm", { path }),
 
+  /** A notification's button: opens the app it came from (desktop entry / app id). */
+  openNotificationTarget: (target: string) => call<boolean>("open_notification_target", { target }),
+
   /** The Claude desktop app, for the Claude Desktop pill (Windows only). */
   openClaudeDesktop: () => call<boolean>("open_claude_desktop"),
 

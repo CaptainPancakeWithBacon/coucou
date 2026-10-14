@@ -715,7 +715,7 @@ test("a declined permission request leaves the stop timer running", () => {
 
 // ── Desktop notifications ─────────────────────────────────────────────────────
 
-import { registerNotificationHandlers } from "../src/island/notifications.ts";
+import { openNoticeTarget, registerNotificationHandlers } from "../src/island/notifications.ts";
 registerNotificationHandlers(island);
 const notice = (n) => emit("desktop-notification", n);
 
@@ -748,4 +748,19 @@ test("a notification never covers a card waiting for an answer", () => {
   notice({ app: "Discord", summary: "Anna", body: "hey!" });
   assert.equal(State.focusId, CLAUDE);
   assert.equal(task("agent_notifications").pillBadge, "finished");
+});
+
+test("a notification's button opens the app it came from, and only when it said which", () => {
+  State.settings.showNotifications = true;
+  notice({ app: "Discord", summary: "Anna", body: "hey!", target: "discord" });
+  assert.equal(task("agent_notifications").noticeApp, "Discord");
+  assert.equal(openNoticeTarget(task("agent_notifications")), true);
+  assert.deepEqual(sent("open_notification_target"), [{ target: "discord" }]);
+  // No sender id: nothing to open, and no terminal fallback either.
+  calls.length = 0;
+  notice({ app: "Mystery", summary: "Hi", body: "" });
+  assert.equal(openNoticeTarget(task("agent_notifications")), false);
+  assert.deepEqual(sent("open_notification_target"), []);
+  // Any other pill keeps its own button.
+  assert.equal(openNoticeTarget(task(CLAUDE)), false);
 });

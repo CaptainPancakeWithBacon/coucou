@@ -39,6 +39,9 @@ export interface AgentTask {
   sessionId?: string | null;
   /** Claude's final message after Stop, one line; cleared when a new turn starts. */
   finalLine?: string | null;
+  /** The Notifications pill: who sent the newest one, and what opens that app. */
+  noticeApp?: string | null;
+  noticeTarget?: string | null;
 }
 
 export interface ApprovalInfo {
