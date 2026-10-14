@@ -401,6 +401,36 @@ fn hooks_apply(
     Ok(backup)
 }
 
+/// The very first launch on Windows, for people who will not open Settings:
+/// Coucou starts with Windows, and when Claude Code is there its hooks go in
+/// through the same checked writer as the Settings button (preview, fingerprint,
+/// dated backup); Settings shows and can undo both.
+fn first_run_setup(app: &AppHandle, loaded: &settings::Settings) {
+    if !cfg!(windows) {
+        return;
+    }
+    if loaded.autostart {
+        if let Err(err) = app.autolaunch().enable() {
+            log::line(format!("first run: autostart: {err}"));
+        }
+    }
+    let claude_code_is_here = hooks::settings_path().parent().is_some_and(|dir| dir.is_dir());
+    if !claude_code_is_here {
+        log::line("first run: no ~/.claude folder, so no Claude Code hooks".to_string());
+        return;
+    }
+    match hooks::preview(true).and_then(|plan| hooks::write(true, &plan.fingerprint)) {
+        Ok(_) => {
+            log::line("first run: Claude Code hooks installed (a backup of settings.json was made)".to_string());
+            let shared = app.state::<Shared>();
+            let mut current = shared.settings.lock().unwrap();
+            current.hooks_installed = true;
+            let _ = settings::save(&current);
+        }
+        Err(err) => log::line(format!("first run: Claude Code hooks not installed: {err}")),
+    }
+}
+
 // ── Other agents' hooks and plugins ──────────────────────────────────────────
 
 #[tauri::command]
@@ -694,7 +724,16 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     platform::prepare_environment();
-    let loaded = settings::load();
+    // No settings file yet: the very first launch (see `first_run_setup`).
+    let first_run = !settings::settings_path().exists();
+    let mut loaded = settings::load();
+    if first_run {
+        settings::apply_first_run_defaults(&mut loaded);
+        if let Err(err) = settings::save(&loaded) {
+            log::line(format!("could not save the first settings: {err}"));
+        }
+    }
+    let loaded = loaded;
     i18n::set_picked(&loaded.language);
     let gate = Arc::new(PollGate::new());
 
@@ -862,6 +901,9 @@ pub fn run() {
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
+            if first_run {
+                first_run_setup(&handle, &loaded);
+            }
             pipe::start(handle.clone());
             #[cfg(any(target_os = "linux", windows))]
             notifications::start(handle.clone());

@@ -182,8 +182,19 @@ pub fn hook_exe_path() -> PathBuf {
     local_dir().join("bin").join(crate::platform::HOOK_EXE)
 }
 
-fn settings_path() -> PathBuf {
+pub fn settings_path() -> PathBuf {
     config_dir().join("settings.json")
+}
+
+/// What the very first launch on Windows sets, so nothing has to be configured:
+/// the desktop notifications and the music pill on, GitHub next to it, and
+/// Coucou starting with Windows. Linux keeps its own defaults.
+pub fn apply_first_run_defaults(s: &mut Settings) {
+    if cfg!(windows) {
+        s.show_notifications = true;
+        s.autostart = true;
+        s.active_integrations = vec!["integration_spotify".into(), "integration_github".into()];
+    }
 }
 
 pub fn load() -> Settings {
@@ -419,6 +430,19 @@ fn save_to(path: &Path, settings: &Settings) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_first_launch_sets_windows_up_and_leaves_linux_alone() {
+        let mut s = super::Settings::default();
+        let before = (s.show_notifications, s.autostart, s.active_integrations.clone());
+        super::apply_first_run_defaults(&mut s);
+        if cfg!(windows) {
+            assert!(s.show_notifications && s.autostart);
+            assert_eq!(s.active_integrations, ["integration_spotify", "integration_github"]);
+        } else {
+            assert_eq!((s.show_notifications, s.autostart, s.active_integrations.clone()), before);
+        }
+    }
+
     use super::*;
     use serde_json::{json, Value};
 
