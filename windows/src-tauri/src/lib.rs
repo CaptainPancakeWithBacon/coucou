@@ -932,6 +932,7 @@ pub fn run() {
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             report::remember(&handle);
+            log::line(format!("send log: {}", report::describe()));
             hooks::ensure_hook_exe(&handle);
             if first_run {
                 first_run_setup(&handle, &loaded);
