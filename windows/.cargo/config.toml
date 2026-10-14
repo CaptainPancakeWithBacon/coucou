@@ -1,0 +1,9 @@
+# A clean Windows has no Visual C++ runtime (VCRUNTIME140.dll). The hook program
+# that Claude Code starts on every event needs none this way: it carries its own
+# runtime and starts everywhere (found by installing on a fresh Windows 11: the
+# hook exited 0xC0000135, "DLL not found").
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
