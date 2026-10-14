@@ -113,7 +113,9 @@ fn payload_string(bytes: &[u8]) -> String {
 /// "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", "com.squirrel.claude.Claude" or
 /// "chrome.exe" → "WindowsTerminal", "Claude", "chrome".
 fn app_name_of(primary_id: &str) -> String {
-    let id = primary_id.split('!').next().unwrap_or(primary_id);
+    // A classic app's id can be its path: "{GUID}\\WindowsPowerShell\\v1.0\\powershell.exe".
+    let id = primary_id.rsplit(['\\', '/']).next().unwrap_or(primary_id);
+    let id = id.split('!').next().unwrap_or(id);
     let id = id.split('_').next().unwrap_or(id);
     let id = id.strip_suffix(".exe").or_else(|| id.strip_suffix(".EXE")).unwrap_or(id);
     id.rsplit('.').next().unwrap_or(id).to_string()
@@ -393,6 +395,8 @@ mod tests {
         assert_eq!(app_name_of("Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"), "WindowsTerminal");
         assert_eq!(app_name_of("com.squirrel.claude.Claude"), "Claude");
         assert_eq!(app_name_of("chrome.exe"), "chrome");
+        assert_eq!(app_name_of(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"), "powershell");
+        assert_eq!(app_name_of(r"C:\Program Files\Claude\Claude.exe"), "Claude");
         assert_eq!(app_name_of(""), "");
     }
 
