@@ -312,7 +312,20 @@ mod win {
         }
         let rows = rows_after(&conn, base)?;
         *last = Some(max);
-        Ok(rows.iter().filter_map(|row| notice_of_toast(&row.app, &row.payload)).collect())
+        // Which app each notification came from goes in the log (never its text),
+        // so "Claude's notifications do not show" can be told from "Windows never
+        // handed them over".
+        let mut notices = Vec::new();
+        for row in &rows {
+            match notice_of_toast(&row.app, &row.payload) {
+                Some(notice) => {
+                    crate::log::line(format!("notification from {}", notice.app));
+                    notices.push(notice);
+                }
+                None => crate::log::line(format!("notification from {:?} had no text to show", app_name_of(&row.app))),
+            }
+        }
+        Ok(notices)
     }
 
     pub fn start(app: AppHandle) {
