@@ -281,6 +281,50 @@ mod linux {
     }
 }
 
+// ── Which rows are new (pure: the Windows reader below, tested everywhere) ─────
+
+/// How far back a poll looks again: a toast committed a moment after a later one
+/// still carries the earlier timestamp. 3 s, in Windows' 100 ns ticks.
+const LOOKBACK: i64 = 30_000_000;
+
+/// What the Windows reader has already handed over. A row's number can come back
+/// (the database reuses it when a replaced toast was the newest), so rows are
+/// told apart by id and arrival time, and "new" is by arrival time, which only
+/// grows. A toast replaced under the same tag arrives again and is shown again.
+#[derive(Default)]
+struct Watch {
+    newest: Option<i64>,
+    seen: std::collections::VecDeque<(i64, i64)>,
+}
+
+impl Watch {
+    /// Where to look from: a little before the newest arrival.
+    fn since(&self) -> Option<i64> {
+        self.newest.map(|n| n.saturating_sub(LOOKBACK))
+    }
+
+    /// True the first time a row is offered; false for one already handed over.
+    fn take(&mut self, id: i64, arrival: i64) -> bool {
+        if self.seen.contains(&(id, arrival)) {
+            return false;
+        }
+        if self.seen.len() >= 512 {
+            self.seen.pop_front();
+        }
+        self.seen.push_back((id, arrival));
+        self.newest = Some(self.newest.map_or(arrival, |n| n.max(arrival)));
+        true
+    }
+
+    /// The first look: what is there now is not news.
+    fn start_from(&mut self, newest: i64, rows: &[(i64, i64)]) {
+        for &(id, arrival) in rows {
+            self.take(id, arrival);
+        }
+        self.newest = Some(self.newest.map_or(newest, |n| n.max(newest)));
+    }
+}
+
 // ── Windows: the notification centre's database ───────────────────────────────
 
 #[cfg(windows)]
@@ -329,7 +373,8 @@ mod win {
     }
 
     struct Row {
-        rowid: i64,
+        id: i64,
+        arrival: i64,
         app: String,
         payload: Vec<u8>,
     }
@@ -341,48 +386,45 @@ mod win {
         }
     }
 
-    /// The rows after `base`, with the app each belongs to (the handler's id).
-    fn rows_after(conn: &Connection, base: i64) -> Result<Vec<Row>, String> {
-        let joined = "SELECT n.rowid, COALESCE(h.PrimaryId, ''), n.Payload FROM Notification n LEFT JOIN NotificationHandler h ON n.HandlerId = h.RecordId WHERE n.rowid > ?1 ORDER BY n.rowid";
-        let plain = "SELECT rowid, '', Payload FROM Notification WHERE rowid > ?1 ORDER BY rowid";
+    /// The rows that arrived after `since`, with the app each belongs to (the
+    /// handler's id).
+    fn rows_since(conn: &Connection, since: i64) -> Result<Vec<Row>, String> {
+        let joined = "SELECT n.Id, n.ArrivalTime, COALESCE(h.PrimaryId, ''), n.Payload FROM Notification n LEFT JOIN NotificationHandler h ON n.HandlerId = h.RecordId WHERE n.ArrivalTime > ?1 ORDER BY n.ArrivalTime";
+        let plain = "SELECT Id, ArrivalTime, '', Payload FROM Notification WHERE ArrivalTime > ?1 ORDER BY ArrivalTime";
         for sql in [joined, plain] {
             let Ok(mut stmt) = conn.prepare(sql) else { continue };
             let rows = stmt
-                .query_map([base], |r| Ok(Row { rowid: r.get(0)?, app: r.get(1)?, payload: bytes_of(r.get_ref(2)?) }))
+                .query_map([since], |r| {
+                    Ok(Row { id: r.get(0)?, arrival: r.get(1)?, app: r.get(2)?, payload: bytes_of(r.get_ref(3)?) })
+                })
                 .map_err(|e| e.to_string())?;
             return rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string());
         }
         Err("no readable Notification table".into())
     }
 
-    /// New notices since `last`; the first call only marks where the database stands.
-    fn poll(last: &mut Option<i64>) -> Result<Vec<Notice>, String> {
+    /// New notices since the last look; the first call only marks where the database stands.
+    fn poll(watch: &mut Watch) -> Result<Vec<Notice>, String> {
         let Some(path) = db_path().filter(|p| p.exists()) else { return Ok(Vec::new()) };
         let conn = open(&path)?;
-        let max: i64 = conn
-            .query_row("SELECT COALESCE(MAX(rowid), 0) FROM Notification", [], |r| r.get(0))
-            .map_err(|e| e.to_string())?;
-        let base = match *last {
-            Some(l) if max >= l => l,
-            // First look, or the newest row was dismissed and its number can come again.
-            _ => {
-                if last.is_none() {
-                    crate::log::line(format!("notifications: watching {} ({max} there now)", path.display()));
-                }
-                *last = Some(max);
-                return Ok(Vec::new());
-            }
-        };
-        if max == base {
+        let Some(since) = watch.since() else {
+            let newest: i64 = conn
+                .query_row("SELECT COALESCE(MAX(ArrivalTime), 0) FROM Notification", [], |r| r.get(0))
+                .map_err(|e| e.to_string())?;
+            let recent: Vec<(i64, i64)> =
+                rows_since(&conn, newest.saturating_sub(LOOKBACK))?.iter().map(|r| (r.id, r.arrival)).collect();
+            watch.start_from(newest, &recent);
+            crate::log::line(format!("notifications: watching {} ({} recent there now)", path.display(), recent.len()));
             return Ok(Vec::new());
-        }
-        let rows = rows_after(&conn, base)?;
-        *last = Some(max);
+        };
         // Which app each notification came from goes in the log (never its text),
         // so "Claude's notifications do not show" can be told from "Windows never
         // handed them over".
         let mut notices = Vec::new();
-        for row in &rows {
+        for row in rows_since(&conn, since)? {
+            if !watch.take(row.id, row.arrival) {
+                continue;
+            }
             match notice_of_toast(&row.app, &row.payload) {
                 Some(notice) => {
                     crate::log::line(format!("notification from {}", notice.app));
@@ -398,16 +440,16 @@ mod win {
         std::thread::Builder::new()
             .name("notifications".into())
             .spawn(move || {
-                let mut last: Option<i64> = None;
+                let mut watch = Watch::default();
                 let mut complained = false;
                 loop {
                     std::thread::sleep(Duration::from_secs(2));
                     if !enabled(&app) || crate::integrations::PAUSED.load(std::sync::atomic::Ordering::Relaxed) {
                         // Turned on again later: start from what is there then.
-                        last = None;
+                        watch = Watch::default();
                         continue;
                     }
-                    match poll(&mut last) {
+                    match poll(&mut watch) {
                         Ok(notices) => {
                             complained = false;
                             for notice in notices {
@@ -429,6 +471,37 @@ mod win {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_row_is_handed_over_once_and_what_was_there_at_the_start_is_not_news() {
+        let mut w = Watch::default();
+        assert_eq!(w.since(), None);
+        w.start_from(1_000_000_000, &[(7, 1_000_000_000)]);
+        assert!(!w.take(7, 1_000_000_000), "the newest row at the start is not new");
+        assert!(w.take(8, 1_000_000_100));
+        assert!(!w.take(8, 1_000_000_100), "never twice");
+        assert!(w.since().unwrap() < 1_000_000_100);
+    }
+
+    #[test]
+    fn a_replaced_toast_comes_again_even_when_its_row_number_is_reused() {
+        let mut w = Watch::default();
+        w.start_from(100, &[]);
+        assert!(w.take(5, 200));
+        // Same tag again: the database may give it the same id, but it arrived later.
+        assert!(w.take(5, 400));
+        assert!(w.take(5, 600));
+    }
+
+    #[test]
+    fn a_toast_committed_late_is_still_seen_inside_the_lookback() {
+        let mut w = Watch::default();
+        w.start_from(100, &[]);
+        assert!(w.take(2, 2 * LOOKBACK));
+        // Stamped earlier than one already handed over, written a moment later.
+        assert!(w.take(1, 2 * LOOKBACK - 1000));
+        assert!(w.since().unwrap() <= 2 * LOOKBACK - 1000);
+    }
 
     #[test]
     fn a_target_that_is_not_an_id_is_not_launched() {
