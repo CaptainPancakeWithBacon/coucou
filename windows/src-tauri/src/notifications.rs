@@ -459,6 +459,7 @@ mod win {
                         Err(e) if !complained => {
                             complained = true;
                             crate::log::line(format!("notifications: {e}"));
+                            crate::report::trouble(&app, "notifications", "Windows' notifications cannot be read");
                         }
                         Err(_) => {}
                     }

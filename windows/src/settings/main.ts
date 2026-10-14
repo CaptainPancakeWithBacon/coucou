@@ -47,6 +47,29 @@ function pickColor(next: Record<string, string>) {
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
 
+/** "Send log to the developer": only in builds that can (see report.rs). */
+function sendLogRow(): HTMLElement {
+  const box = h("div");
+  void Bridge.logReportAvailable().then((yes) => {
+    if (!yes) return;
+    const status = h("span", { class: "hint" });
+    const button = h("button", { text: t("Send log") });
+    button.addEventListener("click", () => {
+      button.setAttribute("disabled", "true");
+      status.textContent = "";
+      void Bridge.sendLog()
+        .then(() => { status.textContent = t("Log sent. Thank you!"); })
+        .catch(() => { status.textContent = t("The log could not be sent. Try again later."); })
+        .finally(() => window.setTimeout(() => button.removeAttribute("disabled"), 5000));
+    });
+    box.append(
+      h("div", { class: "row" }, h("label", { text: t("Send log to the developer") }), button, status),
+      h("div", { class: "hint", text: t("Sends the end of Coucou's log, cleaned of your name and folder names, to the developer. Only when you click. It helps to find out what is not working.") }),
+    );
+  });
+  return box;
+}
+
 function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   const el = h("button", { class: on ? "switch on" : "switch", "aria-pressed": on });
   el.addEventListener("click", () => {
@@ -958,6 +981,7 @@ function generalSection(): HTMLElement {
       toggle(settings.showNotifications, (v) => { settings.showNotifications = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
+    sendLogRow(),
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
         h("label", { text: t("Dance to the beat") }),

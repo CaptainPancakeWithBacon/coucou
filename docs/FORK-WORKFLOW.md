@@ -53,3 +53,28 @@ does. To make a mistake impossible:
 - To cut the link for good, ask GitHub Support to **detach the fork** (it then
   becomes an independent repository; the history stays). The banners and the
   upstream pull request option disappear, and so does the "Sync fork" button.
+
+## Logs from friends
+
+When something does not work, a friend can click **Settings → Send log** (or the
+**Send log** button on the "Something isn't working" card Coucou shows when it
+notices trouble: unreadable notifications, hooks that could not be installed, a
+crash). The end of `coucou.log` is posted to a private Discord channel. Nothing is
+sent without a click, and before it leaves, their user name, home folder and any
+e-mail address are replaced (`<user>`, `<home>`, `<email>`). Each report also
+carries the version, the commit, the system, a random install id and the main
+settings (on/off flags, no tokens).
+
+To switch it on for the release builds:
+
+1. In Discord: a private channel → Edit channel → Integrations → Webhooks → New
+   Webhook → Copy Webhook URL.
+2. Put it in a repository secret yourself (the value never goes through anyone
+   else): `gh secret set COUCOU_LOG_WEBHOOK -R CaptainPancakeWithBacon/coucou`
+   and paste the URL when asked.
+3. Merge into `main` (or run *Friends release* by hand). Builds made without the
+   secret have no button and no card.
+
+The address ends up inside the installer, so anyone who digs for it can find it.
+If it ever gets abused, delete the webhook in Discord, make a new one and update
+the secret; the next release carries the new address.

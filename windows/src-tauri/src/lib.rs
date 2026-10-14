@@ -30,6 +30,7 @@ mod platform;
 #[cfg(target_os = "linux")]
 mod portal;
 mod recap;
+mod report;
 mod secrets;
 mod session_window;
 mod settings;
@@ -308,9 +309,15 @@ fn open_session(session_id: Option<String>, path: Option<String>, editor: Option
 
 /// The notification card's button: opens the app the notification came from.
 #[tauri::command]
-fn open_notification_target(target: String) -> bool {
+fn open_notification_target(app: AppHandle, target: String) -> bool {
+    // The "Something isn't working" card: its button sends the log.
+    if target == report::SEND_TARGET {
+        tauri::async_runtime::spawn(report::send_and_announce(app));
+        return true;
+    }
     #[cfg(any(target_os = "linux", windows))]
     {
+        let _ = app;
         notifications::open_target(&target)
     }
     #[cfg(not(any(target_os = "linux", windows)))]
@@ -443,7 +450,10 @@ fn first_run_setup(app: &AppHandle, loaded: &settings::Settings) {
             current.hooks_installed = true;
             let _ = settings::save(&current);
         }
-        Err(err) => log::line(format!("first run: Claude Code hooks not installed: {err}")),
+        Err(err) => {
+            log::line(format!("first run: Claude Code hooks not installed: {err}"));
+            report::trouble(app, "hooks", "The Claude Code hooks could not be installed");
+        }
     }
 }
 
@@ -740,6 +750,7 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     platform::prepare_environment();
+    report::install_panic_hook();
     // The first launch of a build that sets itself up (see `first_run_setup`):
     // no marker yet, even if an older install left a settings file behind.
     let first_run = cfg!(windows) && !settings::setup_marker().exists();
@@ -796,6 +807,8 @@ pub fn run() {
             open_session,
             open_claude_desktop,
             open_notification_target,
+            report::log_report_available,
+            report::send_log,
             open_file_in_vscode,
             open_file_in_phpstorm,
             quit_app,
@@ -918,6 +931,7 @@ pub fn run() {
             island::spawn_cursor_poll(handle.clone(), gate.clone());
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
+            report::remember(&handle);
             hooks::ensure_hook_exe(&handle);
             if first_run {
                 first_run_setup(&handle, &loaded);

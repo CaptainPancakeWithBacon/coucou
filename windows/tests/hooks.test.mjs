@@ -773,3 +773,10 @@ test("an update notice from Coucou shows even with notification mirroring off", 
   assert.equal(task("agent_notifications").noticeTarget, "https://github.com/x/y");
   assert.match(task("agent_notifications").finalLine, /Coucou: Update available/);
 });
+
+test("the 'Something isn't working' card sends the log through the same button", () => {
+  State.settings.showNotifications = false;
+  notice({ app: "Coucou", summary: "Something isn't working", body: "x", target: "coucou:send-log" });
+  assert.equal(openNoticeTarget(task("agent_notifications")), true);
+  assert.deepEqual(sent("open_notification_target"), [{ target: "coucou:send-log" }]);
+});

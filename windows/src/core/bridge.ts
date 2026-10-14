@@ -226,6 +226,10 @@ export const Bridge = {
   /** The same as openInVSCode, for PhpStorm. */
   openInPhpStorm: (path: string | null) => call<boolean>("open_in_phpstorm", { path }),
 
+  /** "Send log": whether this build can (a webhook was compiled in), and sending it. */
+  logReportAvailable: () => call<boolean>("log_report_available"),
+  sendLog: () => callOrThrow<string>("send_log"),
+
   /** A notification's button: opens the app it came from (desktop entry / app id). */
   openNotificationTarget: (target: string) => call<boolean>("open_notification_target", { target }),
 
