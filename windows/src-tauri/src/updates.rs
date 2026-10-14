@@ -1,0 +1,130 @@
+// "A new version is out": for the builds the fork's release workflow makes.
+//
+// The workflow stamps the commit it built from into the program
+// (COUCOU_BUILD_SHA) and publishes the installer as the "friends-latest"
+// release, whose text carries a line "sha: <commit>". Once after start and every
+// few hours a thread reads that release (public, no login) and, when it names
+// another commit than this build's, tells the island once per version. The card's
+// button opens the release page: nothing is downloaded or installed by itself.
+// A build without a stamp (anything made on a developer's machine) never looks.
+
+use std::time::Duration;
+
+use tauri::AppHandle;
+
+/// The commit this build was made from; set by the release workflow only.
+const BUILD_SHA: Option<&str> = option_env!("COUCOU_BUILD_SHA");
+const RELEASE_API: &str = "https://api.github.com/repos/CaptainPancakeWithBacon/coucou/releases/tags/friends-latest";
+/// Where the card's button leads (see `notifications::open_target`).
+pub const RELEASE_PAGE: &str = "https://github.com/CaptainPancakeWithBacon/coucou/releases/tag/friends-latest";
+const FIRST_LOOK: Duration = Duration::from_secs(90);
+const EVERY: Duration = Duration::from_secs(6 * 3600);
+
+/// The commit a release says it was built from: a line `sha: <hex>` in its text.
+fn sha_of(body: &str) -> Option<String> {
+    body.lines().find_map(|line| {
+        let hex = line.trim().strip_prefix("sha:")?.trim();
+        (hex.len() >= 7 && hex.chars().all(|c| c.is_ascii_hexdigit())).then(|| hex.to_ascii_lowercase())
+    })
+}
+
+/// What the release is about, for the card: its first line that is not the sha.
+fn headline_of(body: &str) -> String {
+    let line = body
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with("sha:"))
+        .unwrap_or("A new version is ready to download");
+    line.chars().take(140).collect()
+}
+
+/// Another commit than this build's (either may be written short).
+fn is_other_commit(mine: &str, release: &str) -> bool {
+    let (mine, release) = (mine.to_ascii_lowercase(), release.to_ascii_lowercase());
+    !mine.is_empty() && !release.is_empty() && !release.starts_with(&mine) && !mine.starts_with(&release)
+}
+
+fn told_path() -> std::path::PathBuf {
+    crate::platform::config_dir().join("update-told")
+}
+
+pub fn start(app: AppHandle) {
+    let Some(mine) = BUILD_SHA.map(str::trim).filter(|s| !s.is_empty()) else { return };
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(FIRST_LOOK).await;
+        loop {
+            if !crate::integrations::PAUSED.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Err(err) = look(&app, mine).await {
+                    crate::log::line(format!("update check: {err}"));
+                }
+            }
+            tokio::time::sleep(EVERY).await;
+        }
+    });
+}
+
+async fn look(app: &AppHandle, mine: &str) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("coucou-update-check")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let release: serde_json::Value = client
+        .get(RELEASE_API)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let body = release.get("body").and_then(|b| b.as_str()).unwrap_or_default();
+    let Some(theirs) = sha_of(body) else { return Ok(()) };
+    if !is_other_commit(mine, &theirs) {
+        return Ok(());
+    }
+    // Once per version: a friend who does not update is not nagged every 6 hours.
+    if std::fs::read_to_string(told_path()).is_ok_and(|told| told.trim() == theirs) {
+        return Ok(());
+    }
+    let _ = std::fs::write(told_path(), &theirs);
+    crate::log::line(format!("update check: {theirs} is out, this build is {mine}"));
+    crate::notifications::announce(
+        app,
+        crate::notifications::Notice {
+            app: "Coucou".into(),
+            summary: "Update available".into(),
+            body: headline_of(body),
+            target: Some(RELEASE_PAGE.into()),
+        },
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_release_names_its_commit() {
+        assert_eq!(sha_of("Fixes the notifications\n\nsha: 0AbC123def\n").as_deref(), Some("0abc123def"));
+        assert_eq!(sha_of("no commit named here"), None);
+        assert_eq!(sha_of("sha: not-hex"), None);
+    }
+
+    #[test]
+    fn the_card_says_what_changed() {
+        assert_eq!(headline_of("sha: abc1234\n\nFixes the notifications\nmore"), "Fixes the notifications");
+        assert_eq!(headline_of("sha: abc1234"), "A new version is ready to download");
+        assert_eq!(headline_of(&"x".repeat(300)).chars().count(), 140);
+    }
+
+    #[test]
+    fn only_another_commit_counts() {
+        assert!(is_other_commit("abc1234def", "ffff111"));
+        assert!(!is_other_commit("abc1234def", "abc1234"));
+        assert!(!is_other_commit("abc1234", "abc1234def"));
+        assert!(!is_other_commit("", "abc1234"));
+    }
+}

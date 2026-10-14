@@ -699,7 +699,10 @@ function buildFinished(actions: ViewActions): ViewHost {
       if (task?.id === "agent_notifications") {
         const app = task.noticeApp;
         open.style.display = task.noticeTarget ? "" : "none";
-        const named = app ? t("Open {name}", { name: app }) : t("Open terminal");
+        // A link (the update card) is something to download, not an app to open.
+        const named = task.noticeTarget?.startsWith("https://")
+          ? t("Download")
+          : app ? t("Open {name}", { name: app }) : t("Open terminal");
         if (span.textContent !== named) span.textContent = named;
       } else {
         open.style.display = "";

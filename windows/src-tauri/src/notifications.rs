@@ -142,6 +142,11 @@ pub fn open_target(target: &str) -> bool {
     if target.is_empty() || target.len() > 260 || target.starts_with('-') || target.chars().any(char::is_control) {
         return false;
     }
+    // The update card: the fork's release page, in the browser.
+    if target == crate::updates::RELEASE_PAGE {
+        crate::platform::open_url(target);
+        return true;
+    }
     #[cfg(target_os = "linux")]
     {
         use std::process::{Command, Stdio};
@@ -182,6 +187,11 @@ pub fn start(app: AppHandle) {
 
 fn enabled(app: &AppHandle) -> bool {
     app.try_state::<crate::Shared>().is_some_and(|s| s.settings.lock().map(|g| g.show_notifications).unwrap_or(false))
+}
+
+/// A notice Coucou itself has (an update): shown whatever the mirroring setting says.
+pub fn announce(app: &AppHandle, notice: Notice) {
+    deliver(app, notice);
 }
 
 fn deliver(app: &AppHandle, notice: Notice) {

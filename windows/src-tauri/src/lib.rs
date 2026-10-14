@@ -21,6 +21,8 @@ mod log;
 mod net;
 #[cfg(any(target_os = "linux", windows))]
 mod notifications;
+#[cfg(any(target_os = "linux", windows))]
+mod updates;
 mod openai_compat;
 mod phone_link;
 mod pipe;
@@ -928,6 +930,8 @@ pub fn run() {
             pipe::start(handle.clone());
             #[cfg(any(target_os = "linux", windows))]
             notifications::start(handle.clone());
+            #[cfg(any(target_os = "linux", windows))]
+            updates::start(handle.clone());
             phone_link::start_if_enabled(&handle);
             integrations::start(handle.clone());
             spotify::sync(&handle, &loaded.active_integrations);

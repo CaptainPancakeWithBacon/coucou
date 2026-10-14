@@ -4009,6 +4009,17 @@
    "pt-BR": "O Claude Code foi desconectado: execute `claude` em um terminal, digite /login e tente de novo.",
    "ru": "Claude Code вышел из аккаунта: запустите `claude` в терминале, введите /login и повторите попытку.",
    "id": "Claude Code telah keluar: jalankan `claude` di terminal, ketik /login, lalu coba lagi."
+  },
+  "Download": {
+   "zh-Hans": "下载",
+   "hi": "डाउनलोड करें",
+   "es": "Descargar",
+   "ar": "تنزيل",
+   "fr": "Télécharger",
+   "bn": "ডাউনলোড",
+   "pt-BR": "Baixar",
+   "ru": "Скачать",
+   "id": "Unduh"
   }
  }
 }

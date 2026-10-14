@@ -42,7 +42,8 @@ export function registerNotificationHandlers(island: Island) {
 }
 
 function handle(island: Island, n: DesktopNotification) {
-  if (State.paused || !State.settings.showNotifications) return;
+  // Coucou's own notices (a new version) show even with the mirroring off.
+  if (State.paused || (!State.settings.showNotifications && n.app !== "Coucou")) return;
   const line = noticeLine(n);
   if (!line) return;
   State.upsertExternalAgent(NOTIFICATIONS_ID, "Notifications", COLOR);

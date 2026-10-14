@@ -764,3 +764,12 @@ test("a notification's button opens the app it came from, and only when it said 
   // Any other pill keeps its own button.
   assert.equal(openNoticeTarget(task(CLAUDE)), false);
 });
+
+test("an update notice from Coucou shows even with notification mirroring off", () => {
+  State.settings.showNotifications = false;
+  notice({ app: "Discord", summary: "Anna", body: "hey!", target: "discord" });
+  assert.equal(task("agent_notifications"), undefined);
+  notice({ app: "Coucou", summary: "Update available", body: "Fixes the notifications", target: "https://github.com/x/y" });
+  assert.equal(task("agent_notifications").noticeTarget, "https://github.com/x/y");
+  assert.match(task("agent_notifications").finalLine, /Coucou: Update available/);
+});
