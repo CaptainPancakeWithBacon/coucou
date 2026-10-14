@@ -3,7 +3,7 @@
 
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
-import { currentBpm, danceCalm, resetBeat } from "../mochi/beat";
+import { resetBeat } from "../mochi/beat";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -979,120 +979,8 @@ export class Island {
    * itself until frames flow again.
    */
   private watchFrames() {
-    this.checkBot();
     if (!this.running || performance.now() - this.lastFrame < STALLED_MS) return;
     this.frame(performance.now());
-  }
-
-  private botOffSince = 0;
-  private botBigSince = 0;
-  private stackSeen = "";
-  private stackLogged = 0;
-
-  /**
-   * Every canvas on the page with its size, place and opacity, logged when the
-   * list changes while the island is folded: a second Mochi drawn at the left (a
-   * leftover canvas) would show up as a different line.
-   */
-  private logStackAtBot() {
-    if (this.stackLogged >= 40) return;
-    const stack = ["greeting-canvas", "upload-canvas", "bot-canvas"].map((id) => {
-      const el = document.getElementById(id) as HTMLCanvasElement | null;
-      if (!el) return `${id}: none`;
-      const r = el.getBoundingClientRect();
-      const cs = getComputedStyle(el);
-      const p = el.parentElement;
-      const ps = p ? getComputedStyle(p) : null;
-      const q = (n: number) => Math.round(n / 4) * 4;
-      return `${id} ${q(r.width)}x${q(r.height)}@${q(r.left)},${q(r.top)} op=${cs.opacity} disp=${cs.display} parent[${p?.id}.${p?.className}] op=${ps?.opacity} disp=${ps?.display} vis=${ps?.visibility}`;
-    }).join(" | ");
-    if (stack === this.stackSeen) return;
-    this.stackSeen = stack;
-    this.stackLogged++;
-    void Bridge.log(`canvases: ${stack}`);
-  }
-
-  /** Width in CSS px of what is drawn on the Mochi canvas (alpha above a threshold). */
-  private drawnWidth(): number {
-    const ctx = this.botCanvas.getContext("2d");
-    if (!ctx || this.botCanvas.width < 1) return 0;
-    const { width, height } = this.botCanvas;
-    const data = ctx.getImageData(0, 0, width, height).data;
-    let min = width, max = -1;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (data[(y * width + x) * 4 + 3] > 60) {
-          if (x < min) min = x;
-          if (x > max) max = x;
-        }
-      }
-    }
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    return max < 0 ? 0 : (max - min + 1) / dpr;
-  }
-
-  /**
-   * Folded, Mochi has one place and one size (botPosition). When the canvas is
-   * somewhere else for more than a second and a half — he was seen oversized and
-   * clipped at the top after a fold — the numbers are logged once and he is put
-   * back by hand, whatever left him there.
-   */
-  private checkBot() {
-    if (State.mode !== "compact" || this.width.animating || this.height.animating || this.uploadActive || State.mochiOnDesktop) {
-      this.botOffSince = 0;
-      this.botBigSince = 0;
-      return;
-    }
-    this.logStackAtBot();
-    // Folded, the body is about 23 px wide; seen drawn at 35.
-    const drawn = this.drawnWidth();
-    if (drawn > 30) {
-      const t = performance.now();
-      if (this.botBigSince === 0) this.botBigSince = t;
-      else if (t - this.botBigSince > 1500) {
-        this.botBigSince = 0;
-        const e = this.engine;
-        void Bridge.log(
-          `Mochi drawn too big after the fold: ${drawn.toFixed(1)} px wide; ` +
-          `sx ${e.sx.toFixed(2)} sy ${e.sy.toFixed(2)} tilt ${e.tilt.toFixed(2)} ox ${e.ox.toFixed(2)} oy ${e.oy.toFixed(2)} ` +
-          `morph ${e.morph.toFixed(2)} dance ${e.dancingLevel.toFixed(2)} calm ${danceCalm().toFixed(2)} bpm ${currentBpm().toFixed(1)} ` +
-          `canvas ${this.botCanvas.width}x${this.botCanvas.height} style ${this.botCanvas.style.width}x${this.botCanvas.style.height} ` +
-          `ratio ${window.devicePixelRatio} state ${State.effectiveState} spotify ${State.spotifyPlaying}`,
-        );
-        e.dancingLevel = 0;
-        e.morph = 0;
-      }
-    } else {
-      this.botBigSince = 0;
-    }
-    const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
-    const style = this.botCanvas.style;
-    const off =
-      Math.abs(parseFloat(style.left) - (p.cx - BOT_FULL_W / 2)) > 2 ||
-      !this.botSize.settled || !this.botCx.settled || !this.botCy.settled;
-    if (!off) {
-      this.botOffSince = 0;
-      return;
-    }
-    const now = performance.now();
-    if (this.botOffSince === 0) {
-      this.botOffSince = now;
-      return;
-    }
-    if (now - this.botOffSince < 1500) return;
-    this.botOffSince = 0;
-    void Bridge.log(
-      `Mochi off after the fold: canvas ${style.width}x${style.height} (${this.botCanvas.width}x${this.botCanvas.height} px, ratio ${window.devicePixelRatio}) at ${style.left},${style.top}; ` +
-      `size ${this.botSize.value.toFixed(1)}->${this.botSize.target.toFixed(1)} ` +
-      `cx ${this.botCx.value.toFixed(1)}->${this.botCx.target} cy ${this.botCy.value.toFixed(1)}->${this.botCy.target}; ` +
-      `view ${State.view} state ${State.effectiveState} running ${this.running} frame ${Math.round(now - this.lastFrame)} ms ago`,
-    );
-    this.botSize.set(p.diameter / 0.6);
-    this.botCx.set(p.cx);
-    this.botCy.set(p.cy);
-    this.canvasDpr = 0;
-    if (this.running) this.frame(now);
-    else this.ensureRunning();
   }
 
   /**

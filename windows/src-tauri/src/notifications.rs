@@ -279,8 +279,7 @@ mod win {
 
     /// The rows after `base`, with the app each belongs to (the handler's id).
     fn rows_after(conn: &Connection, base: i64) -> Result<Vec<Row>, String> {
-        let joined = "SELECT n.rowid, COALESCE(h.PrimaryId, ''), n.Payload FROM Notification n \\
-                      LEFT JOIN NotificationHandler h ON n.HandlerId = h.RecordId WHERE n.rowid > ?1 ORDER BY n.rowid";
+        let joined = "SELECT n.rowid, COALESCE(h.PrimaryId, ''), n.Payload FROM Notification n LEFT JOIN NotificationHandler h ON n.HandlerId = h.RecordId WHERE n.rowid > ?1 ORDER BY n.rowid";
         let plain = "SELECT rowid, '', Payload FROM Notification WHERE rowid > ?1 ORDER BY rowid";
         for sql in [joined, plain] {
             let Ok(mut stmt) = conn.prepare(sql) else { continue };
