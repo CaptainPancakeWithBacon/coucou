@@ -738,8 +738,9 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     platform::prepare_environment();
-    // No settings file yet: the very first launch (see `first_run_setup`).
-    let first_run = !settings::settings_path().exists();
+    // The first launch of a build that sets itself up (see `first_run_setup`):
+    // no marker yet, even if an older install left a settings file behind.
+    let first_run = cfg!(windows) && !settings::setup_marker().exists();
     let mut loaded = settings::load();
     if first_run {
         settings::apply_first_run_defaults(&mut loaded);
@@ -918,7 +919,12 @@ pub fn run() {
             hooks::ensure_hook_exe(&handle);
             if first_run {
                 first_run_setup(&handle, &loaded);
+                let _ = std::fs::write(settings::setup_marker(), b"");
             }
+            log::line(format!(
+                "settings: notifications={} autostart={} hooks={} pills={:?}",
+                loaded.show_notifications, loaded.autostart, loaded.hooks_installed, loaded.active_integrations
+            ));
             pipe::start(handle.clone());
             #[cfg(any(target_os = "linux", windows))]
             notifications::start(handle.clone());

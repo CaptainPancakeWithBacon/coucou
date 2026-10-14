@@ -356,6 +356,9 @@ mod win {
             Some(l) if max >= l => l,
             // First look, or the newest row was dismissed and its number can come again.
             _ => {
+                if last.is_none() {
+                    crate::log::line(format!("notifications: watching {} ({max} there now)", path.display()));
+                }
                 *last = Some(max);
                 return Ok(Vec::new());
             }

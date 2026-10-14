@@ -186,14 +186,33 @@ pub fn settings_path() -> PathBuf {
     config_dir().join("settings.json")
 }
 
-/// What the very first launch on Windows sets, so nothing has to be configured:
-/// the desktop notifications and the music pill on, GitHub next to it, and
-/// Coucou starting with Windows. Linux keeps its own defaults.
+/// Dropped in the settings folder once the first-launch setup has run. A file
+/// of its own, not a setting: an install that already has a settings.json (an
+/// older build, a reinstall) still gets the setup once.
+pub fn setup_marker() -> PathBuf {
+    config_dir().join("welcome-v1")
+}
+
+/// What the first launch on Windows sets, so nothing has to be configured: the
+/// desktop notifications on, Coucou starting with Windows, and the music and
+/// GitHub pills. Pills the user already picked stay; the untouched default set
+/// (the services nobody has connected) is swapped for those two. Linux keeps
+/// its own defaults.
 pub fn apply_first_run_defaults(s: &mut Settings) {
-    if cfg!(windows) {
-        s.show_notifications = true;
-        s.autostart = true;
-        s.active_integrations = vec!["integration_spotify".into(), "integration_github".into()];
+    if !cfg!(windows) {
+        return;
+    }
+    s.show_notifications = true;
+    s.autostart = true;
+    let wanted = ["integration_spotify", "integration_github"];
+    if s.active_integrations == Settings::default().active_integrations {
+        s.active_integrations = wanted.iter().map(|id| id.to_string()).collect();
+    } else {
+        for id in wanted {
+            if s.active_integrations.len() < 4 && !s.active_integrations.iter().any(|x| x == id) {
+                s.active_integrations.push(id.to_string());
+            }
+        }
     }
 }
 
@@ -430,6 +449,18 @@ fn save_to(path: &Path, settings: &Settings) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_first_launch_keeps_pills_somebody_picked() {
+        let mut s = super::Settings::default();
+        s.active_integrations = vec!["integration_notion".into()];
+        super::apply_first_run_defaults(&mut s);
+        if cfg!(windows) {
+            assert_eq!(s.active_integrations, ["integration_notion", "integration_spotify", "integration_github"]);
+        } else {
+            assert_eq!(s.active_integrations, ["integration_notion"]);
+        }
+    }
+
     #[test]
     fn the_first_launch_sets_windows_up_and_leaves_linux_alone() {
         let mut s = super::Settings::default();
