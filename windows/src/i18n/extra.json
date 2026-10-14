@@ -4020,6 +4020,61 @@
    "pt-BR": "Baixar",
    "ru": "Скачать",
    "id": "Unduh"
+  },
+  "Send log": {
+   "zh-Hans": "发送日志",
+   "hi": "लॉग भेजें",
+   "es": "Enviar registro",
+   "ar": "إرسال السجل",
+   "fr": "Envoyer le journal",
+   "bn": "লগ পাঠান",
+   "pt-BR": "Enviar registro",
+   "ru": "Отправить журнал",
+   "id": "Kirim log"
+  },
+  "Send log to the developer": {
+   "zh-Hans": "向开发者发送日志",
+   "hi": "डेवलपर को लॉग भेजें",
+   "es": "Enviar el registro al desarrollador",
+   "ar": "إرسال السجل إلى المطوّر",
+   "fr": "Envoyer le journal au développeur",
+   "bn": "ডেভেলপারকে লগ পাঠান",
+   "pt-BR": "Enviar o registro ao desenvolvedor",
+   "ru": "Отправить журнал разработчику",
+   "id": "Kirim log ke pengembang"
+  },
+  "Log sent. Thank you!": {
+   "zh-Hans": "日志已发送，谢谢！",
+   "hi": "लॉग भेज दिया गया। धन्यवाद!",
+   "es": "Registro enviado. ¡Gracias!",
+   "ar": "تم إرسال السجل. شكرًا!",
+   "fr": "Journal envoyé. Merci !",
+   "bn": "লগ পাঠানো হয়েছে। ধন্যবাদ!",
+   "pt-BR": "Registro enviado. Obrigado!",
+   "ru": "Журнал отправлен. Спасибо!",
+   "id": "Log terkirim. Terima kasih!"
+  },
+  "The log could not be sent. Try again later.": {
+   "zh-Hans": "无法发送日志，请稍后再试。",
+   "hi": "लॉग नहीं भेजा जा सका। बाद में फिर कोशिश करें।",
+   "es": "No se pudo enviar el registro. Inténtalo más tarde.",
+   "ar": "تعذّر إرسال السجل. حاول لاحقًا.",
+   "fr": "Le journal n'a pas pu être envoyé. Réessaie plus tard.",
+   "bn": "লগ পাঠানো যায়নি। পরে আবার চেষ্টা করুন।",
+   "pt-BR": "Não foi possível enviar o registro. Tente novamente mais tarde.",
+   "ru": "Не удалось отправить журнал. Попробуйте позже.",
+   "id": "Log tidak dapat dikirim. Coba lagi nanti."
+  },
+  "Sends the end of Coucou's log, cleaned of your name and folder names, to the developer. Only when you click. It helps to find out what is not working.": {
+   "zh-Hans": "把 Coucou 日志的末尾（已去除你的姓名和文件夹名）发送给开发者。只有在你点击时才会发送，有助于找出问题。",
+   "hi": "Coucou के लॉग का अंतिम हिस्सा (आपके नाम और फ़ोल्डर नामों के बिना) डेवलपर को भेजता है। सिर्फ़ तब जब आप क्लिक करें। इससे पता चलता है कि क्या काम नहीं कर रहा।",
+   "es": "Envía el final del registro de Coucou, sin tu nombre ni los nombres de tus carpetas, al desarrollador. Solo cuando haces clic. Ayuda a averiguar qué no funciona.",
+   "ar": "يرسل نهاية سجل Coucou، بعد إزالة اسمك وأسماء مجلداتك، إلى المطوّر. فقط عند النقر. يساعد على معرفة ما لا يعمل.",
+   "fr": "Envoie la fin du journal de Coucou, sans ton nom ni tes noms de dossiers, au développeur. Seulement quand tu cliques. Ça aide à trouver ce qui ne marche pas.",
+   "bn": "Coucou-র লগের শেষ অংশ (আপনার নাম ও ফোল্ডারের নাম ছাড়া) ডেভেলপারকে পাঠায়। শুধু আপনি ক্লিক করলে। কী কাজ করছে না তা খুঁজে পেতে সাহায্য করে।",
+   "pt-BR": "Envia o final do registro do Coucou, sem seu nome nem nomes de pastas, ao desenvolvedor. Somente quando você clica. Ajuda a descobrir o que não funciona.",
+   "ru": "Отправляет разработчику конец журнала Coucou без вашего имени и названий папок. Только по вашему клику. Помогает понять, что не работает.",
+   "id": "Mengirim bagian akhir log Coucou, tanpa nama dan nama folder Anda, ke pengembang. Hanya saat Anda klik. Membantu mencari tahu apa yang tidak berfungsi."
   }
  }
 }

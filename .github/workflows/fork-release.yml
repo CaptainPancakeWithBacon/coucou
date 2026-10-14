@@ -30,6 +30,9 @@ jobs:
     env:
       # Stamped into the program: it is what the update check compares with.
       COUCOU_BUILD_SHA: ${{ github.sha }}
+      # Where "Send log" posts (windows/src-tauri/src/report.rs). A repository
+      # secret; without it the build simply has no such button.
+      COUCOU_LOG_WEBHOOK: ${{ secrets.COUCOU_LOG_WEBHOOK }}
 
     steps:
       - uses: actions/checkout@v7
