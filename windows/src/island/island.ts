@@ -324,7 +324,6 @@ export class Island {
     this.greetingCanvas.style.height = "150px";
 
     // Keep the transparent, non-activating surface composited off-hover.
-    this.islandEl.style.transform = "translateZ(0)";
     this.root.append(this.wakeStrip, this.islandEl);
     this.applyGeometry();
   }
@@ -697,7 +696,7 @@ export class Island {
     this.islandEl.style.width = `${w}px`;
     this.islandEl.style.height = `${hh}px`;
     this.islandEl.style.borderRadius = `0 0 ${r}px ${r}px`;
-    this.islandEl.style.transform = `translateX(-50%)`;
+    this.islandEl.style.transform = "translateX(-50%) translateZ(0)";
     // These follow the island as it resizes, so they belong here rather than in
     // the state-driven DOM sync.
     this.miniGrid.style.left = `${w - 40 - 14.5}px`;
