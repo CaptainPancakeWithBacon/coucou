@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
+import { beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, pauseBeat, resumeBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
 const report = (bpm, now, offset = 1000, confidence = 5) => ({
   bpm, beatAtMs: offset + Math.floor((now - offset) * bpm / 60000) * 60000 / bpm, confidence,
 });
@@ -83,4 +83,17 @@ test("fallback preserves phase instead of jumping or stopping", () => {
   const beforeReset = beatPosition(6500);
   resetBeat(true, 6500);
   assert.equal(beatPosition(6500), beforeReset);
+});
+
+test("pausing and resuming the same Spotify song preserves its last BPM", () => {
+  resetBeat(true, 1000);
+  for (let at = 1000; at <= 3000; at += 250) feedBeat(report(108, at), at);
+  assert.equal(currentBpm(), 108);
+  pauseBeat(3100);
+  assert.equal(currentBpm(), 108);
+  resumeBeat(20000);
+  assert.equal(currentBpm(), 108, "resume uses the remembered tempo immediately");
+  assert.equal(beatDiagnostics(20000).danceBpm, 108);
+  resetBeat(true, 21000); // Different song: existing reset behavior
+  assert.equal(currentBpm(), DEFAULT_BPM);
 });

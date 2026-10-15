@@ -3,7 +3,7 @@
 
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
-import { resetBeat } from "../mochi/beat";
+import { pauseBeat, resetBeat, resumeBeat } from "../mochi/beat";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -730,16 +730,23 @@ export class Island {
   /** Listening for the beat while music plays and the setting is on (beat.rs). */
   private beatWanted = false;
   private beatTrack = "";
+  private beatSongId = "";
   private beatRevision = 0;
 
   private syncBeat(wanted: boolean) {
     const track = `${Spotify.state.track?.id ?? ""}:${Spotify.beatRevision}`;
     if (wanted === this.beatWanted && (!wanted || track === this.beatTrack)) return;
     const restart = wanted && this.beatWanted;
+    const songId = Spotify.state.track?.id ?? "";
+    const sameSong = songId !== "" && songId === this.beatSongId;
+    const wasPlaying = this.beatWanted;
     const revision = ++this.beatRevision;
     this.beatWanted = wanted;
     this.beatTrack = track;
-    resetBeat(wanted);
+    this.beatSongId = songId;
+    if (!wanted && wasPlaying && sameSong) pauseBeat();
+    else if (wanted && !wasPlaying && sameSong) resumeBeat();
+    else resetBeat(wanted);
     if (restart) {
       void Bridge.beatEnable(false).then(() => {
         if (revision === this.beatRevision) void Bridge.beatEnable(true);
