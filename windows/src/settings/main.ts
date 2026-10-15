@@ -4,7 +4,6 @@
 // island's settings are drawn here, one Notch page at a time.
 
 import "./settings.css";
-import { emit } from "@tauri-apps/api/event";
 import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport } from "../core/bridge";
 import { CUSTOM_SERVER_KEY, providerDef, urlExposure } from "../core/providers";
 import {
@@ -937,58 +936,6 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
 // ── General section ───────────────────────────────────────────────────────────
 
-function songBpmKeyRow(): HTMLElement {
-  const field = h("input", {
-    type: "password", placeholder: "Paste GetSongBPM API key",
-    autocomplete: "off", spellcheck: "false",
-    style: "flex:1 1 200px;min-width:0",
-  }) as HTMLInputElement;
-  const saveBtn = h("button", { text: t("Save key") });
-  const removeBtn = h("button", { class: "danger", text: t("Remove") });
-  const status = h("span", { class: "hint" });
-  const feedback = h("div");
-  const key = "getsongbpm-api-key";
-  const refresh = async () => {
-    const present = (await Bridge.secretPresent(key)) ?? false;
-    status.textContent = present
-      ? t("Key saved in the {store}.", { store: KEY_STORE })
-      : t("No database key configured — live audio detection remains available.");
-    removeBtn.style.display = present ? "" : "none";
-    field.placeholder = present ? "•••••••• (stored)" : "Paste GetSongBPM API key";
-  };
-  saveBtn.addEventListener("click", async () => {
-    const value = field.value.trim();
-    if (!value) return;
-    clear(feedback);
-    try {
-      await Bridge.secretSet(key, value);
-      field.value = "";
-      feedback.append(h("div", { class: "notice ok", text: t("API key saved securely. The next song will use it.") }));
-      await refresh();
-    } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: String(err) }));
-    }
-  });
-  removeBtn.addEventListener("click", async () => {
-    clear(feedback);
-    try {
-      await Bridge.secretClear(key);
-      field.value = "";
-      feedback.append(h("div", { class: "notice ok", text: t("API key removed.") }));
-      await refresh();
-    } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: String(err) }));
-    }
-  });
-  void refresh();
-  return h("div", {},
-    h("div", { class: "row" }, h("label", { text: t("GetSongBPM API key") }), field, saveBtn, removeBtn),
-    h("div", { class: "hint" }, status),
-    h("div", { class: "hint", text: t("Request a key at getsongbpm.com/api. The key is kept in your OS credential store, not in Coucou settings.json.") }),
-    feedback,
-  );
-}
-
 function generalSection(): HTMLElement {
   const volume = h("input", {
     type: "range", min: "0", max: "0.2", step: "0.005",
@@ -1071,22 +1018,6 @@ function generalSection(): HTMLElement {
     void save();
   });
 
-  const beatOutput = h("select", {}) as HTMLSelectElement;
-  beatOutput.append(h("option", { value: "", text: t("Default") }));
-  beatOutput.value = settings.beatOutput ?? "";
-  void Bridge.beatOutputs().then((outputs) => {
-    if (!outputs) return;
-    for (const device of outputs) beatOutput.append(h("option", { value: device, text: device }));
-    if (settings.beatOutput && !outputs.includes(settings.beatOutput)) {
-      beatOutput.append(h("option", { value: settings.beatOutput, text: settings.beatOutput + " (unavailable)" }));
-    }
-    beatOutput.value = settings.beatOutput ?? "";
-  });
-  beatOutput.addEventListener("change", () => {
-    settings.beatOutput = beatOutput.value;
-    void save();
-  });
-
   return h(
     "section",
     {},
@@ -1110,11 +1041,7 @@ function generalSection(): HTMLElement {
         h("label", { text: t("Dance to the beat") }),
         toggle(settings.beatSync, (v) => { settings.beatSync = v; void save(); }),
       ),
-      h("div", { class: "row" },
-        h("label", { text: t("Beat audio output") }),
-        beatOutput,
-      ),
-      songBpmKeyRow(),
+
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
         h("label", { text: t("Chat memory") }),
@@ -1466,7 +1393,6 @@ async function main() {
   });
 
   void onEvent<ShortcutsReport>("shortcuts-status", (fresh) => shortcutsListener?.report(fresh));
-  void onEvent<BeatTelemetry>("beat-diagnostics", (status) => updateBeatInfo?.(status));
   void onEvent<Settings>("settings-changed", (s) => {
     const before = `${settings.chatProvider}|${settings.ollamaUrl}|${settings.lmstudioUrl}|${settings.customUrl}`;
     settings = { ...settings, ...s };
@@ -1476,63 +1402,6 @@ async function main() {
     if (before !== after) localRedraw?.();
     applyLanguage();
   });
-}
-
-type BeatTelemetry = {
-  track: string | null;
-  playing: boolean;
-  enabled: boolean;
-  output: string;
-  databaseBpm: number | null;
-  detectedBpm: number | null;
-  danceBpm: number | null;
-  phaseLocked: boolean;
-  lastAudioAt: number | null;
-  waiting: boolean;
-};
-
-let updateBeatInfo: ((value: BeatTelemetry) => void) | null = null;
-
-function beatInfoSection(): HTMLElement {
-  const section = h("section", {}, h("h2", {}, h("span", { text: t("Beat info") })));
-  section.append(h("div", { class: "hint", text: t("Live diagnostics for Spotify dancing. BPM means beats per minute; matching BPM alone does not guarantee alignment to each beat.") }));
-  const values = new Map<string, HTMLElement>();
-  const items: [string, string][] = [
-    ["track", "Playing track"],
-    ["playing", "Spotify playback"],
-    ["enabled", "Dance to the beat"],
-    ["output", "Listening to"],
-    ["databaseBpm", "Database BPM"],
-    ["detectedBpm", "Detected audio BPM"],
-    ["danceBpm", "Mochi dance BPM"],
-    ["source", "Tempo source"],
-    ["alignment", "Beat alignment"],
-  ];
-  for (const [key, label] of items) {
-    const value = h("strong", { text: "—", style: "text-align:right;overflow-wrap:anywhere" });
-    values.set(key, value);
-    section.append(h("div", { class: "row", style: "justify-content:space-between;gap:20px" },
-      h("label", { text: t(label) }), value));
-  }
-  const show = (key: string, value: string) => { values.get(key)!.textContent = value; };
-  updateBeatInfo = (data) => {
-    const format = (value: number | null) => value == null ? "—" : `${value.toFixed(1)} BPM`;
-    const fresh = data.lastAudioAt != null && Date.now() - data.lastAudioAt < 3500;
-    const synced = data.phaseLocked && fresh;
-    show("track", data.track ?? "No track");
-    show("playing", data.playing ? "Playing" : "Stopped");
-    show("enabled", data.enabled ? "Enabled" : "Disabled");
-    show("output", data.output);
-    show("databaseBpm", format(data.databaseBpm));
-    show("detectedBpm", fresh ? format(data.detectedBpm) : "— (waiting for audio)");
-    show("danceBpm", data.enabled && data.playing ? format(data.danceBpm) : "—");
-    show("source", data.databaseBpm != null ? "Verified database match" : "112 BPM fallback (unverified)");
-    show("alignment", synced ? "Confirmed audio phase" : "Not confirmed (steady tempo)");
-  };
-  section.append(h("div", { class: "hint", text: t("Database BPM requires a GetSongBPM API key. Without a matching song, audio detection is used. A detected tempo of half or double the database BPM can be normal.") }));
-  section.append(h("button", { text: t("Refresh"), onclick: () => void emit("beat-diagnostics-request") }));
-  void emit("beat-diagnostics-request");
-  return section;
 }
 
 /** The Notch page being shown. */
@@ -1580,7 +1449,6 @@ async function render() {
   declaredViews.length = 0;
   localRedraw = null;
   shortcutsListener = null;
-  updateBeatInfo = null;
   clear(root);
   const sections: Partial<Record<PageId, () => HTMLElement[]>> = {
     general: () => [generalSection()],
@@ -1590,7 +1458,6 @@ async function render() {
     integrations: () => [integrationsSection(present)],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],
     shortcuts: () => [shortcutsSection(shortcutReport)],
-    beatinfo: () => [beatInfoSection()],
   };
   root.append(...(sections[notchPage]?.() ?? []));
   if (notchPage === "general") {

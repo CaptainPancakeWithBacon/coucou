@@ -3,7 +3,7 @@
 
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
-import { resetBeat, setTrackBpm } from "../mochi/beat";
+import { resetBeat } from "../mochi/beat";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -733,14 +733,13 @@ export class Island {
   private beatRevision = 0;
 
   private syncBeat(wanted: boolean) {
-    const track = `${Spotify.state.track?.id ?? ""}\u0000${State.settings.beatOutput ?? ""}`;
+    const track = `${Spotify.state.track?.id ?? ""}:${Spotify.beatRevision}`;
     if (wanted === this.beatWanted && (!wanted || track === this.beatTrack)) return;
     const restart = wanted && this.beatWanted;
     const revision = ++this.beatRevision;
     this.beatWanted = wanted;
     this.beatTrack = track;
     resetBeat(wanted);
-    if (wanted) setTrackBpm(Spotify.trackBpm);
     if (restart) {
       void Bridge.beatEnable(false).then(() => {
         if (revision === this.beatRevision) void Bridge.beatEnable(true);

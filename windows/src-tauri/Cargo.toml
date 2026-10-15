@@ -49,6 +49,8 @@ sherpa-onnx = { version = "1.13.8", default-features = false, features = ["stati
 # The microphone, and the computer's own sound for the Notetaker (WASAPI
 # loopback on Windows, a PulseAudio/PipeWire monitor on Linux). Apache-2.0.
 cpal = "0.18"
+# MIT: tempo path and dynamic-programming beat grid; replaces the ad-hoc BPM guess.
+timestretch = "=0.15.0"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
@@ -58,6 +60,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # Same versions as wry, so nothing new is compiled.
 webview2-com = "0.39"
 wv2_core = { package = "windows-core", version = "0.62" }
+windows-core = "0.61"
 windows = { version = "0.61", features = [
   # The Spotify pill: the system media controls Spotify publishes to.
   "Foundation",
@@ -75,6 +78,7 @@ windows = { version = "0.61", features = [
   "Win32_Security_Authorization",
   # "Open terminal": the relay's process tree leads to the session's window.
   "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Performance",
   "Win32_System_Ole",
   "Win32_System_Pipes",
   "Win32_System_Registry",

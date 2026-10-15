@@ -182,8 +182,6 @@ pub enum Source {
     Mic(Option<String>),
     /// What the computer plays (loopback / monitor).
     System,
-    /// A particular audio output (never a microphone).
-    Output(String),
 }
 
 /// A microphone the user can pick in Settings.
@@ -201,15 +199,6 @@ fn device_id(d: &cpal::Device) -> String {
     d.id().map(|id| id.to_string()).unwrap_or_default()
 }
 
-/// Outputs usable for loopback/monitor capture, not microphones.
-pub fn output_devices() -> Vec<String> {
-    let host = cpal::default_host();
-    let Ok(devices) = host.output_devices() else { return Vec::new() };
-    let mut names: Vec<String> = devices.map(|d| device_name(&d)).filter(|s| !s.is_empty()).collect();
-    names.sort();
-    names.dedup();
-    names
-}
 
 /// The microphones, the default first. Monitors of outputs are left out.
 pub fn input_devices() -> Vec<InputDevice> {
@@ -245,7 +234,6 @@ fn open_device(source: &Source) -> Option<cpal::Device> {
             .or_else(|| host.default_input_device()),
         Source::Mic(None) => host.default_input_device(),
         Source::System => system_device(&host),
-        Source::Output(name) => host.output_devices().ok()?.find(|d| device_name(d) == *name).and_then(|d| output_monitor(&host, d)),
     }
 }
 
@@ -332,7 +320,7 @@ impl Drop for Capture {
 
 fn build_stream(source: &Source, mut sink: impl FnMut(&[f32]) + Send + 'static) -> Result<cpal::Stream, String> {
     let device = open_device(source).ok_or("no audio device")?;
-    let supported = if matches!(source, Source::System | Source::Output(_)) && cfg!(windows) {
+    let supported = if *source == Source::System && cfg!(windows) {
         device.default_output_config().map_err(|e| e.to_string())?
     } else {
         device.default_input_config().map_err(|e| e.to_string())?

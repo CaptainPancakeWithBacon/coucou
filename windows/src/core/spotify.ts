@@ -47,10 +47,11 @@ export const IDLE_SPOTIFY: SpotifyState = {
 
 /** The page's copy of the player, and the cover of the track that has one. */
 export const Spotify = {
+  /** Invalidates captured beat history after a seek within the same song. */
+  beatRevision: 0,
   state: { ...IDLE_SPOTIFY } as SpotifyState,
   artwork: null as { artUrl: string; dataUrl: string } | null,
   /** Trusted tempo for the current track, if a provider found an exact match. */
-  trackBpm: null as number | null,
 };
 
 /** The cover to show for the current track, if it has arrived. */

@@ -12,7 +12,7 @@ import {
   musicPlaying, spotifyPosition, volumeLevel, withPlaying,
 } from "../src/core/spotify.ts";
 import { BotEngine, danceTransform, stepDanceLevel } from "../src/mochi/engine.ts";
-import { registerSpotifyHandlers } from "../src/island/spotify.ts";
+import { applySpotify, registerSpotifyHandlers } from "../src/island/spotify.ts";
 import { buildSpotifyCard, buildSpotifyPill } from "../src/views/spotify.ts";
 import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
 import { lookup, setLanguage } from "../src/i18n/i18n.ts";
@@ -27,6 +27,16 @@ const track = (over = {}) => ({
 const playing = (over = {}) => ({
   ...IDLE_SPOTIFY, running: true, installed: true, track: track(), playing: true,
   position: 10, positionAt: 1_000, volume: 70, ...over,
+});
+
+test("a seek invalidates beat history; normal playback progress does not", () => {
+  Spotify.state = playing({ position: 10, positionAt: 1000 });
+  const revision = Spotify.beatRevision;
+  const host = { revealSilently() {} };
+  applySpotify(host, playing({ position: 11, positionAt: 2000 }));
+  assert.equal(Spotify.beatRevision, revision);
+  applySpotify(host, playing({ position: 45, positionAt: 3000 }));
+  assert.equal(Spotify.beatRevision, revision + 1);
 });
 
 // ── Position ──────────────────────────────────────────────────────────────────

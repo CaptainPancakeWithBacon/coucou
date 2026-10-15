@@ -2,9 +2,9 @@
 
 import "./style.css";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
-import { beatDiagnostics, feedBeat, resetBeat, type BeatMessage } from "./mochi/beat";
-import { emit } from "@tauri-apps/api/event";
-import { Spotify } from "./core/spotify";
+import { feedBeat, resetBeat, type BeatMessage } from "./mochi/beat";
+
+
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
@@ -63,19 +63,6 @@ async function main() {
 
   await onEvent<{ x: number; y: number }>("cursor", ({ x, y }) => island.onCursor(x, y));
   await onEvent<BeatMessage>("beat", (b) => feedBeat(b));
-  const reportBeat = () => {
-    const track = Spotify.state.track;
-    void emit("beat-diagnostics", {
-      ...beatDiagnostics(),
-      track: track ? `${track.artist} — ${track.title}` : null,
-      playing: Spotify.state.playing,
-      enabled: State.settings.beatSync,
-      output: State.settings.beatOutput || "Default",
-      databaseBpm: Spotify.trackBpm,
-    });
-  };
-  await onEvent("beat-diagnostics-request", reportBeat);
-  window.setInterval(reportBeat, 1000);
   await onEvent<boolean>("beat-reset", (waiting) => resetBeat(waiting));
   await onEvent<boolean>("pointer-inside", (inside) => island.setPointerInside(inside));
 

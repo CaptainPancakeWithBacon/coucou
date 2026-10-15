@@ -180,8 +180,6 @@ export interface PhoneAnswersStatus {
 
 export const Bridge = {
   boot: () => call<BootInfo>("boot"),
-  beatOutputs: () => call<string[]>("beat_outputs"),
-  bpmLookup: (title: string, artist: string) => call<number>("bpm_lookup", { title, artist }),
   /** The system's languages as the webview sees them, for Rust's own texts (i18n.rs). */
   setSystemLanguages: (languages: string[]) => call<void>("set_system_languages", { languages }),
 

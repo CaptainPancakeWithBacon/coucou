@@ -1,64 +1,86 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, resetBeat,
-  setTrackBpm, DEFAULT_BPM,
-} from "../src/mochi/beat.ts";
+import { beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
+const report = (bpm, now, offset = 1000, confidence = 5) => ({
+  bpm, beatAtMs: offset + Math.floor((now - offset) * bpm / 60000) * 60000 / bpm, confidence,
+});
+const distance = (v) => Math.abs(v - Math.round(v));
 
-test("unverified audio cannot choose or change Mochi's tempo", () => {
-  resetBeat(true);
-  for (let i = 0; i < 30; i++) {
-    feedBeat({ bpm: i % 2 ? 172 : 127.2, beatAtMs: 1000 + i * 250, confidence: 20 }, 1100 + i * 250);
-    assert.equal(currentBpm(), DEFAULT_BPM);
-    assert.equal(beatDiagnostics(1100 + i * 250).phaseLocked, false);
+test("Spotify audio controls tempo and phase without a database key", () => {
+  resetBeat(true, 1000);
+  assert.equal(danceCalm(1000), 1);
+  for (let at = 1000; at <= 3000; at += 250) feedBeat(report(128, at), at);
+  assert.equal(currentBpm(), 128);
+  assert.equal(beatDiagnostics(3000).phaseLocked, true);
+  const beatAt = 1000 + 5 * 60000 / 128;
+  assert.ok(distance(beatPosition(beatAt)) < 0.01);
+});
+
+test("slow and fast audio never get folded into the fixed dance range", () => {
+  for (const bpm of [70, 94, 175, 200]) {
+    resetBeat(true, 1000);
+    for (let at = 1000; at <= 3000; at += 250) feedBeat(report(bpm, at), at);
+    assert.equal(currentBpm(), bpm);
+    assert.ok(danceCalm(3000) > 0);
   }
-  assert.equal(danceCalm(9000), 1);
-  assert.equal(beatDiagnostics(9000).danceBpm, DEFAULT_BPM);
 });
 
-test("a verified BPM is applied once and never nudged by differing audio estimates", () => {
-  resetBeat(true);
-  setTrackBpm(108);
-  for (let i = 0; i < 12; i++) feedBeat({
-    bpm: 127.2, beatAtMs: 10000 + 250 * i, confidence: 9,
-  }, 10100 + 250 * i);
-  assert.equal(currentBpm(), 108);
-  assert.equal(beatDiagnostics(13000).danceBpm, 108);
-  assert.equal(beatDiagnostics(13000).phaseLocked, false);
-});
-
-test("only repeated phase-consistent confident reports lock to verified tempo", () => {
-  resetBeat(true);
-  setTrackBpm(120);
-  for (let i = 0; i < 3; i++) {
-    feedBeat({ bpm: 120, beatAtMs: 10000, confidence: 4 }, 10100 + 100 * i);
-    assert.equal(beatDiagnostics(10100 + 100 * i).phaseLocked, false);
+test("inconsistent and low confidence estimates leave the default rhythm running", () => {
+  resetBeat(true, 1000);
+  for (let i = 0; i < 12; i++) {
+    const now = 1000 + i * 250;
+    feedBeat(report(i % 2 ? 80 : 170, now), now);
   }
-  feedBeat({ bpm: 120, beatAtMs: 10000, confidence: 4 }, 10400);
-  assert.equal(beatDiagnostics(10400).phaseLocked, true);
-  assert.equal(currentBpm(), 120);
-  assert.ok(Math.abs(beatPosition(11000) - Math.round(beatPosition(11000))) < 0.1);
-  assert.equal(beatDiagnostics(15000).phaseLocked, false);
+  assert.equal(beatDiagnostics(4000).phaseLocked, false);
+  assert.equal(danceCalm(4000), 1);
+  for (let now = 5000; now < 7000; now += 250) feedBeat(report(128, now, 1000, 1.2), now);
+  assert.equal(danceCalm(7000), 1);
 });
 
-test("poor-confidence reports never acquire phase lock", () => {
-  resetBeat(true);
-  setTrackBpm(108);
-  for (let i = 0; i < 15; i++) {
-    feedBeat({ bpm: 108, beatAtMs: 10000, confidence: 1.2 }, 10100 + 100 * i);
+test("audio timestamps compensate delayed event delivery", () => {
+  resetBeat(true, 1000);
+  for (let audio = 1000; audio <= 4000; audio += 250) {
+    feedBeat(report(120, audio, 1100), audio + 90);
   }
-  assert.equal(beatDiagnostics(11500).phaseLocked, false);
-  assert.equal(currentBpm(), 108);
+  assert.ok(distance(beatPosition(4100)) < 0.01);
 });
 
-test("reset returns to stable Mac-style fallback", () => {
-  resetBeat(true);
-  setTrackBpm(108);
-  assert.equal(currentBpm(), 108);
-  resetBeat(true);
+test("seek phase corrections settle on the new beats", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 3000; now += 250) feedBeat(report(120, now), now);
+  for (let now = 3250; now <= 6250; now += 250) feedBeat(report(120, now, 1150), now);
+  assert.ok(distance(beatPosition(6150)) < 0.04);
+});
+
+test("lost audio returns to the default rhythm without stopping", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 3000; now += 250) feedBeat(report(120, now), now);
+  assert.equal(danceCalm(6000), 1);
+  assert.equal(beatDiagnostics(6000).phaseLocked, false);
+  resetBeat(true, 1000);
+  assert.equal(danceCalm(7000), 1);
+  resetBeat(false);
+  assert.equal(danceCalm(7000), 1);
   assert.equal(currentBpm(), DEFAULT_BPM);
-  assert.equal(danceCalm(10000), 1);
-  assert.ok(Math.abs(beatPosition(60000) - DEFAULT_BPM) < 1e-9);
-  feedBeat({ bpm: 150, beatAtMs: NaN, confidence: 20 }, 10000);
+});
+
+test("default dance keeps moving while analysis is unavailable", () => {
+  resetBeat(true, 1000);
+  const start = beatPosition(1000);
+  assert.ok(Math.abs(beatPosition(2000) - start - DEFAULT_BPM / 60) < 1e-6);
+  for (const now of [1000, 2000, 6000, 60000]) assert.ok(danceCalm(now) > 0);
+});
+
+test("fallback preserves phase instead of jumping or stopping", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 3000; now += 250) feedBeat(report(128, now), now);
+  const justBefore = beatPosition(5499.999);
+  const atFallback = beatPosition(5500);
+  assert.ok(Math.abs(atFallback - justBefore) < 0.001);
   assert.equal(currentBpm(), DEFAULT_BPM);
+  assert.ok(Math.abs(beatPosition(6500) - atFallback - DEFAULT_BPM / 60) < 1e-6);
+  assert.equal(danceCalm(6500), 1);
+  const beforeReset = beatPosition(6500);
+  resetBeat(true, 6500);
+  assert.equal(beatPosition(6500), beforeReset);
 });

@@ -1,146 +1,82 @@
-// The beat Mochi dances to. beat.rs sends the tempo and the moment of one beat
-// about four times a second; the clock below keeps counting beats between those
-// messages and eases toward each new one, so a rough estimate never makes him
-// jump. Without any (the setting is off, nothing is heard) it counts 112 BPM
-// from the wall clock, the Mac's fixed bounce.
-
+﻿// A playback clock locked to Spotify's isolated audio, including beat phase.
 export const DEFAULT_BPM = 112;
-
-export interface BeatMessage {
-  bpm: number;
-  /** Unix time in ms of one beat; the others follow every 60000 / bpm. */
-  beatAtMs: number;
-  confidence?: number;
-}
-
-/** How much of the gap to a new estimate is closed at once. */
-const NUDGE = 0.15;
-/** Estimates this close to the tempo in use are blended in; farther ones replace it. */
-const PHASE_TOLERANCE = 0.14;
-const MIN_CONFIDENCE = 2.5;
-const LOCK_REPORTS = 4;
-
-let knownBpm: number | null = null;
-let detectedBpm: number | null = null;
-let lastAudioAt: number | null = null;
-let phaseCandidate: number | null = null;
-let phaseCandidateAt = 0;
-let phaseConfirmations = 0;
-
-export function beatDiagnostics(nowMs: number = Date.now()) {
-  const fresh = lastAudioAt != null && nowMs - lastAudioAt < 3500;
-  const locked = fed && fresh;
-  return {
-    detectedBpm: fresh ? detectedBpm : null,
-    databaseBpm: knownBpm,
-    danceBpm: knownBpm ?? DEFAULT_BPM,
-    phaseLocked: locked,
-    lastAudioAt,
-    waiting,
-  };
-}
-
-/** A trusted track BPM governs speed; live audio only supplies beat phase. */
-export function setTrackBpm(value: number | null): void {
-  const next = value != null && Number.isFinite(value) && value >= 40 && value <= 220 ? value : null;
-  if (next === knownBpm) return;
-  knownBpm = next;
-  // A new verified tempo invalidates any beat phase from the old song/tempo.
-  fed = false;
-  phaseCandidate = null;
-  phaseConfirmations = 0;
-}
-
-let fed = false;
+export interface BeatMessage { bpm: number; beatAtMs: number; confidence?: number }
 let waiting = false;
-/** Beats counted at `t0` (ms). */
+let fed = false;
+let bpm = DEFAULT_BPM;
 let phase0 = 0;
 let t0 = 0;
-
-/** Beats since the clock started, as a continuous count: whole numbers are beats. */
+let lastAudioAt: number | null = null;
+let detectedBpm: number | null = null;
+let candidate: { bpm: number; phase: number; at: number; count: number } | null = null;
+let anchored = false;
+const wrap = (v: number) => v - Math.round(v);
+function useFallback(nowMs: number): void {
+  if (!fed || lastAudioAt == null || nowMs - lastAudioAt < 2500) return;
+  const at = lastAudioAt + 2500;
+  phase0 += (at - t0) * bpm / 60000;
+  t0 = at;
+  bpm = DEFAULT_BPM;
+  fed = false;
+  anchored = true;
+}
+export function beatDiagnostics(nowMs: number = Date.now()) {
+  useFallback(nowMs);
+  const locked = fed && lastAudioAt != null && nowMs - lastAudioAt < 2500;
+  return { detectedBpm, databaseBpm: null, danceBpm: bpm,
+    phaseLocked: locked, lastAudioAt, waiting };
+}
 export function beatPosition(nowMs: number): number {
-  const tempo = knownBpm ?? DEFAULT_BPM;
-  // Never let unverified audio choose Mochi's speed. Use a fixed, smooth clock
-  // unless beat phase was independently confirmed at the verified tempo.
-  if (!fed || lastAudioAt == null || nowMs - lastAudioAt > 3500)
-    return (nowMs / 60000) * tempo;
-  return phase0 + ((nowMs - t0) / 60000) * tempo;
+  useFallback(nowMs);
+  if (!anchored) return nowMs * DEFAULT_BPM / 60000;
+  return phase0 + (nowMs - t0) * bpm / 60000;
 }
-
-function wrapHalf(x: number): number {
-  return x - Math.round(x);
-}
-
-/** Audio events can establish *phase*, but never set song BPM. */
 export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
-  if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs) ||
-      !Number.isFinite(nowMs) || msg.beatAtMs > nowMs + 1000) return;
-  // After a capture dropout, old phase evidence is invalid even when the BPM
-  // happens to match: demand a new run of consistent reports.
-  if (lastAudioAt != null && nowMs - lastAudioAt > 1500) {
-    fed = false;
-    phaseCandidate = null;
-    phaseConfirmations = 0;
-  }
+  if (!Number.isFinite(msg.bpm) || msg.bpm < 45 || msg.bpm > 240 ||
+      !Number.isFinite(msg.beatAtMs) || !Number.isFinite(nowMs) ||
+      msg.beatAtMs > nowMs + 100 || nowMs - msg.beatAtMs > 2500 ||
+      (msg.confidence ?? 3) < 1.8) return;
+  useFallback(nowMs);
+  if (lastAudioAt != null && nowMs - lastAudioAt > 1500) candidate = null;
   detectedBpm = msg.bpm;
   lastAudioAt = nowMs;
-  const tempo = knownBpm;
-  // Without verified per-track BPM, the detector is diagnostic only.
-  if (tempo == null || (msg.confidence ?? 0) < MIN_CONFIDENCE ||
-      Math.abs(msg.bpm - tempo) / tempo > 0.03) {
-    fed = false;
-    phaseCandidate = null;
-    phaseConfirmations = 0;
+  const phase = (nowMs - msg.beatAtMs) * msg.bpm / 60000;
+  const predicted = candidate && candidate.phase + (nowMs - candidate.at) * candidate.bpm / 60000;
+  if (!candidate || Math.abs(msg.bpm - candidate.bpm) / candidate.bpm > 0.05 ||
+      predicted == null || Math.abs(wrap(phase - predicted)) > 0.18) {
+    candidate = { bpm: msg.bpm, phase, at: nowMs, count: 1 };
     return;
   }
-
-  const phase = ((nowMs - msg.beatAtMs) / 60000) * tempo;
-  const predicted = phaseCandidate == null ? null : phaseCandidate + (nowMs - phaseCandidateAt) * tempo / 60000;
-  if (predicted == null || Math.abs(wrapHalf(phase - predicted)) > PHASE_TOLERANCE) {
-    phaseCandidate = phase;
-    phaseCandidateAt = nowMs;
-    phaseConfirmations = 1;
-    fed = false;
-    return;
-  }
-  phaseCandidate = predicted + NUDGE * wrapHalf(phase - predicted);
-  phaseCandidateAt = nowMs;
-  phaseConfirmations = Math.min(LOCK_REPORTS, phaseConfirmations + 1);
-  if (phaseConfirmations < LOCK_REPORTS) return;
-
-  if (!fed) {
-    phase0 = phaseCandidate;
-    t0 = nowMs;
-    fed = true;
-    return;
-  }
+  candidate = { bpm: candidate.bpm * 0.65 + msg.bpm * 0.35,
+    phase: predicted + 0.45 * wrap(phase - predicted), at: nowMs, count: candidate.count + 1 };
+  if (candidate.count < 3) return;
   const current = beatPosition(nowMs);
-  phase0 = current + NUDGE * wrapHalf(phase - current);
+  if (!fed || Math.abs(bpm - candidate.bpm) / bpm > 0.05) {
+    bpm = candidate.bpm;
+    phase0 = current + 0.45 * wrap(candidate.phase - current);
+    fed = true;
+  } else {
+    phase0 = current + 0.45 * wrap(candidate.phase - current);
+    bpm += 0.35 * (candidate.bpm - bpm);
+  }
   t0 = nowMs;
+  anchored = true;
 }
-
-/** Back to the fixed bounce: the music stopped, or the listening did. */
-export function resetBeat(waitForMusic: boolean = false): void {
+export function resetBeat(waitForMusic = false, nowMs: number = Date.now()): void {
+  const current = beatPosition(nowMs);
+  waiting = waitForMusic;
   fed = false;
-  knownBpm = null;
-  phaseCandidate = null;
-  phaseConfirmations = 0;
+  bpm = DEFAULT_BPM;
+  candidate = null;
   detectedBpm = null;
   lastAudioAt = null;
-  waiting = waitForMusic;
+  phase0 = current;
+  t0 = nowMs;
+  anchored = true;
 }
-
-export function currentBpm(): number {
-  return knownBpm ?? DEFAULT_BPM;
-}
-
-/**
- * How big the dance is at the tempo in use (0…1): a fast song gets smaller hops
- * so one hop per beat does not look frantic. The fixed bounce stays full size.
- */
+export function currentBpm(): number { return bpm; }
 export function danceCalm(nowMs: number = Date.now()): number {
-  // A failed or silent capture must not freeze Mochi. Fall back to a steady
-  // 112 BPM Mac-style dance, or the database tempo if one is available.
-  if (!fed || lastAudioAt == null || nowMs - lastAudioAt > 3500) return 1;
-  return Math.min(1, Math.max(0.55, 1 - ((knownBpm ?? DEFAULT_BPM) - 100) / 45));
+  useFallback(nowMs);
+  if (!fed) return 1;
+  return Math.min(1, Math.max(0.45, 1 - (bpm - 100) / 100));
 }
