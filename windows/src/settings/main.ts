@@ -1526,8 +1526,8 @@ function beatInfoSection(): HTMLElement {
     show("databaseBpm", format(data.databaseBpm));
     show("detectedBpm", fresh ? format(data.detectedBpm) : "— (waiting for audio)");
     show("danceBpm", data.enabled && data.playing ? format(data.danceBpm) : "—");
-    show("source", data.databaseBpm != null ? "Database" : fresh ? "Live audio" : "None / fallback");
-    show("alignment", synced ? "Audio beat estimates" : "Not synchronized");
+    show("source", data.databaseBpm != null ? "Verified database match" : "112 BPM fallback (unverified)");
+    show("alignment", synced ? "Confirmed audio phase" : "Not confirmed (steady tempo)");
   };
   section.append(h("div", { class: "hint", text: t("Database BPM requires a GetSongBPM API key. Without a matching song, audio detection is used. A detected tempo of half or double the database BPM can be normal.") }));
   section.append(h("button", { text: t("Refresh"), onclick: () => void emit("beat-diagnostics-request") }));
