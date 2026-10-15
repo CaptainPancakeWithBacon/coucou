@@ -476,7 +476,8 @@ mod win {
                     remember(mute_key(&n.app, &n.summary));
                 }
             }
-            crate::log::line(format!("notifications: {} apps in the last week", apps(&[]).len()));
+            let names = apps(&[]);
+            crate::log::line(format!("notifications: {} apps in the last week: {}", names.len(), names.join(", ")));
             crate::log::line(format!("notifications: watching {} ({} recent there now)", path.display(), recent.len()));
             return Ok(Vec::new());
         };
