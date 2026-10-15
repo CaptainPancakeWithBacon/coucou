@@ -22,6 +22,19 @@ const RELOCK_AFTER_MS = 1500;
 /** A real song/tempo change must not spend several updates dancing off-beat. */
 const NEW_TEMPO = 0.12;
 
+let knownBpm: number | null = null;
+
+/** A trusted track BPM governs speed; live audio only supplies beat phase. */
+export function setTrackBpm(value: number | null): void {
+  knownBpm = value != null && Number.isFinite(value) && value >= 40 && value <= 220 ? value : null;
+  if (knownBpm != null && fed) {
+    const at = Date.now();
+    phase0 = beatPosition(at);
+    t0 = at;
+    bpm = knownBpm;
+  }
+}
+
 let fed = false;
 let waiting = false;
 let bpm = DEFAULT_BPM;
@@ -43,17 +56,22 @@ function wrapHalf(x: number): number {
 export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
   if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs) ||
       !Number.isFinite(nowMs) || msg.beatAtMs > nowMs + 1000) return;
-  const targetFrac = ((nowMs - msg.beatAtMs) / 60000) * msg.bpm;
-  if (!fed || nowMs - t0 > RELOCK_AFTER_MS || Math.abs(msg.bpm - bpm) / bpm >= NEW_TEMPO) {
+  // A database BPM is not a beat-grid: use the audio event as a phase anchor.
+  // Reject incompatible detected tempos rather than moving to a false beat.
+  const chosen = knownBpm ?? msg.bpm;
+  const ratios = [1, 2, 0.5];
+  if (knownBpm != null && !ratios.some(r => Math.abs(msg.bpm * r - knownBpm!) / knownBpm! < 0.08)) return;
+  const targetFrac = ((nowMs - msg.beatAtMs) / 60000) * chosen;
+  if (!fed || nowMs - t0 > RELOCK_AFTER_MS || Math.abs(chosen - bpm) / bpm >= NEW_TEMPO) {
     fed = true;
-    bpm = msg.bpm;
+    bpm = chosen;
     phase0 = targetFrac;
     t0 = nowMs;
     return;
   }
   const current = beatPosition(nowMs);
   const err = wrapHalf(targetFrac - current);
-  bpm = Math.abs(msg.bpm - bpm) / bpm < SAME_TEMPO ? bpm + 0.5 * (msg.bpm - bpm) : msg.bpm;
+  bpm = knownBpm ?? (Math.abs(chosen - bpm) / bpm < SAME_TEMPO ? bpm + 0.5 * (chosen - bpm) : chosen);
   phase0 = current + NUDGE * err;
   t0 = nowMs;
 }
@@ -61,6 +79,7 @@ export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
 /** Back to the fixed bounce: the music stopped, or the listening did. */
 export function resetBeat(waitForMusic: boolean = false): void {
   fed = false;
+  knownBpm = null;
   waiting = waitForMusic;
   bpm = DEFAULT_BPM;
 }
