@@ -30,12 +30,16 @@ let frame: number | null = null;
 let last = performance.now();
 const start = performance.now();
 
+/** The next frame: at once, or after a pause that keeps a software canvas from eating the CPU. */
+function next(): number {
+  if (!MIN_FRAME_MS) return requestAnimationFrame(loop);
+  return window.setTimeout(() => {
+    frame = requestAnimationFrame(loop);
+  }, MIN_FRAME_MS);
+}
+
 function loop(now: number) {
   frame = null;
-  if (now - last < MIN_FRAME_MS) {
-    frame = requestAnimationFrame(loop);
-    return;
-  }
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   const t = (now - start) / 1000;
@@ -48,7 +52,7 @@ function loop(now: number) {
     a.shown = true;
     a.draw(dt, t);
   }
-  if (live.size > 0 && document.visibilityState === "visible") frame = requestAnimationFrame(loop);
+  if (live.size > 0 && document.visibilityState === "visible") frame = next();
 }
 
 function wake() {
