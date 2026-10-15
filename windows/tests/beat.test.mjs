@@ -3,17 +3,20 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beatPosition, currentBpm, danceCalm, feedBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
+import { beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
 import { danceAtBeat, danceTransform } from "../src/mochi/engine.ts";
 
 const frac = (x) => x - Math.floor(x);
 
-test("beat sync waits for real beats and fades out when detection stops", () => {
+test("beat sync keeps dancing smoothly when audio detection stops", () => {
   resetBeat(true);
-  assert.equal(danceCalm(1000), 0);
+  assert.equal(danceCalm(1000), 1);
   feedBeat({ bpm: 128, beatAtMs: 1000 }, 1000);
   assert.ok(danceCalm(1200) > 0);
-  assert.equal(danceCalm(5000), 0);
+  assert.equal(danceCalm(5000), 1);
+  assert.equal(beatDiagnostics(5000).danceBpm, DEFAULT_BPM);
+  assert.equal(beatDiagnostics(5000).phaseLocked, false);
+  assert.ok(Math.abs(beatPosition(5000) - (5000 / 60000) * DEFAULT_BPM) < 1e-9);
   resetBeat();
   assert.equal(danceCalm(5000), 1);
 });
