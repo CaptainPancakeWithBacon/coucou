@@ -25,6 +25,14 @@ use serde::Serialize;
 #[cfg(any(windows, target_os = "linux"))]
 use tauri::{AppHandle, Emitter, State};
 
+#[tauri::command]
+pub fn beat_outputs() -> Vec<String> {
+    #[cfg(any(windows, target_os = "linux"))]
+    { crate::speech::audio::output_devices() }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    { Vec::new() }
+}
+
 pub const RATE: usize = 11_025;
 /// One onset value per HOP samples: about 100 a second.
 const HOP: usize = 110;
@@ -204,7 +212,9 @@ impl BeatTracker {
         }
         // A tempo already held is kept unless another is clearly stronger: a
         // song does not change tempo from one second to the next, its
-        // autocorrelation just wobbles between rivals.
+        // autocorrelation just wobbles between rivals. Check the held lag even when
+        // the new best is FAR away: otherwise this hysteresis never prevents
+        // half/double-tempo flips (the exact case it is intended to prevent).
         if let Some(held) = self.held_lag {
             let near = |i: usize| ((min_lag + i) as f64 - held).abs() <= held * 0.04;
             if let Some((i, s)) = scores
@@ -214,7 +224,7 @@ impl BeatTracker {
                 .filter(|&(i, _)| near(i))
                 .fold(None, |a: Option<(usize, f64)>, (i, s)| if a.map_or(true, |x| s > x.1) { Some((i, s)) } else { a })
             {
-                if s >= best * HOLD_RATIO && (held - (min_lag + best_i) as f64).abs() <= held * 0.04 {
+                if s >= best * HOLD_RATIO {
                     best_i = i;
                     best = s;
                 }
@@ -324,7 +334,8 @@ fn now_ms() -> f64 {
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: State<'_, Listener>, on: bool) -> bool {
-    let allowed = shared.settings.lock().unwrap().beat_sync;
+    let config = shared.settings.lock().unwrap().clone();
+    let allowed = config.beat_sync;
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
         if let Some(running) = slot.take() {
@@ -337,7 +348,11 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
     }
     let stop = Arc::new(AtomicBool::new(false));
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let spawned = Command::new("pw-record")
+    let mut command = Command::new("pw-record");
+    if !config.beat_output.is_empty() {
+        command.arg("--target").arg(&config.beat_output);
+    }
+    let spawned = command
         .args([
             "-P", "stream.capture.sink=true",
             "--rate", "11025",
@@ -411,17 +426,22 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
     let allowed = shared.settings.lock().unwrap().beat_sync;
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
+        // The UI owns the reset state. Sending a reset here races with
+        // a subsequent start when Spotify switches tracks.
         slot.take();
-        let _ = app.emit("beat-reset", false);
         return false;
     }
     if slot.is_some() { return true; }
-    let _ = app.emit("beat-reset", true);
     let mut tracker = BeatTracker::new();
     let mut resampler = crate::speech::audio::Resampler::with_output_rate(crate::speech::SAMPLE_RATE, RATE as u32);
     let mut output = Vec::new();
     let mut samples = Vec::new();
-    match crate::speech::audio::Capture::start(crate::speech::audio::Source::System, move |input| {
+    let source = if config.beat_output.is_empty() {
+        crate::speech::audio::Source::System
+    } else {
+        crate::speech::audio::Source::Output(config.beat_output)
+    };
+    match crate::speech::audio::Capture::start(source, move |input| {
         output.clear();
         resampler.process(input, &mut output);
         samples.clear();

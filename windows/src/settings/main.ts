@@ -1010,6 +1010,30 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const opacity = h("input", { type: "range", min: "20", max: "100", step: "1", value: String(settings.islandOpacity ?? 100) }) as HTMLInputElement;
+  const opacityValue = h("span", { class: "hint", text: `${settings.islandOpacity ?? 100}%` });
+  opacity.addEventListener("input", () => {
+    settings.islandOpacity = Number(opacity.value);
+    opacityValue.textContent = `${settings.islandOpacity}%`;
+    void save();
+  });
+
+  const beatOutput = h("select", {}) as HTMLSelectElement;
+  beatOutput.append(h("option", { value: "", text: t("Default") }));
+  beatOutput.value = settings.beatOutput ?? "";
+  void Bridge.beatOutputs().then((outputs) => {
+    if (!outputs) return;
+    for (const device of outputs) beatOutput.append(h("option", { value: device, text: device }));
+    if (settings.beatOutput && !outputs.includes(settings.beatOutput)) {
+      beatOutput.append(h("option", { value: settings.beatOutput, text: settings.beatOutput + " (unavailable)" }));
+    }
+    beatOutput.value = settings.beatOutput ?? "";
+  });
+  beatOutput.addEventListener("change", () => {
+    settings.beatOutput = beatOutput.value;
+    void save();
+  });
+
   return h(
     "section",
     {},

@@ -17,6 +17,10 @@ export interface BeatMessage {
 const NUDGE = 0.3;
 /** Estimates this close to the tempo in use are blended in; farther ones replace it. */
 const SAME_TEMPO = 0.06;
+/** After an audio dropout, the old phase is no longer a useful reference. */
+const RELOCK_AFTER_MS = 1500;
+/** A real song/tempo change must not spend several updates dancing off-beat. */
+const NEW_TEMPO = 0.12;
 
 let fed = false;
 let waiting = false;
@@ -37,9 +41,10 @@ function wrapHalf(x: number): number {
 
 /** A new estimate from the listener. */
 export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
-  if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs)) return;
+  if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs) ||
+      !Number.isFinite(nowMs) || msg.beatAtMs > nowMs + 1000) return;
   const targetFrac = ((nowMs - msg.beatAtMs) / 60000) * msg.bpm;
-  if (!fed) {
+  if (!fed || nowMs - t0 > RELOCK_AFTER_MS || Math.abs(msg.bpm - bpm) / bpm >= NEW_TEMPO) {
     fed = true;
     bpm = msg.bpm;
     phase0 = targetFrac;

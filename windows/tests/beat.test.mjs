@@ -81,3 +81,31 @@ test("a fast song gets a smaller dance, the fixed bounce stays full size", async
   assert.equal(danceCalm(), 1);
   resetBeat();
 });
+
+test("a new song tempo snaps to its own beat instead of the previous song phase", () => {
+  resetBeat(true);
+  feedBeat({ bpm: 100, beatAtMs: 0 }, 1000);
+  feedBeat({ bpm: 140, beatAtMs: 2250 }, 2300);
+  assert.equal(currentBpm(), 140);
+  assert.ok(Math.abs(beatPosition(2250) - Math.round(beatPosition(2250))) < 1e-9);
+  resetBeat();
+});
+
+test("resuming after missing beat reports re-locks instead of easing from stale phase", () => {
+  resetBeat(true);
+  feedBeat({ bpm: 120, beatAtMs: 0 }, 1000);
+  feedBeat({ bpm: 120, beatAtMs: 3300 }, 4000);
+  assert.ok(Math.abs(beatPosition(3300) - Math.round(beatPosition(3300))) < 1e-9);
+  resetBeat();
+});
+
+test("invalid or future beat timestamps cannot disrupt synchronization", () => {
+  resetBeat(true);
+  feedBeat({ bpm: 120, beatAtMs: 1000 }, 1000);
+  const before = beatPosition(1100);
+  feedBeat({ bpm: 180, beatAtMs: 8000 }, 1100);
+  feedBeat({ bpm: 180, beatAtMs: NaN }, 1100);
+  assert.equal(currentBpm(), 120);
+  assert.equal(beatPosition(1100), before);
+  resetBeat();
+});
