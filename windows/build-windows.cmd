@@ -5,7 +5,7 @@ pushd "%~dp0" || exit /b 1
 rem Reuse the existing Tauri CLI. Reinstalling on every build can fail with
 rem EPERM when Windows / antivirus still holds the native .node addon open.
 set "TAURI_BIN=node_modules\.bin\tauri.cmd"
-if exist "%TAURI_BIN%" goto build
+if exist "%TAURI_BIN%" if exist "node_modules\@tauri-apps\cli-win32-x64-msvc\cli.win32-x64-msvc.node" goto build
 
 echo [Coucou] Tauri CLI not installed; installing dependencies...
 call npm install --no-audit --no-fund
