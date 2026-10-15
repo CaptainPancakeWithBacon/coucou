@@ -670,6 +670,57 @@ body {
   padding: 0 8px;
 }
 
+/* Paging stays inside the existing right card; the pill grid keeps its geometry. */
+.pill-pages, .pill-pages-viewport {
+  position: absolute;
+  inset: 0;
+}
+.pill-pages-viewport { overflow: hidden; }
+.pills.pill-page {
+  position: absolute;
+  inset: 0;
+  transition: transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.pill-page-arrow, .pill-page-mark {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--dim-3);
+  cursor: pointer;
+}
+.pill-page-arrow {
+  position: absolute;
+  z-index: 3;
+  left: calc(50% - 10px);
+  width: 20px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+}
+.pill-page-arrow.previous { top: 1px; }
+.pill-page-arrow.next { bottom: 1px; transform: rotate(180deg); }
+.pill-page-indicators {
+  position: absolute;
+  z-index: 3;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pill-page-mark {
+  width: 3px;
+  height: 9px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.pill-page-mark.on { background: var(--ink-2); }
+.pill-page-arrow[hidden], .pill-page-indicators[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pills.pill-page { transition: none; }
+}
+
 .pill {
   position: relative;
   height: 28px;
@@ -2628,3 +2679,6 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   unicode-bidi: plaintext;
   text-align: start;
 }
+
+.header-actions .island-drag { cursor: grab; touch-action: none; }
+.header-actions .island-drag:active { cursor: grabbing; }

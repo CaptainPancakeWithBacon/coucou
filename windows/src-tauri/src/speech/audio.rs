@@ -35,7 +35,11 @@ const HALF_TAPS: isize = 16;
 
 impl Resampler {
     pub fn new(input_rate: u32) -> Self {
-        let step = input_rate as f64 / SAMPLE_RATE as f64;
+        Self::with_output_rate(input_rate, SAMPLE_RATE)
+    }
+
+    pub fn with_output_rate(input_rate: u32, output_rate: u32) -> Self {
+        let step = input_rate as f64 / output_rate as f64;
         Self { step, pos: HALF_TAPS as f64, buf: vec![0.0; HALF_TAPS as usize], cutoff: (1.0 / step).min(1.0) * 0.92 }
     }
 

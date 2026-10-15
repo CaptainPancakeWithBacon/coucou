@@ -34,6 +34,8 @@ export interface SpotifyState {
   repeat: boolean;
   /** 0…100. */
   volume: number;
+  /** False when the player cannot expose its real volume control. */
+  volumeAvailable?: boolean;
   /** The player's own name ("Spotify", "Firefox"…); empty when none runs. */
   player: string;
 }

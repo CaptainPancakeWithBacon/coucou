@@ -15,7 +15,7 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { editorOf } from "../core/pills";
 import { openNoticeTarget } from "./notifications";
-import { SPOTIFY_ID, islandDances } from "../core/spotify";
+import { SPOTIFY_ID, Spotify, islandDances } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
@@ -245,6 +245,11 @@ export class Island {
       setVolume: (v) => {
         State.settings.soundVolume = v;
         Sound.setVolume(v);
+        void Bridge.saveSettings(State.settings);
+        State.notify();
+      },
+      setIslandAlign: (align) => {
+        State.settings.islandAlign = align;
         void Bridge.saveSettings(State.settings);
         State.notify();
       },
@@ -717,12 +722,24 @@ export class Island {
 
   /** Listening for the beat while music plays and the setting is on (beat.rs). */
   private beatWanted = false;
+  private beatTrack = "";
+  private beatRevision = 0;
 
   private syncBeat(wanted: boolean) {
-    if (wanted === this.beatWanted) return;
+    const track = Spotify.state.track?.id ?? "";
+    if (wanted === this.beatWanted && (!wanted || track === this.beatTrack)) return;
+    const restart = wanted && this.beatWanted;
+    const revision = ++this.beatRevision;
     this.beatWanted = wanted;
-    if (!wanted) resetBeat();
-    void Bridge.beatEnable(wanted);
+    this.beatTrack = track;
+    resetBeat(wanted);
+    if (restart) {
+      void Bridge.beatEnable(false).then(() => {
+        if (revision === this.beatRevision) void Bridge.beatEnable(true);
+      });
+    } else {
+      void Bridge.beatEnable(wanted);
+    }
   }
 
   // ── Window collapse (hidden → tiny wake strip, zero polling) ────────────────

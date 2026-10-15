@@ -2,7 +2,7 @@
 
 import "./style.css";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
-import { feedBeat, type BeatMessage } from "./mochi/beat";
+import { feedBeat, resetBeat, type BeatMessage } from "./mochi/beat";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
@@ -61,6 +61,7 @@ async function main() {
 
   await onEvent<{ x: number; y: number }>("cursor", ({ x, y }) => island.onCursor(x, y));
   await onEvent<BeatMessage>("beat", (b) => feedBeat(b));
+  await onEvent<boolean>("beat-reset", (waiting) => resetBeat(waiting));
   await onEvent<boolean>("pointer-inside", (inside) => island.setPointerInside(inside));
 
   /** Pause has to reach Rust too, or the pollers keep calling out. */

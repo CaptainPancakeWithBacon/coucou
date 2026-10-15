@@ -3,10 +3,20 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beatPosition, currentBpm, feedBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
+import { beatPosition, currentBpm, danceCalm, feedBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
 import { danceAtBeat, danceTransform } from "../src/mochi/engine.ts";
 
 const frac = (x) => x - Math.floor(x);
+
+test("beat sync waits for real beats and fades out when detection stops", () => {
+  resetBeat(true);
+  assert.equal(danceCalm(1000), 0);
+  feedBeat({ bpm: 128, beatAtMs: 1000 }, 1000);
+  assert.ok(danceCalm(1200) > 0);
+  assert.equal(danceCalm(5000), 0);
+  resetBeat();
+  assert.equal(danceCalm(5000), 1);
+});
 
 test("without an estimate it counts the fixed 112 BPM", () => {
   resetBeat();

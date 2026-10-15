@@ -1,5 +1,5 @@
 // The beat Mochi dances to. beat.rs sends the tempo and the moment of one beat
-// about once a second; the clock below keeps counting beats between those
+// about four times a second; the clock below keeps counting beats between those
 // messages and eases toward each new one, so a rough estimate never makes him
 // jump. Without any (the setting is off, nothing is heard) it counts 112 BPM
 // from the wall clock, the Mac's fixed bounce.
@@ -19,6 +19,7 @@ const NUDGE = 0.3;
 const SAME_TEMPO = 0.06;
 
 let fed = false;
+let waiting = false;
 let bpm = DEFAULT_BPM;
 /** Beats counted at `t0` (ms). */
 let phase0 = 0;
@@ -53,8 +54,9 @@ export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
 }
 
 /** Back to the fixed bounce: the music stopped, or the listening did. */
-export function resetBeat(): void {
+export function resetBeat(waitForMusic: boolean = false): void {
   fed = false;
+  waiting = waitForMusic;
   bpm = DEFAULT_BPM;
 }
 
@@ -66,7 +68,9 @@ export function currentBpm(): number {
  * How big the dance is at the tempo in use (0…1): a fast song gets smaller hops
  * so one hop per beat does not look frantic. The fixed bounce stays full size.
  */
-export function danceCalm(): number {
-  if (!fed) return 1;
-  return Math.min(1, Math.max(0.55, 1 - (bpm - 100) / 45));
+export function danceCalm(nowMs: number = Date.now()): number {
+  if (!fed) return waiting ? 0 : 1;
+  // Do not keep inventing beats through silence or a lost audio stream.
+  const freshness = Math.min(1, Math.max(0, (3500 - (nowMs - t0)) / 1000));
+  return freshness * Math.min(1, Math.max(0.55, 1 - (bpm - 100) / 45));
 }

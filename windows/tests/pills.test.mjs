@@ -45,7 +45,8 @@ test("the catalog holds the Mac's pills with the Claude Code label for Windows a
     ["integration_calcom", "Cal.com", "#C9956A", "service", "Integration"],
     ["integration_stripe", "Stripe", "#0570DE", "service", "Integration"],
     ["integration_music", "Apple Music", "#FA2D48", "service", "Integration"],
-    ["integration_spotify", "Media", "#1DB954", "service", "Integration"],
+    ["integration_spotify", "Spotify", "#1DB954", "service", "Integration"],
+    ["agent_notifications", "Notification", "#5AC8FA", "service", "Integration"],
   ];
   assert.deepEqual(
     PILL_CATALOG.map((p) => [p.id, p.name, p.color, p.category, p.subtitle]),
@@ -177,14 +178,16 @@ test("a declaration from an older or edited settings file is made usable", () =>
     "integration_claude");
 });
 
-test("up to four pills next to the main one, never the main one itself", () => {
+test("up to eight pills next to the main one, never the main one itself", () => {
   const d = {
     mainPill: "integration_claude",
     activeIntegrations: ["integration_n8n", "integration_github", "integration_stripe"],
   };
   const four = toggleDeclared(d, "agent_gemini", "linux");
-  assert.equal(four.length, MAX_DECLARED);
-  assert.equal(toggleDeclared({ ...d, activeIntegrations: four }, "ai_anthropic", "linux"), null);
+  assert.equal(four.length, 4);
+  const eight = [...four, "ai_google", "ai_openai", "ai_ollama", "agent_notifications"];
+  assert.equal(eight.length, MAX_DECLARED);
+  assert.equal(toggleDeclared({ ...d, activeIntegrations: eight }, "ai_anthropic", "linux"), null);
   assert.equal(toggleDeclared(d, "integration_claude", "linux"), null);
   assert.equal(toggleDeclared(d, "integration_music", "linux"), null);
   assert.equal(toggleDeclared(d, "agent_claude-desktop", "linux"), null);
@@ -293,14 +296,15 @@ test("a Claude Code session gets its pill even when it is not loaded", () => {
   assert.equal(State.upsertWorkspacePill("not_a_pill", "x", ""), null);
 });
 
-test("toggling declares up to four pills and never the main one", () => {
+test("toggling declares up to eight pills and never the main one", () => {
   State.settings.activeIntegrations = [];
   State.loadIntegrationTasks();
-  for (const id of ["integration_n8n", "agent_gemini", "ai_anthropic", "integration_stripe", "integration_github"]) {
+  for (const id of ["integration_n8n", "agent_gemini", "ai_anthropic", "integration_stripe", "integration_github", "integration_spotify", "agent_notifications", "integration_notion", "ai_google"]) {
     State.toggleIntegration(id);
   }
   assert.deepEqual(State.settings.activeIntegrations, [
     "integration_n8n", "agent_gemini", "ai_anthropic", "integration_stripe",
+    "integration_github", "integration_spotify", "agent_notifications", "integration_notion",
   ]);
   State.toggleIntegration("integration_claude");
   assert.ok(ids().includes("integration_claude"));
@@ -326,4 +330,20 @@ test("the Claude Code idle card keeps the agent title when the task has a projec
   assert.ok(card.textContent.includes("Claude Code"));
   assert.ok(!card.textContent.includes("my-project"));
   assert.ok(card.textContent.includes("Open Visual Studio Code"));
+});
+
+
+test("Notification loads immediately, keeps its colour and history, and disappears when switched off", () => {
+  State.settings.activeIntegrations = ["agent_notifications"];
+  State.settings.pillColors = { agent_notifications: "#E879F9" };
+  State.loadIntegrationTasks();
+  const notice = State.tasks.find((t) => t.id === "agent_notifications");
+  assert.equal(notice.name, "Notification");
+  assert.equal(notice.color, "#E879F9");
+  assert.ok(State.isKept(notice.id));
+  State.appendStep(notice.id, "A new notification");
+  State.loadIntegrationTasks();
+  assert.deepEqual(notice.steps, ["A new notification"]);
+  State.toggleIntegration(notice.id);
+  assert.ok(!State.tasks.some((t) => t.id === notice.id));
 });
