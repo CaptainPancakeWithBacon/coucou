@@ -22,8 +22,7 @@ fn verified_tempo(json: &Value, title: &str, artist: &str) -> Option<f64> {
         };
         if normalize(name) != wanted_title || !artists.iter().any(|artist_name| {
             let candidate = normalize(artist_name);
-            !candidate.is_empty() &&
-                (candidate == wanted_artist || candidate.contains(&wanted_artist) || wanted_artist.contains(&candidate))
+            candidate == wanted_artist
         }) { continue; }
         let tempo = song.get("tempo").and_then(|v| v.as_f64().or_else(|| v.as_str()?.parse::<f64>().ok()));
         if let Some(bpm) = tempo.filter(|b| b.is_finite() && (40.0..=220.0).contains(b)) {
