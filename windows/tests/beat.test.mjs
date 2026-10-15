@@ -109,3 +109,18 @@ test("invalid or future beat timestamps cannot disrupt synchronization", () => {
   assert.equal(beatPosition(1100), before);
   resetBeat();
 });
+
+test("verified track BPM governs dance speed while detected beats provide timing", async () => {
+  const { setTrackBpm } = await import("../src/mochi/beat.ts");
+  resetBeat(true);
+  setTrackBpm(116);
+  feedBeat({ bpm: 58, beatAtMs: 10_000 }, 10_100);
+  assert.equal(currentBpm(), 116, "half-time onset should not halve known tempo");
+  assert.ok(Math.abs(beatPosition(10_000) - Math.round(beatPosition(10_000))) < 1e-9);
+  feedBeat({ bpm: 171, beatAtMs: 10_500 }, 10_600);
+  assert.equal(currentBpm(), 116, "incompatible tempo must not replace database BPM");
+  resetBeat(true);
+  feedBeat({ bpm: 90, beatAtMs: 20_000 }, 20_100);
+  assert.equal(currentBpm(), 90, "reset restores audio-only detection");
+  resetBeat();
+});
