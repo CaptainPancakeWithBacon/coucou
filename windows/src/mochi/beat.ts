@@ -19,10 +19,6 @@ const NUDGE = 0.15;
 const PHASE_TOLERANCE = 0.14;
 const MIN_CONFIDENCE = 2.5;
 const LOCK_REPORTS = 4;
-/** After an audio dropout, the old phase is no longer a useful reference. */
-const RELOCK_AFTER_MS = 1500;
-/** A real song/tempo change must not spend several updates dancing off-beat. */
-const NEW_TEMPO = 0.12;
 
 let knownBpm: number | null = null;
 let detectedBpm: number | null = null;
