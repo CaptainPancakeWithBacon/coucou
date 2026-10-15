@@ -47,6 +47,7 @@ export interface ViewActions {
   answerInTerminal(): void;
   toggleSound(): void;
   setVolume(v: number): void;
+  setIslandOpacity(percent: number): void;
   setAutoClose(seconds: number): void;
   setIslandAlign(align: "left" | "center" | "right" | "custom"): void;
   openSettingsWindow(): void;
@@ -758,6 +759,11 @@ function buildSettings(actions: ViewActions): ViewHost {
     type: "range", min: "0", max: "0.2", step: "0.005",
     oninput: (e: Event) => actions.setVolume(Number((e.target as HTMLInputElement).value)),
   }) as HTMLInputElement;
+  const opacitySlider = h("input", {
+    type: "range", min: "20", max: "100", step: "1",
+    oninput: (e: Event) => actions.setIslandOpacity(Number((e.target as HTMLInputElement).value)),
+  }) as HTMLInputElement;
+  const opacityLabel = h("span", { class: "hint", style: "min-width:34px;text-align:right" });
   const positions = ["left", "center", "right", "custom"] as const;
   const positionLabels = [tl("Left"), tl("Centre"), tl("Right"), tl("Custom")];
   const positionButtons = positions.map((align, i) => h("button", {
@@ -774,6 +780,9 @@ function buildSettings(actions: ViewActions): ViewHost {
     "div",
     { class: "settings-rows" },
     h("div", { class: "settings-row" }, soundSwitch, h("span", { text: tl("Sound") }), volume),
+    h("div", { class: "settings-row" },
+      svg(ICONS.gear, 12), h("span", { text: tl("Island opacity") }), opacitySlider, opacityLabel,
+    ),
     h("div", { class: "settings-row" },
       svg(ICONS.move, 12, { stroke: 1.7 }),
       h("span", { text: tl("Island position") }),
@@ -815,6 +824,8 @@ function buildSettings(actions: ViewActions): ViewHost {
       });
       soundSwitch.classList.toggle("on", s.soundEnabled);
       volume.value = String(s.soundVolume);
+      opacitySlider.value = String(Math.max(20, Math.min(100, s.islandOpacity ?? 100)));
+      opacityLabel.textContent = `${opacitySlider.value}%`;
       volume.style.opacity = s.soundEnabled ? "1" : "0.4";
       autoLabel.textContent = t("Auto-close · {seconds}s", { seconds: Math.round(s.autoCloseInterval) });
       segButtons.forEach((b, i) => b.classList.toggle("on", s.autoCloseInterval === [10, 15, 30][i]));
