@@ -15,9 +15,16 @@ fn verified_tempo(json: &Value, title: &str, artist: &str) -> Option<f64> {
     let mut found = Vec::new();
     for song in songs {
         let name = song.get("title").and_then(Value::as_str).unwrap_or("");
-        let artist_name = song.pointer("/artist/name").and_then(Value::as_str).unwrap_or("");
-        if normalize(name) != wanted_title || !normalize(artist_name).contains(&wanted_artist) &&
-            !wanted_artist.contains(&normalize(artist_name)) { continue; }
+        let artists: Vec<&str> = match song.get("artist") {
+            Some(Value::Object(a)) => a.get("name").and_then(Value::as_str).into_iter().collect(),
+            Some(Value::Array(a)) => a.iter().filter_map(|v| v.get("name").and_then(Value::as_str)).collect(),
+            _ => Vec::new(),
+        };
+        if normalize(name) != wanted_title || !artists.iter().any(|artist_name| {
+            let candidate = normalize(artist_name);
+            !candidate.is_empty() &&
+                (candidate == wanted_artist || candidate.contains(&wanted_artist) || wanted_artist.contains(&candidate))
+        }) { continue; }
         let tempo = song.get("tempo").and_then(|v| v.as_f64().or_else(|| v.as_str()?.parse::<f64>().ok()));
         if let Some(bpm) = tempo.filter(|b| b.is_finite() && (40.0..=220.0).contains(b)) {
             found.push(bpm);
