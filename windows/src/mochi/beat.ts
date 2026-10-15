@@ -28,6 +28,7 @@ let knownBpm: number | null = null;
 let detectedBpm: number | null = null;
 let lastAudioAt: number | null = null;
 let phaseCandidate: number | null = null;
+let phaseCandidateAt = 0;
 let phaseConfirmations = 0;
 
 export function beatDiagnostics(nowMs: number = Date.now()) {
@@ -93,13 +94,16 @@ export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
   }
 
   const phase = ((nowMs - msg.beatAtMs) / 60000) * tempo;
-  if (phaseCandidate == null || Math.abs(wrapHalf(phase - phaseCandidate)) > PHASE_TOLERANCE) {
+  const predicted = phaseCandidate == null ? null : phaseCandidate + (nowMs - phaseCandidateAt) * tempo / 60000;
+  if (predicted == null || Math.abs(wrapHalf(phase - predicted)) > PHASE_TOLERANCE) {
     phaseCandidate = phase;
+    phaseCandidateAt = nowMs;
     phaseConfirmations = 1;
     fed = false;
     return;
   }
-  phaseCandidate += NUDGE * wrapHalf(phase - phaseCandidate);
+  phaseCandidate = predicted + NUDGE * wrapHalf(phase - predicted);
+  phaseCandidateAt = nowMs;
   phaseConfirmations = Math.min(LOCK_REPORTS, phaseConfirmations + 1);
   if (phaseConfirmations < LOCK_REPORTS) return;
 
