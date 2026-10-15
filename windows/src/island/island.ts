@@ -1001,6 +1001,8 @@ export class Island {
    */
   private watchFrames() {
     if (!this.running || performance.now() - this.lastFrame < STALLED_MS) return;
+    // The non-activating transparent window can have its rAF throttled off-hover.
+    // A queued rAF must not cancel/restart the watchdog frame mid-render.
     this.frame(performance.now());
   }
 
@@ -1025,6 +1027,10 @@ export class Island {
   private loggedErrors = new Set<string>();
 
   private frameBody = (nowMs: number) => {
+    // Apply opacity to the complete island (content, Mochi, borders, shadows).
+    // Never dim the transparent window container or its hit-testing region.
+    const opacity = Math.max(20, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
+    this.islandEl.style.opacity = String(opacity);
     // One chain only: a frame forced by the watchdog replaces the pending one.
     cancelAnimationFrame(this.rafId);
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
