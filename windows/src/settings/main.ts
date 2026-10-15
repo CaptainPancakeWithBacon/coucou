@@ -104,6 +104,27 @@ function notificationAppsRow(): HTMLElement {
   return box;
 }
 
+/** "Check for updates": asks the release page now instead of waiting for the hourly look. */
+function updateRow(): HTMLElement {
+  const status = h("span", { class: "hint" });
+  const button = h("button", { text: t("Check for updates") });
+  button.addEventListener("click", () => {
+    button.setAttribute("disabled", "true");
+    status.textContent = "";
+    void Bridge.checkForUpdates()
+      .then((r) => {
+        status.textContent =
+          r === "available" ? t("A new version is out. See the card in the island.")
+          : r === "current" ? t("Coucou is up to date.")
+          : r === "unstamped" ? t("This build does not check for updates.")
+          : t("Could not check. Try again later.");
+      })
+      .catch(() => { status.textContent = t("Could not check. Try again later."); })
+      .finally(() => button.removeAttribute("disabled"));
+  });
+  return h("div", { class: "row" }, h("label", { text: t("Updates") }), button, status);
+}
+
 function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   const el = h("button", { class: on ? "switch on" : "switch", "aria-pressed": on });
   el.addEventListener("click", () => {
@@ -1028,6 +1049,7 @@ function generalSection(): HTMLElement {
     ),
     h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
     notificationAppsRow(),
+    updateRow(),
     sendLogRow(),
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },

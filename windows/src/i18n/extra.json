@@ -4614,6 +4614,72 @@
    "pt-BR": "O Coucou não conseguiu responder: verifique sua chave do Claude em Notch → Chat.",
    "ru": "Coucou не смог ответить: проверьте ключ Claude в Notch → Чат.",
    "id": "Coucou tidak bisa menjawab: periksa kunci Claude-mu di Notch → Obrolan."
+  },
+  "Check for updates": {
+   "zh-Hans": "检查更新",
+   "hi": "अपडेट जाँचें",
+   "es": "Buscar actualizaciones",
+   "ar": "التحقق من التحديثات",
+   "fr": "Rechercher des mises à jour",
+   "bn": "আপডেট দেখুন",
+   "pt-BR": "Verificar atualizações",
+   "ru": "Проверить обновления",
+   "id": "Periksa pembaruan"
+  },
+  "A new version is out. See the card in the island.": {
+   "zh-Hans": "有新版本了。请看岛上的卡片。",
+   "hi": "नया संस्करण आ गया है। आइलैंड का कार्ड देखें।",
+   "es": "Hay una versión nueva. Mira la tarjeta en la isla.",
+   "ar": "صدر إصدار جديد. شاهد البطاقة في الجزيرة.",
+   "fr": "Une nouvelle version est sortie. Voir la carte dans l'îlot.",
+   "bn": "নতুন সংস্করণ এসেছে। আইল্যান্ডের কার্ডটি দেখুন।",
+   "pt-BR": "Há uma nova versão. Veja o cartão na ilha.",
+   "ru": "Вышла новая версия. Смотрите карточку на острове.",
+   "id": "Versi baru telah rilis. Lihat kartu di pulau."
+  },
+  "Coucou is up to date.": {
+   "zh-Hans": "Coucou 已是最新版本。",
+   "hi": "Coucou अप टू डेट है।",
+   "es": "Coucou está al día.",
+   "ar": "Coucou محدّث.",
+   "fr": "Coucou est à jour.",
+   "bn": "Coucou আপ টু ডেট আছে।",
+   "pt-BR": "O Coucou está atualizado.",
+   "ru": "Coucou обновлён до последней версии.",
+   "id": "Coucou sudah yang terbaru."
+  },
+  "This build does not check for updates.": {
+   "zh-Hans": "此版本不检查更新。",
+   "hi": "यह बिल्ड अपडेट नहीं जाँचता।",
+   "es": "Esta versión no busca actualizaciones.",
+   "ar": "هذا الإصدار لا يتحقق من التحديثات.",
+   "fr": "Cette version ne vérifie pas les mises à jour.",
+   "bn": "এই বিল্ড আপডেট দেখে না।",
+   "pt-BR": "Esta versão não verifica atualizações.",
+   "ru": "Эта сборка не проверяет обновления.",
+   "id": "Build ini tidak memeriksa pembaruan."
+  },
+  "Could not check. Try again later.": {
+   "zh-Hans": "无法检查。请稍后再试。",
+   "hi": "जाँच नहीं हो सकी। बाद में फिर कोशिश करें।",
+   "es": "No se pudo comprobar. Inténtalo más tarde.",
+   "ar": "تعذّر التحقق. حاول لاحقًا.",
+   "fr": "Vérification impossible. Réessayez plus tard.",
+   "bn": "দেখা যায়নি। পরে আবার চেষ্টা করুন।",
+   "pt-BR": "Não foi possível verificar. Tente mais tarde.",
+   "ru": "Не удалось проверить. Повторите позже.",
+   "id": "Tidak bisa memeriksa. Coba lagi nanti."
+  },
+  "Updates": {
+   "zh-Hans": "更新",
+   "hi": "अपडेट",
+   "es": "Actualizaciones",
+   "ar": "التحديثات",
+   "fr": "Mises à jour",
+   "bn": "আপডেট",
+   "pt-BR": "Atualizações",
+   "ru": "Обновления",
+   "id": "Pembaruan"
   }
  }
 }
