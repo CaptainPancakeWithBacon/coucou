@@ -55,7 +55,7 @@ const PRE_PROGRESS = USC.T_PROG_START - USC.T_DROP;
 const modeOrder = (m: IslandMode) => (m === "hidden" ? 0 : m === "compact" ? 1 : 2);
 
 /** A frame loop silent for this long (ms) is stalled: normal frames come every ~16. */
-const STALLED_MS = 250;
+const STALLED_MS = 80;
 
 export class Island {
   readonly fsm = new IslandStateMachine();
@@ -323,6 +323,8 @@ export class Island {
     this.greetingCanvas.style.width = `${EXPANDED_W}px`;
     this.greetingCanvas.style.height = "150px";
 
+    // Keep the transparent, non-activating surface composited off-hover.
+    this.islandEl.style.transform = "translateZ(0)";
     this.root.append(this.wakeStrip, this.islandEl);
     this.applyGeometry();
   }
@@ -726,7 +728,7 @@ export class Island {
   private beatRevision = 0;
 
   private syncBeat(wanted: boolean) {
-    const track = Spotify.state.track?.id ?? "";
+    const track = `${Spotify.state.track?.id ?? ""}\u0000${State.settings.beatOutput ?? ""}`;
     if (wanted === this.beatWanted && (!wanted || track === this.beatTrack)) return;
     const restart = wanted && this.beatWanted;
     const revision = ++this.beatRevision;
