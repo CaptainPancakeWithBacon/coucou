@@ -722,3 +722,9 @@ Coucou normally detects both tempo and beat phase from the selected system audio
 3. In **Settings → Notch → General**, enable **Dance to the beat** and select the correct **Beat audio output**. The default device remains the fallback.
 
 Coucou searches only the song title and artist; the key is read locally by its Rust backend, not embedded in the frontend, and audio is never uploaded. Exact matching, a short request timeout and an in-session cache limit unnecessary requests. Without a key, an API failure, or an ambiguous/unmatched track, the existing audio-only detection is used. The tempo is not guaranteed for songs with changing time signatures, remixes, or inaccurate database records.
+
+## Windows installer build (Visual Studio Developer Command Prompt)
+
+From the repository root, run `windows\build-windows.cmd` (or from `windows`, run `build-windows.cmd`). The script uses the local Tauri CLI already installed in `node_modules` instead of reinstalling npm dependencies on every build. It installs them only if the CLI or its native addon is missing, and **stops** when npm installation fails rather than reporting a misleading `'tauri' is not recognized` error.
+
+If npm prints `EPERM ... unlink ... cli.win32-x64-msvc.node`, Windows has locked the native Tauri CLI binary. Close running Tauri builds, dev servers and other processes holding it, and retry; reboot if the lock persists. Running as Administrator or deleting `node_modules` should not be necessary as the first step. Avoid running multiple builds against the same working directory concurrently.
