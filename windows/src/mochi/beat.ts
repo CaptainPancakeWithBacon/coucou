@@ -62,6 +62,30 @@ export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
   t0 = nowMs;
   anchored = true;
 }
+/** Keep the measured tempo for a paused track without keeping stale phase data. */
+export function pauseBeat(nowMs: number = Date.now()): void {
+  const current = beatPosition(nowMs);
+  phase0 = current;
+  t0 = nowMs;
+  anchored = true;
+  fed = false;
+  waiting = false;
+  lastAudioAt = null;
+  detectedBpm = null;
+  candidate = null;
+}
+
+/** Resume at the remembered tempo immediately; audio may refine phase later. */
+export function resumeBeat(nowMs: number = Date.now()): void {
+  phase0 = beatPosition(nowMs);
+  t0 = nowMs;
+  anchored = true;
+  fed = false;
+  waiting = true;
+  lastAudioAt = null;
+  candidate = null;
+}
+
 export function resetBeat(waitForMusic = false, nowMs: number = Date.now()): void {
   const current = beatPosition(nowMs);
   waiting = waitForMusic;
