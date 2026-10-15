@@ -26,12 +26,14 @@ let knownBpm: number | null = null;
 let detectedBpm: number | null = null;
 let lastAudioAt: number | null = null;
 
-export function beatDiagnostics() {
+export function beatDiagnostics(nowMs: number = Date.now()) {
+  const fresh = lastAudioAt != null && nowMs - lastAudioAt < 3500;
+  const locked = fed && fresh;
   return {
     detectedBpm,
     databaseBpm: knownBpm,
-    danceBpm: fed ? bpm : knownBpm,
-    phaseLocked: fed,
+    danceBpm: locked ? bpm : (knownBpm ?? DEFAULT_BPM),
+    phaseLocked: locked,
     lastAudioAt,
     waiting,
   };
@@ -57,7 +59,12 @@ let t0 = 0;
 
 /** Beats since the clock started, as a continuous count: whole numbers are beats. */
 export function beatPosition(nowMs: number): number {
-  if (!fed) return (nowMs / 1000) * DEFAULT_BPM / 60;
+  if (!fed) return (nowMs / 1000) * (knownBpm ?? DEFAULT_BPM) / 60;
+  if (lastAudioAt != null && nowMs - lastAudioAt > 3500) {
+    // On a lost capture stream, never keep hopping at an unverified old tempo.
+    // Use the same wall-clock anchor as the Mac fallback instead.
+    return (nowMs / 1000) * (knownBpm ?? DEFAULT_BPM) / 60;
+  }
   return phase0 + ((nowMs - t0) / 60000) * bpm;
 }
 
@@ -110,8 +117,8 @@ export function currentBpm(): number {
  * so one hop per beat does not look frantic. The fixed bounce stays full size.
  */
 export function danceCalm(nowMs: number = Date.now()): number {
-  if (!fed) return waiting ? 0 : 1;
-  // Do not keep inventing beats through silence or a lost audio stream.
-  const freshness = Math.min(1, Math.max(0, (3500 - (nowMs - t0)) / 1000));
-  return freshness * Math.min(1, Math.max(0.55, 1 - (bpm - 100) / 45));
+  // A failed or silent capture must not freeze Mochi. Fall back to a steady
+  // 112 BPM Mac-style dance, or the database tempo if one is available.
+  if (!fed || lastAudioAt == null || nowMs - lastAudioAt > 3500) return 1;
+  return Math.min(1, Math.max(0.55, 1 - (bpm - 100) / 45));
 }
