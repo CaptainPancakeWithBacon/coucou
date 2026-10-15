@@ -26,12 +26,17 @@ pub struct Settings {
     pub chat_memory: bool,
     /// Desktop notifications shown in the island (notifications.rs, Linux).
     pub show_notifications: bool,
+    /// Apps whose notifications stay out of the island (notifications.rs), by the
+    /// name they notify under; compared without regard to case.
+    pub muted_notification_apps: Vec<String>,
     pub absence_interval: f64,
     pub active_integrations: Vec<String>,
     /// The always-on workspace pill (src/core/pills.ts checks it is one).
     pub main_pill: String,
     /// "primary" = the main display, "cursor" = whichever display the mouse is on.
     pub screen: String,
+    /// Where along the top edge the island sits: "center", "left" or "right".
+    pub island_align: String,
     pub autostart: bool,
     pub hooks_installed: bool,
     /// Claude model used by the chat. Changeable in the settings window.
@@ -137,6 +142,7 @@ impl Default for Settings {
             beat_sync: false,
             chat_memory: false,
             show_notifications: false,
+            muted_notification_apps: Vec::new(),
             absence_interval: 180.0,
             active_integrations: vec![
                 "integration_resend".into(),
@@ -146,6 +152,7 @@ impl Default for Settings {
             ],
             main_pill: "integration_claude".into(),
             screen: "primary".into(),
+            island_align: "center".into(),
             autostart: false,
             hooks_installed: false,
             model: default_model(),
@@ -997,10 +1004,12 @@ mod tests {
                 "beatSync",
                 "chatMemory",
                 "showNotifications",
+                "mutedNotificationApps",
                 "absenceInterval",
                 "activeIntegrations",
                 "mainPill",
                 "screen",
+                "islandAlign",
                 "autostart",
                 "hooksInstalled",
                 "model",

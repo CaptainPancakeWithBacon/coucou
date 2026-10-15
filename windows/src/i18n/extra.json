@@ -4075,6 +4075,83 @@
    "pt-BR": "Envia o final do registro do Coucou, sem seu nome nem nomes de pastas, ao desenvolvedor. Somente quando você clica. Ajuda a descobrir o que não funciona.",
    "ru": "Отправляет разработчику конец журнала Coucou без вашего имени и названий папок. Только по вашему клику. Помогает понять, что не работает.",
    "id": "Mengirim bagian akhir log Coucou, tanpa nama dan nama folder Anda, ke pengembang. Hanya saat Anda klik. Membantu mencari tahu apa yang tidak berfungsi."
+  },
+  "Show notifications from:": {
+   "zh-Hans": "显示来自以下应用的通知：",
+   "hi": "इन ऐप्स की सूचनाएँ दिखाएँ:",
+   "es": "Mostrar notificaciones de:",
+   "ar": "عرض إشعارات من:",
+   "fr": "Afficher les notifications de :",
+   "bn": "এই অ্যাপগুলির বিজ্ঞপ্তি দেখান:",
+   "pt-BR": "Mostrar notificações de:",
+   "ru": "Показывать уведомления от:",
+   "id": "Tampilkan notifikasi dari:"
+  },
+  "Codex is connected": {
+   "zh-Hans": "Codex 已连接",
+   "hi": "Codex जुड़ गया",
+   "es": "Codex está conectado",
+   "ar": "تم ربط Codex",
+   "fr": "Codex est connecté",
+   "bn": "Codex সংযুক্ত হয়েছে",
+   "pt-BR": "Codex conectado",
+   "ru": "Codex подключён",
+   "id": "Codex terhubung"
+  },
+  "Codex asks you to trust new hooks once: start Codex and type /hooks.": {
+   "zh-Hans": "Codex 会要求你信任新的钩子一次：启动 Codex 并输入 /hooks。",
+   "hi": "Codex नए हुक पर एक बार भरोसा करने को कहता है: Codex शुरू करें और /hooks लिखें।",
+   "es": "Codex pide confiar una vez en los hooks nuevos: inicia Codex y escribe /hooks.",
+   "ar": "يطلب Codex الوثوق بالخطافات الجديدة مرة واحدة: شغّل Codex واكتب /hooks.",
+   "fr": "Codex demande de faire confiance aux nouveaux hooks une fois : lancez Codex et tapez /hooks.",
+   "bn": "Codex নতুন হুকে একবার আস্থা রাখতে বলে: Codex চালু করে /hooks লিখুন।",
+   "pt-BR": "O Codex pede para confiar nos novos hooks uma vez: inicie o Codex e digite /hooks.",
+   "ru": "Codex просит один раз доверять новым хукам: запустите Codex и введите /hooks.",
+   "id": "Codex meminta Anda mempercayai hook baru sekali: jalankan Codex dan ketik /hooks."
+  },
+  "Island position": {
+   "zh-Hans": "岛的位置",
+   "hi": "आइलैंड की जगह",
+   "es": "Posición de la isla",
+   "ar": "موضع الجزيرة",
+   "fr": "Position de l'îlot",
+   "bn": "আইল্যান্ডের অবস্থান",
+   "pt-BR": "Posição da ilha",
+   "ru": "Положение острова",
+   "id": "Posisi pulau"
+  },
+  "Centre": {
+   "zh-Hans": "居中",
+   "hi": "बीच में",
+   "es": "Centro",
+   "ar": "الوسط",
+   "fr": "Centre",
+   "bn": "মাঝখানে",
+   "pt-BR": "Centro",
+   "ru": "По центру",
+   "id": "Tengah"
+  },
+  "Left": {
+   "zh-Hans": "左",
+   "hi": "बाएँ",
+   "es": "Izquierda",
+   "ar": "يسار",
+   "fr": "Gauche",
+   "bn": "বামে",
+   "pt-BR": "Esquerda",
+   "ru": "Слева",
+   "id": "Kiri"
+  },
+  "Right": {
+   "zh-Hans": "右",
+   "hi": "दाएँ",
+   "es": "Derecha",
+   "ar": "يمين",
+   "fr": "Droite",
+   "bn": "ডানে",
+   "pt-BR": "Direita",
+   "ru": "Справа",
+   "id": "Kanan"
   }
  }
 }

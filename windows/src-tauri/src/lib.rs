@@ -90,11 +90,21 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
     }
 }
 
+/// Apps that notified this session and the muted ones, for Settings → Notifications.
+#[tauri::command]
+fn notification_apps(shared: State<Shared>) -> Vec<String> {
+    let muted = shared.settings.lock().map(|g| g.muted_notification_apps.clone()).unwrap_or_default();
+    #[cfg(any(target_os = "linux", windows))]
+    return notifications::apps(&muted);
+    #[cfg(not(any(target_os = "linux", windows)))]
+    muted
+}
+
 #[tauri::command]
 fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     let (screen_changed, autostart_changed, shortcuts_changed) = {
         let mut current = shared.settings.lock().unwrap();
-        let screen_changed = current.screen != settings.screen;
+        let screen_changed = current.screen != settings.screen || current.island_align != settings.island_align;
         let autostart_changed = current.autostart != settings.autostart;
         let shortcuts_changed = current.shortcuts != settings.shortcuts;
         // Where Mochi sits on the desktop is desktop.rs's to say, not a webview's.
@@ -457,6 +467,50 @@ fn first_run_setup(app: &AppHandle, loaded: &settings::Settings) {
     }
 }
 
+/// Windows: Codex gets its hooks the way Claude Code did, once, as soon as a
+/// `~/.codex` folder exists (also for installs that finished their first run
+/// before Codex support). No folder, no marker: it is looked at again next launch.
+#[cfg(windows)]
+fn codex_setup(app: &AppHandle) {
+    let marker = settings::setup_marker().with_file_name("codex-v1");
+    let codex_is_here = platform::home_dir().join(".codex").is_dir();
+    if marker.exists() || !codex_is_here {
+        return;
+    }
+    let _ = std::fs::write(&marker, b"");
+    match agents::preview("codex", true).and_then(|plan| agents::apply("codex", true, &plan.fingerprint)) {
+        Ok(_) => {
+            log::line("codex: hooks installed (a backup was made)".to_string());
+            let shared = app.state::<Shared>();
+            let mut current = shared.settings.lock().unwrap();
+            let pill = "agent_codex".to_string();
+            if current.active_integrations.len() < 4 && !current.active_integrations.contains(&pill) {
+                current.active_integrations.push(pill);
+            }
+            let _ = settings::save(&current);
+            drop(current);
+            let handle = app.clone();
+            std::thread::spawn(move || {
+                // After the island is up, so the card is seen.
+                std::thread::sleep(std::time::Duration::from_secs(8));
+                notifications::announce(
+                    &handle,
+                    notifications::Notice {
+                        app: "Coucou".into(),
+                        summary: i18n::t("Codex is connected"),
+                        body: i18n::t("Codex asks you to trust new hooks once: start Codex and type /hooks."),
+                        target: None,
+                    },
+                );
+            });
+        }
+        Err(err) => {
+            log::line(format!("codex: hooks not installed: {err}"));
+            report::trouble(app, "codex", "The Codex hooks could not be installed");
+        }
+    }
+}
+
 // ── Other agents' hooks and plugins ──────────────────────────────────────────
 
 #[tauri::command]
@@ -808,6 +862,7 @@ pub fn run() {
             open_claude_desktop,
             open_notification_target,
             report::log_report_available,
+            notification_apps,
             report::send_log,
             open_file_in_vscode,
             open_file_in_phpstorm,
@@ -937,6 +992,8 @@ pub fn run() {
                 first_run_setup(&handle, &loaded);
                 let _ = std::fs::write(settings::setup_marker(), b"");
             }
+            #[cfg(windows)]
+            codex_setup(&handle);
             log::line(format!(
                 "settings: notifications={} autostart={} hooks={} pills={:?}",
                 loaded.show_notifications, loaded.autostart, loaded.hooks_installed, loaded.active_integrations

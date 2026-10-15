@@ -284,6 +284,14 @@ mod display_tests {
     }
 
     #[test]
+    fn the_island_can_sit_centred_left_or_right() {
+        assert_eq!(x_for("center", 0, 1920, 720, 16), 600);
+        assert_eq!(x_for("", 0, 1920, 720, 16), 600);
+        assert_eq!(x_for("left", 100, 1920, 720, 16), 116);
+        assert_eq!(x_for("right", 0, 1920, 720, 16), 1184);
+    }
+
+    #[test]
     fn preferences_saved_before_still_match() {
         let lap = d("eDP-1", 0, 0, 1920, 1200);
         let ext = d("HDMI-1", 1920, 0, 1920, 1080);
@@ -311,6 +319,15 @@ pub fn screen_info(app: &AppHandle, pref: &str) -> ScreenInfo {
     }
 }
 
+/// The window's left edge: centred (the default, and anything unknown), or `margin` from a side.
+fn x_for(align: &str, left: i32, width: i32, pw: i32, margin: i32) -> i32 {
+    match align {
+        "left" => left + margin,
+        "right" => left + width - pw - margin,
+        _ => left + (width - pw) / 2,
+    }
+}
+
 /// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
 pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let Some(win) = window(app) else { return };
@@ -328,7 +345,11 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let (lw, lh) = if collapsed { (STRIP_W, strip_h) } else { (PANEL_W, PANEL_H) };
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
-    let x = mp.x + (ms.width as i32 - pw as i32) / 2;
+    let align = app
+        .try_state::<crate::Shared>()
+        .and_then(|s| s.settings.lock().ok().map(|g| g.island_align.clone()))
+        .unwrap_or_default();
+    let x = x_for(&align, mp.x, ms.width as i32, pw as i32, (16.0 * scale) as i32);
     let y = mp.y + (inset as f64 * scale).round() as i32;
 
     // GTK never sizes a non-resizable window below its natural size (200 px

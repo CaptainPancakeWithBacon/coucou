@@ -70,6 +70,34 @@ function sendLogRow(): HTMLElement {
   return box;
 }
 
+/** One switch per app that has notified: on = shown in the island. */
+function notificationAppsRow(): HTMLElement {
+  const box = h("div");
+  let shown = "";
+  const fill = () => void Bridge.notificationApps().then((apps) => {
+    const key = `${settings.showNotifications}|${(apps ?? []).join("|")}`;
+    if (key === shown) return;
+    shown = key;
+    box.replaceChildren();
+    if (!settings.showNotifications || !apps?.length) return;
+    box.append(h("div", { class: "hint", text: t("Show notifications from:") }));
+    for (const app of apps) {
+      const muted = settings.mutedNotificationApps.some((m) => m.toLowerCase() === app.toLowerCase());
+      box.append(h("div", { class: "row" },
+        h("label", { text: app }),
+        toggle(!muted, (on) => {
+          const rest = settings.mutedNotificationApps.filter((m) => m.toLowerCase() !== app.toLowerCase());
+          settings.mutedNotificationApps = on ? rest : [...rest, app];
+          void save();
+        }),
+      ));
+    }
+  });
+  fill();
+  window.setInterval(fill, 5000);
+  return box;
+}
+
 function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   const el = h("button", { class: on ? "switch on" : "switch", "aria-pressed": on });
   el.addEventListener("click", () => {
@@ -960,6 +988,18 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const align = h("select", {}) as HTMLSelectElement;
+  align.append(
+    h("option", { value: "center", text: t("Centre") }),
+    h("option", { value: "left", text: t("Left") }),
+    h("option", { value: "right", text: t("Right") }),
+  );
+  align.value = settings.islandAlign;
+  align.addEventListener("change", () => {
+    settings.islandAlign = align.value as typeof settings.islandAlign;
+    void save();
+  });
+
   return h(
     "section",
     {},
@@ -981,6 +1021,7 @@ function generalSection(): HTMLElement {
       toggle(settings.showNotifications, (v) => { settings.showNotifications = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
+    notificationAppsRow(),
     sendLogRow(),
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
@@ -1002,6 +1043,10 @@ function generalSection(): HTMLElement {
     h("div", { class: "row" },
       h("label", { text: t("Island lives on") }),
       screen,
+    ),
+    h("div", { class: "row" },
+      h("label", { text: t("Island position") }),
+      align,
     ),
     h("div", { class: "row" },
       h("label", { text: t("Launch at startup") }),

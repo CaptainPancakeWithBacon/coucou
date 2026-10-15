@@ -229,6 +229,8 @@ export const Bridge = {
   /** "Send log": whether this build can (a webhook was compiled in), and sending it. */
   logReportAvailable: () => call<boolean>("log_report_available"),
   sendLog: () => callOrThrow<string>("send_log"),
+  /** Apps that notified this session plus the muted ones (Settings → per-app switches). */
+  notificationApps: () => call<string[]>("notification_apps"),
 
   /** A notification's button: opens the app it came from (desktop entry / app id). */
   openNotificationTarget: (target: string) => call<boolean>("open_notification_target", { target }),

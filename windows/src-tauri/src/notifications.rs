@@ -194,9 +194,43 @@ pub fn announce(app: &AppHandle, notice: Notice) {
     deliver(app, notice);
 }
 
+/// Names of the apps that notified since Coucou started, for Settings to list.
+static SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Whether `app` is on the muted list (names compare without regard to case).
+fn is_muted(muted: &[String], app: &str) -> bool {
+    muted.iter().any(|m| m.eq_ignore_ascii_case(app))
+}
+
 fn deliver(app: &AppHandle, notice: Notice) {
     use tauri::Emitter;
+    // Coucou's own notices (an update, a trouble card) are never muted.
+    if notice.app != "Coucou" && !notice.app.is_empty() {
+        if let Ok(mut seen) = SEEN.lock() {
+            if !seen.iter().any(|a| a.eq_ignore_ascii_case(&notice.app)) {
+                seen.push(notice.app.clone());
+            }
+        }
+        let muted = app
+            .try_state::<crate::Shared>()
+            .and_then(|s| s.settings.lock().ok().map(|g| is_muted(&g.muted_notification_apps, &notice.app)));
+        if muted == Some(true) {
+            return;
+        }
+    }
     let _ = app.emit("desktop-notification", notice);
+}
+
+/// Every app that has notified this session plus the muted ones, A to Z.
+pub fn apps(muted: &[String]) -> Vec<String> {
+    let mut all: Vec<String> = SEEN.lock().map(|s| s.clone()).unwrap_or_default();
+    for m in muted {
+        if !all.iter().any(|a| a.eq_ignore_ascii_case(m)) {
+            all.push(m.clone());
+        }
+    }
+    all.sort_by_key(|a| a.to_lowercase());
+    all
 }
 
 // ── Linux: the session bus ────────────────────────────────────────────────────
@@ -472,6 +506,14 @@ mod win {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn muting_ignores_case_and_the_list_joins_seen_and_muted_apps() {
+        let muted = vec!["Discord".to_string()];
+        assert!(is_muted(&muted, "discord"));
+        assert!(!is_muted(&muted, "Slack"));
+        assert!(apps(&muted).iter().any(|a| a == "Discord"));
+    }
 
     #[test]
     fn a_row_is_handed_over_once_and_what_was_there_at_the_start_is_not_news() {
