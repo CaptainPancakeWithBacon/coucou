@@ -22,6 +22,10 @@ pub struct Settings {
     /// Mochi dances on the beat of the music, found by listening to the
     /// speakers' output (beat.rs, Linux). Off by default.
     pub beat_sync: bool,
+    /// Audio output to monitor for the dance; empty means system default.
+    pub beat_output: String,
+    /// Opacity percentage of the entire island (20..=100).
+    pub island_opacity: u8,
     /// The Claude Code chat shares the user's memory notes (claude_cli.rs).
     pub chat_memory: bool,
     /// Desktop notifications shown in the island (notifications.rs, Linux).
@@ -142,6 +146,8 @@ impl Default for Settings {
             auto_close_interval: 15.0,
             open_on_hover: false,
             beat_sync: cfg!(windows),
+            beat_output: String::new(),
+            island_opacity: 100,
             chat_memory: false,
             show_notifications: false,
             muted_notification_apps: Vec::new(),
@@ -1031,6 +1037,8 @@ mod tests {
                 "autoCloseInterval",
                 "openOnHover",
                 "beatSync",
+                "beatOutput",
+                "islandOpacity",
                 "chatMemory",
                 "showNotifications",
                 "mutedNotificationApps",
