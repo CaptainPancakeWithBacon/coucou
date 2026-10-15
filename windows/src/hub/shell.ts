@@ -13,7 +13,7 @@ import { icon, keyLabel } from "./ui";
 
 export type PageId =
   | "dictation" | "notes" | "insights" | "dictionary" | "snippets" | "styles" | "flowsettings"
-  | "general" | "pills" | "agents" | "chat" | "voice" | "integrations" | "phone" | "shortcuts";
+  | "general" | "pills" | "agents" | "chat" | "voice" | "integrations" | "phone" | "shortcuts" | "beatinfo";
 
 interface PageDef {
   id: PageId;
@@ -42,6 +42,7 @@ export const NOTCH_PAGES: PageDef[] = [
   { id: "integrations", icon: "puzzle", title: () => t("Integrations"), subtitle: () => t("Stripe, GitHub, Vercel, n8n, Notion and the rest.") },
   { id: "phone", icon: "phone", title: () => t("Android phone"), subtitle: () => t("Your agents and their approvals on your Android phone, over your Wi-Fi.") },
   { id: "shortcuts", icon: "keyboard", title: () => t("Shortcuts"), subtitle: () => t("The keys that open the island and its actions.") },
+  { id: "beatinfo", icon: "chart", title: () => t("Beat info"), subtitle: () => t("Live Spotify BPM and dance synchronization diagnostics.") },
 ];
 
 const ALL = [...FLOW_PAGES, ...NOTCH_PAGES];
