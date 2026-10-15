@@ -937,6 +937,58 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
 // ── General section ───────────────────────────────────────────────────────────
 
+function songBpmKeyRow(): HTMLElement {
+  const field = h("input", {
+    type: "password", placeholder: "Paste GetSongBPM API key",
+    autocomplete: "off", spellcheck: "false",
+    style: "flex:1 1 200px;min-width:0",
+  }) as HTMLInputElement;
+  const saveBtn = h("button", { text: t("Save key") });
+  const removeBtn = h("button", { class: "danger", text: t("Remove") });
+  const status = h("span", { class: "hint" });
+  const feedback = h("div");
+  const key = "getsongbpm-api-key";
+  const refresh = async () => {
+    const present = (await Bridge.secretPresent(key)) ?? false;
+    status.textContent = present
+      ? t("Key saved in the {store}.", { store: KEY_STORE })
+      : t("No database key configured — live audio detection remains available.");
+    removeBtn.style.display = present ? "" : "none";
+    field.placeholder = present ? "•••••••• (stored)" : "Paste GetSongBPM API key";
+  };
+  saveBtn.addEventListener("click", async () => {
+    const value = field.value.trim();
+    if (!value) return;
+    clear(feedback);
+    try {
+      await Bridge.secretSet(key, value);
+      field.value = "";
+      feedback.append(h("div", { class: "notice ok", text: t("API key saved securely. The next song will use it.") }));
+      await refresh();
+    } catch (err) {
+      feedback.append(h("div", { class: "notice err", text: String(err) }));
+    }
+  });
+  removeBtn.addEventListener("click", async () => {
+    clear(feedback);
+    try {
+      await Bridge.secretClear(key);
+      field.value = "";
+      feedback.append(h("div", { class: "notice ok", text: t("API key removed.") }));
+      await refresh();
+    } catch (err) {
+      feedback.append(h("div", { class: "notice err", text: String(err) }));
+    }
+  });
+  void refresh();
+  return h("div", {},
+    h("div", { class: "row" }, h("label", { text: t("GetSongBPM API key") }), field, saveBtn, removeBtn),
+    h("div", { class: "hint" }, status),
+    h("div", { class: "hint", text: t("Request a key at getsongbpm.com/api. The key is kept in your OS credential store, not in Coucou settings.json.") }),
+    feedback,
+  );
+}
+
 function generalSection(): HTMLElement {
   const volume = h("input", {
     type: "range", min: "0", max: "0.2", step: "0.005",
@@ -1062,6 +1114,7 @@ function generalSection(): HTMLElement {
         h("label", { text: t("Beat audio output") }),
         beatOutput,
       ),
+      songBpmKeyRow(),
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
         h("label", { text: t("Chat memory") }),
