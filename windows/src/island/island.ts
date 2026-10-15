@@ -488,6 +488,11 @@ export class Island {
     this.alert("wardrobe");
   }
 
+  /** Keep the island open until `dropPin` (a card that must be seen). */
+  stay() {
+    this.fsm.pinned = true;
+  }
+
   /** An alert stopped waiting for an answer: let the island auto-close again. */
   dropPin() {
     this.fsm.pinned = false;

@@ -44,6 +44,18 @@ fn is_other_commit(mine: &str, release: &str) -> bool {
     !mine.is_empty() && !release.is_empty() && !release.starts_with(&mine) && !mine.starts_with(&release)
 }
 
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// The marker file says "<sha> <seconds>": was this version announced in the last day?
+/// (An older marker holding only the sha counts as long ago.)
+fn told_recently(told: &str, sha: &str, now: u64) -> bool {
+    let mut parts = told.split_whitespace();
+    let (Some(was), at) = (parts.next(), parts.next().and_then(|s| s.parse::<u64>().ok())) else { return false };
+    was == sha && at.is_some_and(|t| now.saturating_sub(t) < 24 * 3600)
+}
+
 fn told_path() -> std::path::PathBuf {
     crate::platform::config_dir().join("update-told")
 }
@@ -98,11 +110,12 @@ fn announce_update(app: &AppHandle, headline: String) {
 
 async fn look(app: &AppHandle, mine: &str) -> Result<(), String> {
     let Some((theirs, headline)) = newer(mine).await? else { return Ok(()) };
-    // Once per version: a friend who does not update is not nagged every hour.
-    if std::fs::read_to_string(told_path()).is_ok_and(|told| told.trim() == theirs) {
+    // Once a day per version: a friend who was away from the screen sees it
+    // later, and one who does not update is not nagged every hour.
+    if std::fs::read_to_string(told_path()).is_ok_and(|told| told_recently(&told, &theirs, now_secs())) {
         return Ok(());
     }
-    let _ = std::fs::write(told_path(), &theirs);
+    let _ = std::fs::write(told_path(), format!("{theirs} {}", now_secs()));
     crate::log::line(format!("update check: {theirs} is out, this build is {mine}"));
     announce_update(app, headline);
     Ok(())
@@ -115,7 +128,7 @@ pub async fn check_for_updates(app: AppHandle) -> String {
     let Some(mine) = BUILD_SHA.map(str::trim).filter(|s| !s.is_empty()) else { return "unstamped".into() };
     match newer(mine).await {
         Ok(Some((theirs, headline))) => {
-            let _ = std::fs::write(told_path(), &theirs);
+            let _ = std::fs::write(told_path(), format!("{theirs} {}", now_secs()));
             announce_update(&app, headline);
             "available".into()
         }
@@ -143,6 +156,15 @@ mod tests {
         assert_eq!(headline_of("sha: abc1234\n\nFixes the notifications\nmore"), "Fixes the notifications");
         assert_eq!(headline_of("sha: abc1234"), "A new version is ready to download");
         assert_eq!(headline_of(&"x".repeat(300)).chars().count(), 140);
+    }
+
+    #[test]
+    fn a_version_is_announced_once_a_day() {
+        assert!(told_recently("abc1234 1000", "abc1234", 1000 + 3600));
+        assert!(!told_recently("abc1234 1000", "abc1234", 1000 + 25 * 3600));
+        assert!(!told_recently("abc1234 1000", "def5678", 1100));
+        assert!(!told_recently("abc1234", "abc1234", 1100), "an old marker without a time");
+        assert!(!told_recently("", "abc1234", 1100));
     }
 
     #[test]
