@@ -49,12 +49,10 @@ export function setTrackBpm(value: number | null): void {
   fed = false;
   phaseCandidate = null;
   phaseConfirmations = 0;
-  bpm = next ?? DEFAULT_BPM;
 }
 
 let fed = false;
 let waiting = false;
-let bpm = DEFAULT_BPM;
 /** Beats counted at `t0` (ms). */
 let phase0 = 0;
 let t0 = 0;
@@ -130,7 +128,6 @@ export function resetBeat(waitForMusic: boolean = false): void {
   detectedBpm = null;
   lastAudioAt = null;
   waiting = waitForMusic;
-  bpm = DEFAULT_BPM;
 }
 
 export function currentBpm(): number {
