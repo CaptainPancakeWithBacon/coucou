@@ -199,6 +199,7 @@ export const Bridge = {
   focusWindow: (focused: boolean) => call<void>("focus_window", { focused }),
 
   reposition: () => call<void>("reposition"),
+  dragIsland: () => call<boolean>("island_drag"),
   fitZoom: (dpr: number) => call<boolean>("fit_zoom", { dpr }),
 
   /** Displays the island can be pinned to: `key` is what `settings.screen` stores. */

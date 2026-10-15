@@ -492,7 +492,7 @@ pub fn flow_set_prefs(app: AppHandle, flow: State<Arc<Flow>>, prefs: Prefs) {
         s.key = key_id(prefs.key);
     });
     let restart = before.key != prefs.key;
-    if before.enabled && (!prefs.enabled || restart) {
+    if !prefs.enabled || (before.enabled && restart) {
         disable(&app, &flow);
     }
     if prefs.enabled && (!before.enabled || restart) {

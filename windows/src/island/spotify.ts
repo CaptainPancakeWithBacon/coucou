@@ -45,7 +45,7 @@ export function syncPillName() {
   if (!task) return;
   const track = Spotify.state.track;
   const title = isAd(track) ? t("Advertisement") : (track?.title ?? "");
-  const name = title || (pillDefinition(SPOTIFY_ID)?.name ?? "Media");
+  const name = title || (pillDefinition(SPOTIFY_ID)?.name ?? "Spotify");
   if (task.name !== name) task.name = name;
 }
 

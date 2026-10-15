@@ -3,7 +3,7 @@
 // src/island/spotify.ts and the views in src/views/spotify.ts. The MPRIS side —
 // metadata, position, the bus itself — is tested in src-tauri/src/spotify.rs.
 
-import { beforeEach, test } from "node:test";
+import { beforeEach, test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { emit, sent } from "./tauri.mjs";
 import { installFakeDom } from "./fakedom.mjs";
@@ -183,14 +183,14 @@ beforeEach(() => {
 const spotifyTask = () => State.tasks.find((t) => t.id === SPOTIFY_ID);
 
 test("the pill wears the track's title, and its own name when nothing plays", () => {
-  assert.equal(spotifyTask().name, "Media");
+  assert.equal(spotifyTask().name, "Spotify");
   emit("spotify", playing());
   assert.equal(Spotify.state.track.title, "Get Lucky");
   assert.equal(spotifyTask().name, "Get Lucky");
   emit("spotify", playing({ track: track({ id: "spotify:ad:1", title: "" }) }));
   assert.equal(spotifyTask().name, "Advertisement");
   emit("spotify", { ...IDLE_SPOTIFY, running: true });
-  assert.equal(spotifyTask().name, "Media");
+  assert.equal(spotifyTask().name, "Spotify");
 });
 
 test("music starting shows the hidden island once, silently; nothing on Windows-like setups", () => {
@@ -237,7 +237,7 @@ test("the idle card: not playing, or not installed with a way to get it", () => 
   const card = buildSpotifyCard();
   Spotify.state = { ...IDLE_SPOTIFY, installed: true };
   card.sync();
-  assert.match(card.el.textContent, /Media.*Integration.*Not playing.*Open Spotify/);
+  assert.match(card.el.textContent, /Spotify.*Integration.*Not playing.*Open Spotify/);
   // A player that runs but has no track is named in the header.
   Spotify.state = { ...IDLE_SPOTIFY, running: true, player: "Firefox" };
   card.sync();
@@ -307,4 +307,62 @@ test("the pill shows play/pause and next on hover, only with a track", () => {
   assert.equal(Spotify.state.playing, false);
   pill.el.fire("mouseleave");
   assert.ok(!pill.el.classList.contains("controls"));
+});
+
+
+test("the volume bar follows Spotify reports instead of retaining an independent value", () => {
+  Spotify.state = playing({ volume: 24, volumeAvailable: true });
+  const card = buildSpotifyCard();
+  card.sync();
+  const volumeBox = card.el.querySelector("np-volume");
+  assert.equal(volumeBox.querySelector("np-fill").style.width, "24%");
+  Spotify.state = playing({ volume: 83, volumeAvailable: true });
+  card.sync();
+  assert.equal(volumeBox.querySelector("np-fill").style.width, "83%");
+  assert.equal(volumeBox.title, "Volume 83%");
+});
+
+test("an unavailable Spotify volume cannot silently control the Windows mixer", () => {
+  Spotify.state = playing({ volume: 65, volumeAvailable: false });
+  const card = buildSpotifyCard();
+  card.sync();
+  const volumeBox = card.el.querySelector("np-volume");
+  const bar = volumeBox.querySelector("np-bar");
+  const before = sent("spotify_control").length;
+  const event = { button: 0, pointerId: 1, clientX: 90, stopPropagation() {} };
+  for (const fn of bar.listeners.get("pointerdown")) fn(event);
+  for (const fn of bar.listeners.get("pointerup")) fn(event);
+  assert.equal(Spotify.state.volume, 65);
+  assert.equal(volumeBox.style.opacity, "0.4");
+  assert.equal(sent("spotify_control").length, before);
+});
+
+test("dragging sends the final volume in order and remote readbacks do not move the held thumb", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    Spotify.state = playing({ volume: 50, volumeAvailable: true });
+    const card = buildSpotifyCard();
+    card.sync();
+    const bar = card.el.querySelector("np-volume").querySelector("np-bar");
+    bar.getBoundingClientRect = () => ({ left: 0, width: 100 });
+    const fire = (type, clientX) => {
+      for (const fn of bar.listeners.get(type) ?? []) fn({ button: 0, pointerId: 1, clientX, stopPropagation() {} });
+      card.sync();
+    };
+    const before = sent("spotify_control").length;
+    fire("pointerdown", 20);
+    mock.timers.tick(0);
+    await new Promise((resolve) => setImmediate(resolve));
+    fire("pointermove", 80);
+    Spotify.state = { ...Spotify.state, volume: 20 }; // an older confirmed readback
+    card.sync();
+    assert.equal(bar.querySelector("np-fill").style.width, "80%");
+    fire("pointerup", 80);
+    mock.timers.tick(120);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(sent("spotify_control").slice(before), [
+      { action: "volume", value: 20 }, { action: "volume", value: 80 },
+    ]);
+    mock.timers.tick(120);
+  } finally { mock.timers.reset(); }
 });

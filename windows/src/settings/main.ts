@@ -42,6 +42,7 @@ let root: HTMLElement = windowRoot;
 let hub: { redraw(): void; current(): PageId } | null = null;
 
 async function save() {
+  settings.showNotifications = settings.activeIntegrations.includes("agent_notifications");
   await Bridge.saveSettings(settings);
 }
 
@@ -835,7 +836,8 @@ const INTEGRATIONS: IntegrationDef[] = [
   { id: "integration_calcom", name: "Cal.com", color: "#C9956A",
     fields: [{ key: "calcom-api-key", label: N_("API key"), placeholder: "cal_…", secret: true }] },
   // Nothing to enter: read over D-Bus on Linux, from the system media controls on Windows (see core/pills.ts).
-  { id: "integration_spotify", name: "Media", color: "#1DB954", fields: [] },
+  { id: "integration_spotify", name: "Spotify", color: "#1DB954", fields: [] },
+  { id: "agent_notifications", name: "Notification", color: "#5AC8FA", fields: [] },
 ];
 
 const MAX_ACTIVE = MAX_DECLARED;
@@ -862,6 +864,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
   for (const def of INTEGRATIONS.filter((d) => offered.has(d.id))) {
     const active = settings.activeIntegrations.includes(def.id);
     const sw = h("button", { class: active ? "switch on" : "switch" });
+    if (def.id === "agent_notifications") sw.setAttribute("aria-label", t("Notifications in the island"));
     sw.addEventListener("click", () => {
       const on = settings.activeIntegrations.includes(def.id);
       if (on) {
@@ -1000,6 +1003,7 @@ function generalSection(): HTMLElement {
     h("option", { value: "left", text: t("Left") }),
     h("option", { value: "right", text: t("Right") }),
   );
+  if (settings.islandCustomPosition) align.append(h("option", { value: "custom", text: t("Custom") }));
   align.value = settings.islandAlign;
   align.addEventListener("change", () => {
     settings.islandAlign = align.value as typeof settings.islandAlign;
@@ -1022,18 +1026,14 @@ function generalSection(): HTMLElement {
       toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
-    h("div", { class: "row" },
-      h("label", { text: t("Notifications in the island") }),
-      toggle(settings.showNotifications, (v) => { settings.showNotifications = v; void save(); }),
-    ),
     h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
     notificationAppsRow(),
     sendLogRow(),
-    ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
         h("label", { text: t("Dance to the beat") }),
         toggle(settings.beatSync, (v) => { settings.beatSync = v; void save(); }),
       ),
+    ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
         h("label", { text: t("Chat memory") }),
         toggle(settings.chatMemory, (v) => { settings.chatMemory = v; void save(); }),

@@ -23,6 +23,7 @@ import { buildRecap } from "./recap";
 import { buildWardrobe } from "./wardrobe";
 import { buildSpotifyCard, buildSpotifyPill, type SpotifyPillHost } from "./spotify";
 import { SPOTIFY_ID } from "../core/spotify";
+import { buildPillPages } from "./pill-pages";
 import type { Outfit, OutfitSelection } from "../mochi/wardrobe";
 import { language, t, tl, type Msg } from "../i18n/i18n";
 import type { ViewCommand } from "../island/shortcuts";
@@ -47,6 +48,7 @@ export interface ViewActions {
   toggleSound(): void;
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
+  setIslandAlign(align: "left" | "center" | "right" | "custom"): void;
   openSettingsWindow(): void;
   blip(): void;
   /** Wardrobe click: keeps the outfit ("auto" and "none" included). */
@@ -112,6 +114,13 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const tabDrop = h("button", { class: "tab", title: tl("Drop"), onclick: () => go("upload") }, svg(ICONS.plus, 13));
 
   const gearBtn = h("button", { title: tl("Settings"), onclick: () => go("settings") }, svg(ICONS.gear, 14));
+  const dragBtn = h("button", { class: "island-drag", title: tl("Island position") }, svg(ICONS.move, 12, { stroke: 1.7 }));
+  dragBtn.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void Bridge.dragIsland();
+  });
   const soundBtn = h("button", { title: tl("Mute"), onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
   // Plan usage pills (off by default): before the gear, Claude first, as on the Mac.
   const claudePill = buildPlanPill(false);
@@ -128,13 +137,14 @@ export function buildHeader(actions: ViewActions): ViewHost {
     "div",
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
-    h("div", { class: "header-actions" }, planPills, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, planPills, dragBtn, gearBtn, soundBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 
   return {
     el,
     sync() {
+      dragBtn.style.display = State.os === "windows" ? "" : "none";
       const v = State.view;
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
       tabChat.classList.toggle("on", v === "prompt");
@@ -190,8 +200,8 @@ function buildOverview(actions: ViewActions): ViewHost {
     svg(ICONS.arrowUpRight, 8),
   );
   const left = card(null, leftBody, jump);
-  const pills = h("div", { class: "pills" });
-  const right = card(null, pills);
+  const pillPages = buildPillPages();
+  const right = card(null, pillPages.el);
   // Opened from a plan pill in the header: stands in for the left card.
   const plan = new PlanCard();
   let planTimer: number | null = null;
@@ -389,20 +399,21 @@ function buildOverview(actions: ViewActions): ViewHost {
       highlightRow(rows, State.cardSelection, State.cardSelection !== shownSelection);
       shownSelection = State.cardSelection;
 
-      const others = State.otherTasks.slice(0, 4);
+      const others = State.otherTasks.slice(0, 8);
       const pillKey = others.map((t) => `${t.id}:${t.color}:${t.pillBadge ?? ""}`).join("|");
       if (pillKey !== pillIds) {
         pillIds = pillKey;
-        clear(pills);
+        const pillNodes: HTMLElement[] = [];
         spotifyPill = null;
         for (const t of others) {
           if (t.id === SPOTIFY_ID) {
             spotifyPill = buildSpotifyPill(t, () => actions.setFocus(t.id));
-            pills.append(spotifyPill.el);
+            pillNodes.push(spotifyPill.el);
           } else {
-            pills.append(buildPill(t, actions));
+            pillNodes.push(buildPill(t, actions));
           }
         }
+        pillPages.setPills(pillNodes);
         pruneMiniBots();
       }
       spotifyPill?.sync();
@@ -417,6 +428,7 @@ function buildOverview(actions: ViewActions): ViewHost {
 export function hasSessionTicker(task: AgentTask): boolean {
   // A pill made for an agent's session (Gemini CLI, Codex… not declared) only
   // exists while that session does: it keeps the ticker from the first event.
+  if (task.id === "agent_notifications") return task.steps.length > 0;
   if (task.source === "agent" && !task.isIntegration) return true;
   const category = pillDefinition(task.id)?.category;
   const isSession = category === "workspace" || category === "agent" ||
@@ -746,17 +758,27 @@ function buildSettings(actions: ViewActions): ViewHost {
     type: "range", min: "0", max: "0.2", step: "0.005",
     oninput: (e: Event) => actions.setVolume(Number((e.target as HTMLInputElement).value)),
   }) as HTMLInputElement;
+  const positions = ["left", "center", "right", "custom"] as const;
+  const positionLabels = [tl("Left"), tl("Centre"), tl("Right"), tl("Custom")];
+  const positionButtons = positions.map((align, i) => h("button", {
+    text: positionLabels[i],
+    onclick: () => actions.setIslandAlign(align),
+  }));
   const autoLabel = h("span", {});
   const segButtons = [10, 15, 30].map((s) =>
     h("button", { onclick: () => actions.setAutoClose(s) }, `${s}s`),
   );
-  const claudeBadge = h("span", { class: "status-badge" });
-  const apiBadge = h("span", { class: "status-badge" });
+  const aiBadge = h("span", { class: "status-badge" });
 
   const rows = h(
     "div",
     { class: "settings-rows" },
     h("div", { class: "settings-row" }, soundSwitch, h("span", { text: tl("Sound") }), volume),
+    h("div", { class: "settings-row" },
+      svg(ICONS.move, 12, { stroke: 1.7 }),
+      h("span", { text: tl("Island position") }),
+      h("div", { class: "seg" }, ...positionButtons),
+    ),
     h(
       "div",
       { class: "settings-row" },
@@ -767,8 +789,7 @@ function buildSettings(actions: ViewActions): ViewHost {
     h(
       "div",
       { class: "settings-row", style: "gap:14px" },
-      claudeBadge,
-      apiBadge,
+      aiBadge,
       h("div", { class: "grow" }),
       h("button", {
         class: "link-btn",
@@ -786,18 +807,28 @@ function buildSettings(actions: ViewActions): ViewHost {
     el,
     sync() {
       const s = State.settings;
+      const dutchSystem = !s.language && navigator.language.toLowerCase().startsWith("nl");
+      positionButtons.forEach((b, i) => {
+        b.hidden = i === 3 && s.islandCustomPosition == null;
+        b.textContent = dutchSystem ? ["Links", "Midden", "Rechts", "Aangepast"][i] : t(positionLabels[i].key);
+        b.classList.toggle("on", s.islandAlign === positions[i]);
+      });
       soundSwitch.classList.toggle("on", s.soundEnabled);
       volume.value = String(s.soundVolume);
       volume.style.opacity = s.soundEnabled ? "1" : "0.4";
       autoLabel.textContent = t("Auto-close · {seconds}s", { seconds: Math.round(s.autoCloseInterval) });
       segButtons.forEach((b, i) => b.classList.toggle("on", s.autoCloseInterval === [10, 15, 30][i]));
-      clear(claudeBadge);
-      claudeBadge.append(
-        dot(s.hooksInstalled ? "#22C55E" : "#F4505E", 6),
-        h("span", { text: "Claude Code" }),
+      // Follow the user's main AI, rather than advertising Claude and a
+      // permanently disconnected API regardless of which integration is used.
+      const ai = pillDefinition(s.mainPill);
+      const configured = State.integrations[s.mainPill]?.configured ??
+        (s.mainPill === "integration_claude" && s.hooksInstalled);
+      clear(aiBadge);
+      aiBadge.hidden = !ai;
+      if (ai) aiBadge.append(
+        dot(configured ? "#22C55E" : "#F4505E", 6),
+        h("span", { text: ai.name }),
       );
-      clear(apiBadge);
-      apiBadge.append(dot("#F4505E", 6), h("span", { text: "API" }));
     },
   };
 }

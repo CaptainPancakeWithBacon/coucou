@@ -37,6 +37,8 @@ pub struct Settings {
     pub screen: String,
     /// Where along the top edge the island sits: "center", "left" or "right".
     pub island_align: String,
+    /// Last dragged centre-X and top-Y, as fractions of the selected display.
+    pub island_custom_position: Option<[f64; 2]>,
     pub autostart: bool,
     pub hooks_installed: bool,
     /// Claude model used by the chat. Changeable in the settings window.
@@ -139,7 +141,7 @@ impl Default for Settings {
             sound_volume: 0.12,
             auto_close_interval: 15.0,
             open_on_hover: false,
-            beat_sync: false,
+            beat_sync: cfg!(windows),
             chat_memory: false,
             show_notifications: false,
             muted_notification_apps: Vec::new(),
@@ -153,6 +155,7 @@ impl Default for Settings {
             main_pill: "integration_claude".into(),
             screen: "primary".into(),
             island_align: "center".into(),
+            island_custom_position: None,
             autostart: false,
             hooks_installed: false,
             model: default_model(),
@@ -216,15 +219,25 @@ pub fn apply_first_run_defaults(s: &mut Settings) {
         s.active_integrations = wanted.iter().map(|id| id.to_string()).collect();
     } else {
         for id in wanted {
-            if s.active_integrations.len() < 4 && !s.active_integrations.iter().any(|x| x == id) {
+            if s.active_integrations.len() < 8 && !s.active_integrations.iter().any(|x| x == id) {
                 s.active_integrations.push(id.to_string());
             }
         }
     }
+    restore_notification_pill(s);
+}
+
+/// Preserve the old notification toggle as a declared, immediately visible pill.
+fn restore_notification_pill(s: &mut Settings) {
+    if s.show_notifications && !s.active_integrations.iter().any(|id| id == "agent_notifications") {
+        s.active_integrations.push("agent_notifications".into());
+    }
 }
 
 pub fn load() -> Settings {
-    load_from(&settings_path())
+    let mut settings = load_from(&settings_path());
+    restore_notification_pill(&mut settings);
+    settings
 }
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
@@ -462,7 +475,7 @@ mod tests {
         s.active_integrations = vec!["integration_notion".into()];
         super::apply_first_run_defaults(&mut s);
         if cfg!(windows) {
-            assert_eq!(s.active_integrations, ["integration_notion", "integration_spotify", "integration_github"]);
+            assert_eq!(s.active_integrations, ["integration_notion", "integration_spotify", "integration_github", "agent_notifications"]);
         } else {
             assert_eq!(s.active_integrations, ["integration_notion"]);
         }
@@ -475,10 +488,23 @@ mod tests {
         super::apply_first_run_defaults(&mut s);
         if cfg!(windows) {
             assert!(s.show_notifications && s.autostart);
-            assert_eq!(s.active_integrations, ["integration_spotify", "integration_github"]);
+            assert_eq!(s.active_integrations, ["integration_spotify", "integration_github", "agent_notifications"]);
         } else {
             assert_eq!((s.show_notifications, s.autostart, s.active_integrations.clone()), before);
         }
+    }
+
+    #[test]
+    fn legacy_notification_toggle_declares_one_persistent_pill() {
+        let mut s = super::Settings::default();
+        let original = s.active_integrations.clone();
+        super::restore_notification_pill(&mut s);
+        assert_eq!(s.active_integrations, original);
+        s.show_notifications = true;
+        super::restore_notification_pill(&mut s);
+        super::restore_notification_pill(&mut s);
+        assert_eq!(s.active_integrations.iter().filter(|id| id.as_str() == "agent_notifications").count(), 1);
+        for id in original { assert!(s.active_integrations.contains(&id)); }
     }
 
     use super::*;
@@ -500,6 +526,7 @@ mod tests {
   "mainPill": "agent_cursor",
   "screen": "cursor",
   "islandAlign": "right",
+  "islandCustomPosition": [0.25, 0.35],
   "autostart": true,
   "hooksInstalled": true,
   "model": "some-model",
@@ -1012,6 +1039,7 @@ mod tests {
                 "mainPill",
                 "screen",
                 "islandAlign",
+                "islandCustomPosition",
                 "autostart",
                 "hooksInstalled",
                 "model",

@@ -108,11 +108,12 @@ fn notification_apps(shared: State<Shared>) -> Vec<String> {
 fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     let (screen_changed, autostart_changed, shortcuts_changed) = {
         let mut current = shared.settings.lock().unwrap();
-        let screen_changed = current.screen != settings.screen || current.island_align != settings.island_align;
+        let screen_changed = current.screen != settings.screen || current.island_align != settings.island_align || current.island_custom_position != settings.island_custom_position;
         let autostart_changed = current.autostart != settings.autostart;
         let shortcuts_changed = current.shortcuts != settings.shortcuts;
         // Where Mochi sits on the desktop is desktop.rs's to say, not a webview's.
         let mut settings = settings.clone();
+        settings.show_notifications = settings.active_integrations.iter().any(|id| id == "agent_notifications");
         settings.desktop_mochi = current.desktop_mochi.clone();
         // Same for the phone link: only its own commands turn it on or off.
         settings.phone_link = current.phone_link;
@@ -508,7 +509,7 @@ fn codex_setup(app: &AppHandle) {
             let shared = app.state::<Shared>();
             let mut current = shared.settings.lock().unwrap();
             let pill = "agent_codex".to_string();
-            if current.active_integrations.len() < 4 && !current.active_integrations.contains(&pill) {
+            if current.active_integrations.len() < 8 && !current.active_integrations.contains(&pill) {
                 current.active_integrations.push(pill);
             }
             let _ = settings::save(&current);
@@ -904,6 +905,7 @@ pub fn run() {
             set_island_rect,
             focus_window,
             reposition,
+            island::island_drag,
             fit_zoom,
             list_monitors,
             open_url,
@@ -1100,7 +1102,7 @@ pub fn run() {
                 // writing it again adds it, so the window stays hidden at login.
                 let _ = handle.autolaunch().enable();
             }
-            let open_window = flow::get(&handle).map(|f| f.store.lock().unwrap().prefs.open_at_launch).unwrap_or(true);
+            let open_window = flow::get(&handle).map(|f| { f.store.lock().unwrap().prefs.opens_window_at_launch() }).unwrap_or(false);
             if open_window && !launched_at_login() {
                 show_hub(&handle, None);
             }
