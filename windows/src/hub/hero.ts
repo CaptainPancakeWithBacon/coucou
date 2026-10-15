@@ -10,6 +10,12 @@
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import type { BotEmoteName, BotStateName } from "../core/layout";
 import type { Outfit } from "../mochi/wardrobe";
+import { HOST_OS } from "../core/pills";
+
+// WebKitGTK draws these canvases in software: on Linux the loop runs at about
+// 30 frames a second and at one pixel per CSS pixel (Windows keeps the full rate).
+const LINUX = HOST_OS === "linux";
+const MIN_FRAME_MS = LINUX ? 33 : 0;
 
 interface Animated {
   el: HTMLCanvasElement;
@@ -26,6 +32,10 @@ const start = performance.now();
 
 function loop(now: number) {
   frame = null;
+  if (now - last < MIN_FRAME_MS) {
+    frame = requestAnimationFrame(loop);
+    return;
+  }
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   const t = (now - start) / 1000;
@@ -56,7 +66,7 @@ function add(a: Animated) {
 }
 
 function fit(canvas: HTMLCanvasElement): { w: number; h: number; ctx: CanvasRenderingContext2D | null } {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(LINUX ? 1 : 2, window.devicePixelRatio || 1);
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
   if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
