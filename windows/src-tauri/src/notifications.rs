@@ -233,6 +233,7 @@ fn deliver(app: &AppHandle, notice: Notice) {
             .try_state::<crate::Shared>()
             .and_then(|s| s.settings.lock().ok().map(|g| is_muted(&g.muted_notification_apps, &key)));
         if muted == Some(true) {
+            crate::log::line(format!("notification from {key} muted"));
             return;
         }
     }
@@ -475,6 +476,7 @@ mod win {
                     remember(mute_key(&n.app, &n.summary));
                 }
             }
+            crate::log::line(format!("notifications: {} apps in the last week", apps(&[]).len()));
             crate::log::line(format!("notifications: watching {} ({} recent there now)", path.display(), recent.len()));
             return Ok(Vec::new());
         };
