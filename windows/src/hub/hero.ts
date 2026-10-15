@@ -15,7 +15,7 @@ import { HOST_OS } from "../core/pills";
 // WebKitGTK draws these canvases in software: on Linux the loop runs at about
 // 30 frames a second and at one pixel per CSS pixel (Windows keeps the full rate).
 const LINUX = HOST_OS === "linux";
-const MIN_FRAME_MS = LINUX ? 120 : 0;
+const MIN_FRAME_MS = LINUX ? 33 : 0;
 
 interface Animated {
   el: HTMLCanvasElement;
