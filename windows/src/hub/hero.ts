@@ -19,6 +19,8 @@ const MIN_FRAME_MS = LINUX ? 120 : 0;
 
 interface Animated {
   el: HTMLCanvasElement;
+  /** Frames drawn since it was added or the window last resized (Linux stops at STILL_AFTER). */
+  frames?: number;
   draw(dt: number, t: number): void;
   /** Pages are built before they are put in the window: dropped only once gone. */
   shown?: boolean;
@@ -26,6 +28,8 @@ interface Animated {
 }
 
 const live = new Set<Animated>();
+/** Linux: drawn and left as they are until the window is resized. */
+const still = new Set<Animated>();
 let frame: number | null = null;
 let last = performance.now();
 const start = performance.now();
@@ -51,6 +55,10 @@ function loop(now: number) {
     }
     a.shown = true;
     a.draw(dt, t);
+    if (LINUX && (a.frames = (a.frames ?? 0) + 1) >= STILL_AFTER) {
+      live.delete(a);
+      still.add(a);
+    }
   }
   if (live.size > 0 && document.visibilityState === "visible") frame = next();
 }
@@ -63,6 +71,20 @@ function wake() {
 }
 
 document.addEventListener("visibilitychange", wake);
+
+let resizing: number | undefined;
+window.addEventListener("resize", () => {
+  if (!LINUX) return;
+  window.clearTimeout(resizing);
+  resizing = window.setTimeout(() => {
+    for (const a of still) {
+      a.frames = 0;
+      live.add(a);
+    }
+    still.clear();
+    wake();
+  }, 200);
+});
 
 function add(a: Animated) {
   live.add(a);
