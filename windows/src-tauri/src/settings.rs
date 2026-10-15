@@ -524,6 +524,8 @@ mod tests {
   "autoCloseInterval": 30.0,
   "openOnHover": true,
   "beatSync": true,
+  "beatOutput": "",
+  "islandOpacity": 100,
   "chatMemory": false,
   "showNotifications": false,
   "mutedNotificationApps": ["Discord", "YourPhone › Snapchat"],
