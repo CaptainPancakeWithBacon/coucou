@@ -49,6 +49,8 @@ export const IDLE_SPOTIFY: SpotifyState = {
 export const Spotify = {
   state: { ...IDLE_SPOTIFY } as SpotifyState,
   artwork: null as { artUrl: string; dataUrl: string } | null,
+  /** Trusted tempo for the current track, if a provider found an exact match. */
+  trackBpm: null as number | null,
 };
 
 /** The cover to show for the current track, if it has arrived. */
