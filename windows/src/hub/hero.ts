@@ -12,10 +12,13 @@ import type { BotEmoteName, BotStateName } from "../core/layout";
 import type { Outfit } from "../mochi/wardrobe";
 import { HOST_OS } from "../core/pills";
 
-// WebKitGTK draws these canvases in software: on Linux the loop runs at about
-// 30 frames a second and at one pixel per CSS pixel (Windows keeps the full rate).
+// WebKitGTK paints these canvases so slowly that the whole window stutters
+// (frames of 100 ms to 2 s). On Linux they are drawn a few times and then stay as
+// a still picture (drawn again after a resize), at one pixel per CSS pixel;
+// Windows keeps the animation.
 const LINUX = HOST_OS === "linux";
-const MIN_FRAME_MS = LINUX ? 120 : 0;
+const MIN_FRAME_MS = LINUX ? 33 : 0;
+const STILL_AFTER = 3;
 
 interface Animated {
   el: HTMLCanvasElement;
