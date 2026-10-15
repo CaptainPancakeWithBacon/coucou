@@ -108,6 +108,10 @@ export interface Settings {
   openOnHover: boolean;
   /** Mochi dances on the beat of the music (Linux; listens to the speakers' output). */
   beatSync: boolean;
+  /** Output used for Spotify beat analysis; empty follows the default device. */
+  beatOutput: string;
+  /** Opacity of the entire island, as percent. */
+  islandOpacity: number;
   /** The Claude Code chat shares the user's memory notes (Linux; claude_cli.rs). */
   chatMemory: boolean;
   /** Desktop notifications shown in the island (Linux; notifications.rs). */
@@ -184,6 +188,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCloseInterval: 15,
   openOnHover: false,
   beatSync: HOST_OS === "windows",
+  beatOutput: "",
+  islandOpacity: 100,
   chatMemory: false,
   showNotifications: false,
   mutedNotificationApps: [],
