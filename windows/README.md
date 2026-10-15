@@ -718,7 +718,7 @@ Notes:
 Coucou normally detects both tempo and beat phase from the selected system audio output. You can optionally enable a **GetSongBPM** metadata lookup to provide a more reliable tempo for tracks with a verified matching title and artist. The live audio listener still estimates beat timing; an exact phase is **not** supplied by the database.
 
 1. Request a personal API key from [GetSongBPM](https://getsongbpm.com/api). Their free API requires registration **and a backlink/attribution** to GetSongBPM.com.
-2. In Windows, set the **user** environment variable `COUCOU_GETSONGBPM_API_KEY` to your key (for example, using PowerShell: `[Environment]::SetEnvironmentVariable('COUCOU_GETSONGBPM_API_KEY', 'YOUR_KEY', 'User')`). Restart Coucou completely so the new environment is inherited.
+2. Open **Coucou → Notch → General → GetSongBPM API key**, paste your key and click **Save key**. Coucou keeps it in Windows Credential Manager (or your Linux keyring). You can remove it from the same page. Existing `COUCOU_GETSONGBPM_API_KEY` environment variables remain supported as a fallback, but are no longer required.
 3. In **Settings → Notch → General**, enable **Dance to the beat** and select the correct **Beat audio output**. The default device remains the fallback.
 
 Coucou searches only the song title and artist; the key is read locally by its Rust backend, not embedded in the frontend, and audio is never uploaded. Exact matching, a short request timeout and an in-session cache limit unnecessary requests. Without a key, an API failure, or an ambiguous/unmatched track, the existing audio-only detection is used. The tempo is not guaranteed for songs with changing time signatures, remixes, or inaccurate database records.
