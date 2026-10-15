@@ -81,6 +81,13 @@ function wrapHalf(x: number): number {
 export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
   if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs) ||
       !Number.isFinite(nowMs) || msg.beatAtMs > nowMs + 1000) return;
+  // After a capture dropout, old phase evidence is invalid even when the BPM
+  // happens to match: demand a new run of consistent reports.
+  if (lastAudioAt != null && nowMs - lastAudioAt > 1500) {
+    fed = false;
+    phaseCandidate = null;
+    phaseConfirmations = 0;
+  }
   detectedBpm = msg.bpm;
   lastAudioAt = nowMs;
   const tempo = knownBpm;
