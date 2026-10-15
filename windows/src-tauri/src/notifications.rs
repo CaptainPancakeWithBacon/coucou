@@ -197,23 +197,41 @@ pub fn announce(app: &AppHandle, notice: Notice) {
 /// Names of the apps that notified since Coucou started, for Settings to list.
 static SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
-/// Whether `app` is on the muted list (names compare without regard to case).
-fn is_muted(muted: &[String], app: &str) -> bool {
-    muted.iter().any(|m| m.eq_ignore_ascii_case(app))
+/// The name an app is muted under: its own, except Phone Link, whose toasts all
+/// come from "YourPhone" and carry the phone app's name as their title.
+fn mute_key(app: &str, summary: &str) -> String {
+    if app.eq_ignore_ascii_case("YourPhone") && !summary.trim().is_empty() {
+        format!("YourPhone › {}", summary.trim())
+    } else {
+        app.to_string()
+    }
+}
+
+/// Whether `key` is on the muted list (names compare without regard to case);
+/// muting "YourPhone" itself mutes every phone app.
+fn is_muted(muted: &[String], key: &str) -> bool {
+    let whole = key.split(" › ").next().unwrap_or(key);
+    muted.iter().any(|m| m.eq_ignore_ascii_case(key) || m.eq_ignore_ascii_case(whole))
+}
+
+/// Adds a key to the list Settings shows.
+fn remember(key: String) {
+    if let Ok(mut seen) = SEEN.lock() {
+        if !seen.iter().any(|a| a.eq_ignore_ascii_case(&key)) {
+            seen.push(key);
+        }
+    }
 }
 
 fn deliver(app: &AppHandle, notice: Notice) {
     use tauri::Emitter;
     // Coucou's own notices (an update, a trouble card) are never muted.
     if notice.app != "Coucou" && !notice.app.is_empty() {
-        if let Ok(mut seen) = SEEN.lock() {
-            if !seen.iter().any(|a| a.eq_ignore_ascii_case(&notice.app)) {
-                seen.push(notice.app.clone());
-            }
-        }
+        let key = mute_key(&notice.app, &notice.summary);
+        remember(key.clone());
         let muted = app
             .try_state::<crate::Shared>()
-            .and_then(|s| s.settings.lock().ok().map(|g| is_muted(&g.muted_notification_apps, &notice.app)));
+            .and_then(|s| s.settings.lock().ok().map(|g| is_muted(&g.muted_notification_apps, &key)));
         if muted == Some(true) {
             return;
         }
@@ -320,6 +338,9 @@ mod linux {
 /// How far back a poll looks again: a toast committed a moment after a later one
 /// still carries the earlier timestamp. 3 s, in Windows' 100 ns ticks.
 const LOOKBACK: i64 = 30_000_000;
+/// A week, in the 100 ns ticks of ArrivalTime.
+#[cfg(windows)]
+const WEEK: i64 = 7 * 24 * 3600 * 10_000_000;
 
 /// What the Windows reader has already handed over. A row's number can come back
 /// (the database reuses it when a replaced toast was the newest), so rows are
@@ -448,6 +469,12 @@ mod win {
             let recent: Vec<(i64, i64)> =
                 rows_since(&conn, newest.saturating_sub(LOOKBACK))?.iter().map(|r| (r.id, r.arrival)).collect();
             watch.start_from(newest, &recent);
+            // The apps of the last week, so Settings can list them before they notify again.
+            for row in rows_since(&conn, newest.saturating_sub(WEEK))? {
+                if let Some(n) = notice_of_toast(&row.app, &row.payload) {
+                    remember(mute_key(&n.app, &n.summary));
+                }
+            }
             crate::log::line(format!("notifications: watching {} ({} recent there now)", path.display(), recent.len()));
             return Ok(Vec::new());
         };
@@ -511,6 +538,11 @@ mod tests {
     fn muting_ignores_case_and_the_list_joins_seen_and_muted_apps() {
         let muted = vec!["Discord".to_string()];
         assert!(is_muted(&muted, "discord"));
+        assert_eq!(mute_key("YourPhone", " Snapchat "), "YourPhone › Snapchat");
+        assert_eq!(mute_key("Discord", "Anna"), "Discord");
+        assert!(is_muted(&["YourPhone › Snapchat".to_string()], "YourPhone › snapchat"));
+        assert!(!is_muted(&["YourPhone › Snapchat".to_string()], "YourPhone › Mail"));
+        assert!(is_muted(&["YourPhone".to_string()], "YourPhone › Mail"));
         assert!(!is_muted(&muted, "Slack"));
         assert!(apps(&muted).iter().any(|a| a == "Discord"));
     }
