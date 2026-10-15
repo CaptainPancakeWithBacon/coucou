@@ -423,7 +423,8 @@ pub fn beat_enable(_on: bool) -> bool {
 #[cfg(windows)]
 #[tauri::command]
 pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: State<'_, Listener>, on: bool) -> bool {
-    let allowed = shared.settings.lock().unwrap().beat_sync;
+    let config = shared.settings.lock().unwrap().clone();
+    let allowed = config.beat_sync;
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
         // The UI owns the reset state. Sending a reset here races with
