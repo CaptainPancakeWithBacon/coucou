@@ -40,7 +40,8 @@ pub async fn bpm_lookup(title: String, artist: String) -> Option<f64> {
     if title.len() > 250 || artist.len() > 250 || title.trim().is_empty() || artist.trim().is_empty() {
         return None;
     }
-    let key = std::env::var("COUCOU_GETSONGBPM_API_KEY").ok()?;
+    let key = crate::secrets::get("getsongbpm-api-key")
+        .or_else(|| std::env::var("COUCOU_GETSONGBPM_API_KEY").ok())?;
     if key.is_empty() { return None; }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5)).build().ok()?;
