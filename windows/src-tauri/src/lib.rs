@@ -3,6 +3,7 @@
 mod agent_hooks;
 mod agents;
 mod beat;
+mod bpm;
 mod chat;
 mod claude;
 mod claude_cli;
@@ -999,7 +1000,7 @@ pub fn run() {
             sounds::custom_sound,
             sounds::reveal_sounds_folder,
             sounds::reload_sounds,
-            beat::beat_enable, beat::beat_outputs,
+            beat::beat_enable, beat::beat_outputs, bpm::bpm_lookup,
             spotify::spotify_refresh,
             spotify::spotify_control,
             spotify::spotify_open,
