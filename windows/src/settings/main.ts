@@ -4,6 +4,7 @@
 // island's settings are drawn here, one Notch page at a time.
 
 import "./settings.css";
+import { emit } from "@tauri-apps/api/event";
 import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport } from "../core/bridge";
 import { CUSTOM_SERVER_KEY, providerDef, urlExposure } from "../core/providers";
 import {
@@ -1412,6 +1413,7 @@ async function main() {
   });
 
   void onEvent<ShortcutsReport>("shortcuts-status", (fresh) => shortcutsListener?.report(fresh));
+  void onEvent<BeatTelemetry>("beat-diagnostics", (status) => updateBeatInfo?.(status));
   void onEvent<Settings>("settings-changed", (s) => {
     const before = `${settings.chatProvider}|${settings.ollamaUrl}|${settings.lmstudioUrl}|${settings.customUrl}`;
     settings = { ...settings, ...s };
@@ -1421,6 +1423,63 @@ async function main() {
     if (before !== after) localRedraw?.();
     applyLanguage();
   });
+}
+
+type BeatTelemetry = {
+  track: string | null;
+  playing: boolean;
+  enabled: boolean;
+  output: string;
+  databaseBpm: number | null;
+  detectedBpm: number | null;
+  danceBpm: number | null;
+  phaseLocked: boolean;
+  lastAudioAt: number | null;
+  waiting: boolean;
+};
+
+let updateBeatInfo: ((value: BeatTelemetry) => void) | null = null;
+
+function beatInfoSection(): HTMLElement {
+  const section = h("section", {}, h("h2", {}, h("span", { text: t("Beat info") })));
+  section.append(h("div", { class: "hint", text: t("Live diagnostics for Spotify dancing. BPM means beats per minute; matching BPM alone does not guarantee alignment to each beat.") }));
+  const values = new Map<string, HTMLElement>();
+  const items: [string, string][] = [
+    ["track", "Playing track"],
+    ["playing", "Spotify playback"],
+    ["enabled", "Dance to the beat"],
+    ["output", "Listening to"],
+    ["databaseBpm", "Database BPM"],
+    ["detectedBpm", "Detected audio BPM"],
+    ["danceBpm", "Mochi dance BPM"],
+    ["source", "Tempo source"],
+    ["alignment", "Beat alignment"],
+  ];
+  for (const [key, label] of items) {
+    const value = h("strong", { text: "—", style: "text-align:right;overflow-wrap:anywhere" });
+    values.set(key, value);
+    section.append(h("div", { class: "row", style: "justify-content:space-between;gap:20px" },
+      h("label", { text: t(label) }), value));
+  }
+  const show = (key: string, value: string) => { values.get(key)!.textContent = value; };
+  updateBeatInfo = (data) => {
+    const format = (value: number | null) => value == null ? "—" : `${value.toFixed(1)} BPM`;
+    const fresh = data.lastAudioAt != null && Date.now() - data.lastAudioAt < 3500;
+    const synced = data.phaseLocked && fresh;
+    show("track", data.track ?? "No track");
+    show("playing", data.playing ? "Playing" : "Stopped");
+    show("enabled", data.enabled ? "Enabled" : "Disabled");
+    show("output", data.output);
+    show("databaseBpm", format(data.databaseBpm));
+    show("detectedBpm", fresh ? format(data.detectedBpm) : "— (waiting for audio)");
+    show("danceBpm", data.enabled && data.playing ? format(data.danceBpm) : "—");
+    show("source", data.databaseBpm != null ? "Database" : fresh ? "Live audio" : "None / fallback");
+    show("alignment", synced ? "Audio beat estimates" : "Not synchronized");
+  };
+  section.append(h("div", { class: "hint", text: t("Database BPM requires a GetSongBPM API key. Without a matching song, audio detection is used. A detected tempo of half or double the database BPM can be normal.") }));
+  section.append(h("button", { text: t("Refresh"), onclick: () => void emit("beat-diagnostics-request") }));
+  void emit("beat-diagnostics-request");
+  return section;
 }
 
 /** The Notch page being shown. */
@@ -1468,6 +1527,7 @@ async function render() {
   declaredViews.length = 0;
   localRedraw = null;
   shortcutsListener = null;
+  updateBeatInfo = null;
   clear(root);
   const sections: Partial<Record<PageId, () => HTMLElement[]>> = {
     general: () => [generalSection()],
@@ -1477,6 +1537,7 @@ async function render() {
     integrations: () => [integrationsSection(present)],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],
     shortcuts: () => [shortcutsSection(shortcutReport)],
+    beatinfo: () => [beatInfoSection()],
   };
   root.append(...(sections[notchPage]?.() ?? []));
   if (notchPage === "general") {
