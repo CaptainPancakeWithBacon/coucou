@@ -73,6 +73,10 @@ jobs:
       - name: Build and pack the installer
         id: pack
         shell: pwsh
+        env:
+          # A build started by hand is stamped like a release, so the update check
+          # can be tried on it (empty for tag builds: those never look).
+          COUCOU_BUILD_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || '' }}
         run: |
           npm run pack
           $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
