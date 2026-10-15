@@ -999,7 +999,7 @@ pub fn run() {
             sounds::custom_sound,
             sounds::reveal_sounds_folder,
             sounds::reload_sounds,
-            beat::beat_enable,
+            beat::beat_enable, beat::beat_outputs,
             spotify::spotify_refresh,
             spotify::spotify_control,
             spotify::spotify_open,
