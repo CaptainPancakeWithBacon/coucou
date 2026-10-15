@@ -284,6 +284,14 @@ mod display_tests {
     }
 
     #[test]
+    fn the_island_can_sit_centred_left_or_right() {
+        assert_eq!(x_for("center", 0, 1920, 720, 16), 600);
+        assert_eq!(x_for("", 0, 1920, 720, 16), 600);
+        assert_eq!(x_for("left", 100, 1920, 720, 16), 116);
+        assert_eq!(x_for("right", 0, 1920, 720, 16), 1184);
+    }
+
+    #[test]
     fn preferences_saved_before_still_match() {
         let lap = d("eDP-1", 0, 0, 1920, 1200);
         let ext = d("HDMI-1", 1920, 0, 1920, 1080);
@@ -292,6 +300,58 @@ mod display_tests {
         assert_eq!(pick_display("at:nonsense", &[]), None);
     }
 }
+
+/// Calculates the zoom correction factor so that 1 CSS pixel equals 1 window logical pixel.
+/// If WebView2's devicePixelRatio differs from the window's scale factor (e.g. system text
+/// scaling or multi-monitor DPI mismatch), adjusting the webview zoom ensures the island
+/// canvas (PANEL_W / EXPANDED_W) fits within the window without clipping.
+pub fn calculate_zoom_correction(current_zoom: f64, scale: f64, dpr: f64) -> Option<f64> {
+    if dpr <= 0.0 || !dpr.is_finite() || scale <= 0.0 || !scale.is_finite() {
+        return None;
+    }
+    if (dpr - scale).abs() / scale < 0.02 {
+        return None;
+    }
+    let new_zoom = (current_zoom * (scale / dpr)).clamp(0.25, 4.0);
+    Some(new_zoom)
+}
+
+#[cfg(test)]
+mod zoom_tests {
+    use super::*;
+
+    #[test]
+    fn zoom_correction_is_none_when_dpr_matches_window_scale() {
+        assert_eq!(calculate_zoom_correction(1.0, 1.0, 1.0), None);
+        assert_eq!(calculate_zoom_correction(1.0, 1.25, 1.25), None);
+        // Within 2% threshold
+        assert_eq!(calculate_zoom_correction(1.0, 1.0, 1.01), None);
+    }
+
+    #[test]
+    fn zoom_correction_adjusts_for_dpi_mismatch() {
+        // Issue #346: 100% scale display (scale 1.0) but WebView2 dpr = 1.25
+        let zoom = calculate_zoom_correction(1.0, 1.0, 1.25);
+        assert_eq!(zoom, Some(0.8));
+
+        // 125% display with 125% text scale (dpr 1.5625 vs scale 1.25)
+        let zoom = calculate_zoom_correction(1.0, 1.25, 1.5625);
+        assert_eq!(zoom, Some(0.8));
+
+        // 150% display with 100% webview dpr
+        let zoom = calculate_zoom_correction(1.0, 1.5, 1.0);
+        assert_eq!(zoom, Some(1.5));
+    }
+
+    #[test]
+    fn zoom_correction_handles_invalid_inputs() {
+        assert_eq!(calculate_zoom_correction(1.0, 0.0, 1.0), None);
+        assert_eq!(calculate_zoom_correction(1.0, 1.0, -1.0), None);
+        assert_eq!(calculate_zoom_correction(1.0, f64::NAN, 1.0), None);
+        assert_eq!(calculate_zoom_correction(1.0, 1.0, f64::INFINITY), None);
+    }
+}
+
 
 pub fn screen_info(app: &AppHandle, pref: &str) -> ScreenInfo {
     match target_monitor(app, pref) {
@@ -308,6 +368,15 @@ pub fn screen_info(app: &AppHandle, pref: &str) -> ScreenInfo {
             }
         }
         None => ScreenInfo { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0, scale: 1.0 },
+    }
+}
+
+/// The window's left edge: centred (the default, and anything unknown), or `margin` from a side.
+fn x_for(align: &str, left: i32, width: i32, pw: i32, margin: i32) -> i32 {
+    match align {
+        "left" => left + margin,
+        "right" => left + width - pw - margin,
+        _ => left + (width - pw) / 2,
     }
 }
 
@@ -328,7 +397,11 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let (lw, lh) = if collapsed { (STRIP_W, strip_h) } else { (PANEL_W, PANEL_H) };
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
-    let x = mp.x + (ms.width as i32 - pw as i32) / 2;
+    let align = app
+        .try_state::<crate::Shared>()
+        .and_then(|s| s.settings.lock().ok().map(|g| g.island_align.clone()))
+        .unwrap_or_default();
+    let x = x_for(&align, mp.x, ms.width as i32, pw as i32, (16.0 * scale) as i32);
     let y = mp.y + (inset as f64 * scale).round() as i32;
 
     // GTK never sizes a non-resizable window below its natural size (200 px
@@ -344,6 +417,19 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     // Moving across displays can rescale the window: re-assert the physical size.
     let _ = win.set_size(PhysicalSize::new(pw, ph));
     let _ = win.set_always_on_top(true);
+
+    // On Windows, moving across displays or waking from the strip can clamp or lag
+    // the resize. If the physical inner size differs from what was requested, retry once.
+    if let Ok(got) = win.inner_size() {
+        if got.width != pw || got.height != ph {
+            crate::log::line(format!(
+                "window size mismatch: wanted {pw}x{ph}, got {}x{} (scale {scale}, monitor {}x{})",
+                got.width, got.height, ms.width, ms.height
+            ));
+            let _ = win.set_size(PhysicalSize::new(pw, ph));
+            let _ = win.set_position(PhysicalPosition::new(x, y));
+        }
+    }
 }
 
 /// Position, size and scale of the monitor the island lives on. Any change here

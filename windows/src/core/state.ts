@@ -112,6 +112,8 @@ export interface Settings {
   chatMemory: boolean;
   /** Desktop notifications shown in the island (Linux; notifications.rs). */
   showNotifications: boolean;
+  /** Apps whose notifications stay out of the island. */
+  mutedNotificationApps: string[];
   absenceInterval: number;
   /** Declared pills next to the main one (at most 4), in the order they were added. */
   activeIntegrations: string[];
@@ -119,6 +121,8 @@ export interface Settings {
   mainPill: string;
   /** "primary", "cursor", or `at:<x>,<y>` for one display (logical origin). */
   screen: string;
+  /** Where along the top edge the island sits. */
+  islandAlign: "center" | "left" | "right";
   autostart: boolean;
   hooksInstalled: boolean;
   /** Claude model used by the chat. */
@@ -181,12 +185,14 @@ export const DEFAULT_SETTINGS: Settings = {
   beatSync: false,
   chatMemory: false,
   showNotifications: false,
+  mutedNotificationApps: [],
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
   ],
   mainPill: DEFAULT_MAIN_PILL,
   screen: "primary",
+  islandAlign: "center",
   autostart: false,
   hooksInstalled: false,
   model: "claude-opus-5",

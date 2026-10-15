@@ -529,7 +529,16 @@ mod win {
     };
     use windows::Media::MediaPlaybackAutoRepeatMode;
     use windows::Storage::Streams::DataReader;
-    use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+    use windows::core::Interface;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Media::Audio::{
+        eMultimedia, eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator, ISimpleAudioVolume,
+        MMDeviceEnumerator,
+    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
 
     static ON: AtomicBool = AtomicBool::new(false);
     static LAST: Mutex<Option<PlayerState>> = Mutex::new(None);
@@ -565,6 +574,68 @@ mod win {
         Some(bytes)
     }
 
+    // ── Volume: the playing app's own volume in the Windows mixer ─────────────
+
+    /// The audio sessions on the default output of the app called `player`
+    /// ("Spotify", "Chrome"…), found by its program's file name.
+    fn audio_of(player: &str) -> Vec<ISimpleAudioVolume> {
+        com();
+        let mut out = Vec::new();
+        if player.is_empty() {
+            return out;
+        }
+        let wanted = player.to_lowercase();
+        unsafe {
+            let Ok(devices) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else {
+                return out;
+            };
+            let Ok(device) = devices.GetDefaultAudioEndpoint(eRender, eMultimedia) else { return out };
+            let Ok(manager) = device.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) else { return out };
+            let Ok(sessions) = manager.GetSessionEnumerator() else { return out };
+            for i in 0..sessions.GetCount().unwrap_or(0) {
+                let Ok(control) = sessions.GetSession(i) else { continue };
+                let Ok(control) = control.cast::<IAudioSessionControl2>() else { continue };
+                let pid = control.GetProcessId().unwrap_or(0);
+                if pid != 0 && program_of(pid).is_some_and(|name| name.contains(&wanted)) {
+                    if let Ok(volume) = control.cast::<ISimpleAudioVolume>() {
+                        out.push(volume);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// "spotify" for C:\...\Spotify.exe.
+    fn program_of(pid: u32) -> Option<String> {
+        unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+            let mut buf = [0u16; 1024];
+            let mut len = buf.len() as u32;
+            let named = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len);
+            let _ = CloseHandle(process);
+            named.ok()?;
+            let path = String::from_utf16_lossy(&buf[..len as usize]).to_lowercase();
+            let file = path.rsplit(['\\', '/']).next()?.to_string();
+            Some(file.strip_suffix(".exe").unwrap_or(&file).to_string())
+        }
+    }
+
+    /// 0…100, or None while the app has no audio session (nothing played yet).
+    fn volume_of(player: &str) -> Option<i32> {
+        let level = unsafe { audio_of(player).first()?.GetMasterVolume().ok()? };
+        Some((level * 100.0).round().clamp(0.0, 100.0) as i32)
+    }
+
+    fn set_volume(player: &str, percent: f64) -> bool {
+        let level = (percent / 100.0).clamp(0.0, 1.0) as f32;
+        let mut done = false;
+        for volume in &audio_of(player) {
+            done |= unsafe { volume.SetMasterVolume(level, std::ptr::null()).is_ok() };
+        }
+        done
+    }
+
     fn session() -> Option<Session> {
         Manager::RequestAsync().ok()?.get().ok()?.GetCurrentSession().ok()
     }
@@ -591,7 +662,8 @@ mod win {
             None
         };
         let has_title = !title.is_empty();
-        let state = PlayerState {
+        let player = session.SourceAppUserModelId().map(|s| player_name(&s.to_string())).unwrap_or_default();
+        let mut state = PlayerState {
             running: true,
             installed: true,
             track: has_title.then(|| Track { id, title, artist, album, duration, art_url: Some(art_url), object_path: String::new() }),
@@ -605,8 +677,9 @@ mod win {
                 .and_then(|r| r.Value().ok())
                 .is_some_and(|m| m != MediaPlaybackAutoRepeatMode::None),
             volume: 50,
-            player: session.SourceAppUserModelId().map(|s| player_name(&s.to_string())).unwrap_or_default(),
+            player,
         };
+        state.volume = volume_of(&state.player).unwrap_or(50);
         Some((state, artwork))
     }
 
@@ -621,6 +694,7 @@ mod win {
             || old.playing != new.playing
             || old.shuffle != new.shuffle
             || old.repeat != new.repeat
+            || old.volume != new.volume
             || old.player != new.player
             || old.track.as_ref().map(|t| &t.id) != new.track.as_ref().map(|t| &t.id)
             || seeked
@@ -651,6 +725,10 @@ mod win {
             "repeat" => {
                 let mode = if value.unwrap_or(0.0) >= 0.5 { MediaPlaybackAutoRepeatMode::List } else { MediaPlaybackAutoRepeatMode::None };
                 session.TryChangeAutoRepeatModeAsync(mode).ok().and_then(|op| op.get().ok()).unwrap_or(false)
+            }
+            "volume" => {
+                let player = session.SourceAppUserModelId().map(|s| player_name(&s.to_string())).unwrap_or_default();
+                value.is_some_and(|v| set_volume(&player, v))
             }
             _ => false,
         }
