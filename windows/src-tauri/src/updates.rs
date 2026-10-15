@@ -111,7 +111,6 @@ async fn look(app: &AppHandle, mine: &str) -> Result<(), String> {
 /// Settings' "Check for updates": "current", "available" (the card shows again,
 /// told before or not), "unstamped" (a build the release workflow did not make)
 /// or "failed".
-#[tauri::command]
 pub async fn check_for_updates(app: AppHandle) -> String {
     let Some(mine) = BUILD_SHA.map(str::trim).filter(|s| !s.is_empty()) else { return "unstamped".into() };
     match newer(mine).await {
