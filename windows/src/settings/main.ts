@@ -1057,6 +1057,10 @@ function generalSection(): HTMLElement {
         h("label", { text: t("Dance to the beat") }),
         toggle(settings.beatSync, (v) => { settings.beatSync = v; void save(); }),
       ),
+      h("div", { class: "row" },
+        h("label", { text: t("Beat audio output") }),
+        beatOutput,
+      ),
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
         h("label", { text: t("Chat memory") }),
