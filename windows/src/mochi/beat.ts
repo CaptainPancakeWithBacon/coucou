@@ -23,6 +23,19 @@ const RELOCK_AFTER_MS = 1500;
 const NEW_TEMPO = 0.12;
 
 let knownBpm: number | null = null;
+let detectedBpm: number | null = null;
+let lastAudioAt: number | null = null;
+
+export function beatDiagnostics() {
+  return {
+    detectedBpm,
+    databaseBpm: knownBpm,
+    danceBpm: fed ? bpm : knownBpm,
+    phaseLocked: fed,
+    lastAudioAt,
+    waiting,
+  };
+}
 
 /** A trusted track BPM governs speed; live audio only supplies beat phase. */
 export function setTrackBpm(value: number | null): void {
@@ -56,6 +69,8 @@ function wrapHalf(x: number): number {
 export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
   if (!(msg.bpm > 0) || !Number.isFinite(msg.bpm) || !Number.isFinite(msg.beatAtMs) ||
       !Number.isFinite(nowMs) || msg.beatAtMs > nowMs + 1000) return;
+  detectedBpm = msg.bpm;
+  lastAudioAt = nowMs;
   // A database BPM is not a beat-grid: use the audio event as a phase anchor.
   // Reject incompatible detected tempos rather than moving to a false beat.
   const chosen = knownBpm ?? msg.bpm;
@@ -80,6 +95,8 @@ export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
 export function resetBeat(waitForMusic: boolean = false): void {
   fed = false;
   knownBpm = null;
+  detectedBpm = null;
+  lastAudioAt = null;
   waiting = waitForMusic;
   bpm = DEFAULT_BPM;
 }
