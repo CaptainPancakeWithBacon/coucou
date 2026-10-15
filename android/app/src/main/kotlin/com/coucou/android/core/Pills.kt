@@ -18,8 +18,9 @@ object Pills {
     const val DEFAULT_MAIN_PILL = "integration_claude"
 
     val catalog: List<PillDefinition> = listOf(
-        PillDefinition("integration_claude", "VS Code", "#F5F6F8", PillCategory.WORKSPACE),
+        PillDefinition("integration_claude", "Claude Code", "#F5F6F8", PillCategory.WORKSPACE),
         PillDefinition("agent_cursor", "Cursor", "#C0C4CC", PillCategory.WORKSPACE),
+        PillDefinition("agent_phpstorm", "PhpStorm", "#B07DFF", PillCategory.WORKSPACE),
         PillDefinition("agent_antigravity", "Antigravity", "#E879F9", PillCategory.WORKSPACE),
         PillDefinition("agent_codex", "Codex", "#2DD4BF", PillCategory.WORKSPACE),
         PillDefinition("agent_gemini", "Gemini CLI", "#8AB4F8", PillCategory.AGENT),
@@ -41,7 +42,7 @@ object Pills {
         PillDefinition("integration_notion", "Notion", "#8C8C8C", PillCategory.SERVICE),
         PillDefinition("integration_calcom", "Cal.com", "#C9956A", PillCategory.SERVICE),
         PillDefinition("integration_stripe", "Stripe", "#0570DE", PillCategory.SERVICE),
-        PillDefinition("integration_spotify", "Spotify", "#1DB954", PillCategory.SERVICE),
+        PillDefinition("integration_spotify", "Media", "#1DB954", PillCategory.SERVICE),
     )
 
     fun byId(id: String): PillDefinition? = catalog.firstOrNull { it.id == id }

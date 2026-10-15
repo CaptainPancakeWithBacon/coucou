@@ -199,6 +199,7 @@ export const Bridge = {
   focusWindow: (focused: boolean) => call<void>("focus_window", { focused }),
 
   reposition: () => call<void>("reposition"),
+  fitZoom: (dpr: number) => call<boolean>("fit_zoom", { dpr }),
 
   /** Displays the island can be pinned to: `key` is what `settings.screen` stores. */
   listMonitors: () => call<{ key: string; label: string }[]>("list_monitors"),
@@ -229,6 +230,8 @@ export const Bridge = {
   /** "Send log": whether this build can (a webhook was compiled in), and sending it. */
   logReportAvailable: () => call<boolean>("log_report_available"),
   sendLog: () => callOrThrow<string>("send_log"),
+  /** Apps that notified this session plus the muted ones (Settings → per-app switches). */
+  notificationApps: () => call<string[]>("notification_apps"),
 
   /** A notification's button: opens the app it came from (desktop entry / app id). */
   openNotificationTarget: (target: string) => call<boolean>("open_notification_target", { target }),
@@ -415,7 +418,7 @@ export const Bridge = {
   // ── Beat (src-tauri/src/beat.rs, Linux) ───────────────────────────────────
   /** Listens to the speakers' output for the beat, or stops. False when it cannot (or the setting is off). */
   beatEnable: (on: boolean) => call<boolean>("beat_enable", { on }),
-  // ── Spotify (src-tauri/src/spotify.rs, Linux) ─────────────────────────────
+  // ── Spotify (src-tauri/src/spotify.rs) ─────────────────────────────
   /** Reads the player again (the card came on screen) and reports it. */
   spotifyRefresh: () => call<SpotifyState | null>("spotify_refresh"),
   /** True when Spotify took it. `value`: seconds for seek, 0/1 for shuffle and repeat, 0…100 for volume. */
