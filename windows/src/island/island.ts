@@ -248,6 +248,12 @@ export class Island {
         void Bridge.saveSettings(State.settings);
         State.notify();
       },
+      setIslandOpacity: (percent) => {
+        State.settings.islandOpacity = Math.max(20, Math.min(100, percent));
+        this.islandEl.style.opacity = String(State.settings.islandOpacity / 100);
+        void Bridge.saveSettings(State.settings);
+        State.notify();
+      },
       setIslandAlign: (align) => {
         State.settings.islandAlign = align;
         void Bridge.saveSettings(State.settings);
