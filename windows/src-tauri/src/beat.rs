@@ -413,12 +413,12 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
     let allowed = shared.settings.lock().unwrap().beat_sync;
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
+        // The UI owns the reset state. Sending a reset here races with
+        // a subsequent start when Spotify switches tracks.
         slot.take();
-        let _ = app.emit("beat-reset", false);
         return false;
     }
     if slot.is_some() { return true; }
-    let _ = app.emit("beat-reset", true);
     let mut tracker = BeatTracker::new();
     let mut resampler = crate::speech::audio::Resampler::with_output_rate(crate::speech::SAMPLE_RATE, RATE as u32);
     let mut output = Vec::new();
