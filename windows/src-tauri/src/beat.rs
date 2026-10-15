@@ -204,7 +204,9 @@ impl BeatTracker {
         }
         // A tempo already held is kept unless another is clearly stronger: a
         // song does not change tempo from one second to the next, its
-        // autocorrelation just wobbles between rivals.
+        // autocorrelation just wobbles between rivals. Check the held lag even when
+        // the new best is FAR away: otherwise this hysteresis never prevents
+        // half/double-tempo flips (the exact case it is intended to prevent).
         if let Some(held) = self.held_lag {
             let near = |i: usize| ((min_lag + i) as f64 - held).abs() <= held * 0.04;
             if let Some((i, s)) = scores
@@ -214,7 +216,7 @@ impl BeatTracker {
                 .filter(|&(i, _)| near(i))
                 .fold(None, |a: Option<(usize, f64)>, (i, s)| if a.map_or(true, |x| s > x.1) { Some((i, s)) } else { a })
             {
-                if s >= best * HOLD_RATIO && (held - (min_lag + best_i) as f64).abs() <= held * 0.04 {
+                if s >= best * HOLD_RATIO {
                     best_i = i;
                     best = s;
                 }
