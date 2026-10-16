@@ -954,6 +954,25 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
 // ── General section ───────────────────────────────────────────────────────────
 
+/** The notifications page: the switch for the island's mirror and one switch per app. */
+function notificationsSection(): HTMLElement {
+  return h(
+    "section",
+    {},
+    h("h2", {}, h("span", { text: t("Notifications") })),
+    h("div", { class: "row" },
+      h("label", { text: t("Notifications in the island") }),
+      toggle(settings.showNotifications, (v) => {
+        settings.showNotifications = v;
+        void save();
+        void render();
+      }),
+    ),
+    h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
+    notificationAppsRow(),
+  );
+}
+
 function generalSection(): HTMLElement {
   const volume = h("input", {
     type: "range", min: "0", max: "0.2", step: "0.005",
@@ -1043,12 +1062,6 @@ function generalSection(): HTMLElement {
       toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
-    h("div", { class: "row" },
-      h("label", { text: t("Notifications in the island") }),
-      toggle(settings.showNotifications, (v) => { settings.showNotifications = v; void save(); }),
-    ),
-    h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
-    notificationAppsRow(),
     updateRow(),
     sendLogRow(),
     ...(HOST_OS === "linux" ? [
@@ -1466,6 +1479,7 @@ async function render() {
   const sections: Partial<Record<PageId, () => HTMLElement[]>> = {
     general: () => [generalSection()],
     pills: () => [activePillsSection(connected)],
+    notifications: () => [notificationsSection()],
     agents: () => [claudeSection(status), agentsSection(agents), planSection(status)],
     chat: () => [apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     integrations: () => [integrationsSection(present)],

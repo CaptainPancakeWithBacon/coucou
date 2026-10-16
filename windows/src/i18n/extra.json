@@ -4251,6 +4251,28 @@
    "pt-BR": "Atualizações",
    "ru": "Обновления",
    "id": "Pembaruan"
+  },
+  "Which desktop notifications show in the island.": {
+   "zh-Hans": "哪些桌面通知显示在岛上。",
+   "hi": "आइलैंड में कौन-सी डेस्कटॉप सूचनाएँ दिखें।",
+   "es": "Qué notificaciones del escritorio se muestran en la isla.",
+   "ar": "أي إشعارات سطح المكتب تظهر في الجزيرة.",
+   "fr": "Quelles notifications du bureau s'affichent dans l'îlot.",
+   "bn": "কোন ডেস্কটপ বিজ্ঞপ্তি আইল্যান্ডে দেখাবে।",
+   "pt-BR": "Quais notificações da área de trabalho aparecem na ilha.",
+   "ru": "Какие уведомления рабочего стола показывать на острове.",
+   "id": "Notifikasi desktop mana yang tampil di pulau."
+  },
+  "Notifications": {
+   "zh-Hans": "通知",
+   "hi": "सूचनाएँ",
+   "es": "Notificaciones",
+   "ar": "الإشعارات",
+   "fr": "Notifications",
+   "bn": "বিজ্ঞপ্তি",
+   "pt-BR": "Notificações",
+   "ru": "Уведомления",
+   "id": "Notifikasi"
   }
  }
 }
