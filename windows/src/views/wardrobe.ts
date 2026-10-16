@@ -61,7 +61,8 @@ export function buildWardrobe(actions: ViewActions): ViewHost {
     styles.inert = true; stylePanels.push(styles);
     const panel = h("div", { class: "wardrobe-collection" },
       h("div", { class: "wardrobe-choice" },
-        h("div", { class: "wardrobe-head" }, h("span", { class: "wardrobe-title", text: tl(collection.name) }), note),
+        h("div", { class: "wardrobe-head" }, h("span", { class: "wardrobe-title", text: tl(collection.name) }),
+          page > 0 ? h("span", { class: "wardrobe-beta", text: "Beta", title: "Experimental wardrobe collection" }) : null, note),
         h("div", { class: "wardrobe-grid" }, ...collection.items.map(sel => makeItem(sel, page)))), styles);
     panels.push(panel);
     return { name: t(collection.name), el: panel };
