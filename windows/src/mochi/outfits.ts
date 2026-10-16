@@ -11,8 +11,10 @@
 // slightly from above and follow the head pitch only partly, so a hat never
 // flips to a top-down view.
 
+import { accessoryMesh } from "./extra-outfits";
 import { Ease } from "../core/anim";
 import type { Outfit, OutfitSelection } from "./wardrobe";
+import { outfitAppearance, LEAGUE_OUTFITS } from "./wardrobe";
 import { SCRIPT_FONTS } from "../core/fonts";
 
 const EXP = 2.7;
@@ -540,6 +542,94 @@ function crownFront(ctx: Ctx, H: Head, body: Path2D, simple: boolean) {
 
 // ── Witch hat ─────────────────────────────────────────────────────────────────
 
+/** Volumetric surfaces, lit from the upper left and occluded by the head. */
+function extraAccessory(ctx: Ctx, H: Head, outfit: Outfit) {
+  const mesh = accessoryMesh(outfit, H.physDx, H.R < SIMPLIFY_BELOW_R);
+  const projected = mesh.faces.map(face => {
+    const points = face.points.map(p => proj(H, p));
+    return { face, points, depth: points.reduce((sum, p) => sum + p.z, 0) / 3 };
+  }).sort((a, b) => a.depth - b.depth);
+  const body = bodyOutline(H.rx, H.ry);
+  const paint = (inside: boolean) => {
+    for (const { face, points } of projected) {
+      let visible = points;
+      if (inside) {
+        const clearance = (p: P3) => p.z - Math.pow(Math.max(0, 1 -
+          Math.pow(Math.abs(p.x / H.rx), EXP) - Math.pow(Math.abs(p.y / H.ry), EXP)), 1 / EXP) + 0.015;
+        visible = [];
+        for (let i = 0; i < points.length; i++) {
+          const a = points[i], b = points[(i + 1) % points.length];
+          const fa = clearance(a), fb = clearance(b);
+          if (fa >= 0) visible.push(a);
+          if ((fa >= 0) !== (fb >= 0)) {
+            let lo = 0, hi = 1;
+            for (let step = 0; step < 9; step++) {
+              const t = (lo + hi) / 2;
+              const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+              if ((clearance(q) >= 0) === (fa >= 0)) lo = t; else hi = t;
+            }
+            const t = (lo + hi) / 2;
+            visible.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t });
+          }
+        }
+        if (visible.length < 3) continue;
+      }
+      const light = face.normals.map(n => {
+        const normal = proj(H, n);
+        const facing = normal.z < 0 ? -1 : 1;
+        const nx = normal.x / H.rx * facing, ny = -normal.y / H.ry * facing, nz = normal.z * facing;
+        const diffuse = Math.max(0, -nx * 0.44 + ny * 0.65 + nz * 0.62);
+        const specular = Math.pow(Math.max(0, -nx * 0.22 + ny * 0.35 + nz * 0.91), 22) * face.gloss;
+        return 0.53 + diffuse * 0.48 + specular;
+      });
+      const color = (value: number) => {
+        const hex = face.color.slice(1);
+        const rgb = [0, 2, 4].map(i => Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * Math.min(1, value) + Math.max(0, value - 1) * 220)));
+        return `rgb(${rgb.join(",")})`;
+      };
+      // Interpolate vertex lighting across each surface; no flat triangle facets.
+      const [a, b, c] = points;
+      const dx = b.x - a.x, dy = b.y - a.y, ex = c.x - a.x, ey = c.y - a.y;
+      const det = dx * ey - dy * ex;
+      if (Math.abs(det) < 0.00001) continue;
+      const gx = ((light[1] - light[0]) * ey - (light[2] - light[0]) * dy) / det;
+      const gy = (dx * (light[2] - light[0]) - ex * (light[1] - light[0])) / det;
+      const length = gx * gx + gy * gy;
+      let fill: string | CanvasGradient = color(light[0]);
+      if (length > 0.000001) {
+        const low = Math.min(...light), high = Math.max(...light);
+        fill = lin(ctx, a.x + gx * (low - light[0]) / length, a.y + gy * (low - light[0]) / length,
+          a.x + gx * (high - light[0]) / length, a.y + gy * (high - light[0]) / length,
+          [[0, color(low)], [1, color(high)]]);
+      }
+      ctx.fillStyle = ctx.strokeStyle = fill;
+      const path = closedPath(visible);
+      ctx.fill(path);
+      ctx.lineWidth = 0.3;
+      ctx.stroke(path);
+    }
+  };
+  ctx.save();
+  ctx.clip(invert(body, H), "evenodd");
+  paint(false);
+  ctx.restore();
+  ctx.save();
+  ctx.clip(body);
+  for (const root of mesh.roots) {
+    const q = proj(H, root);
+    if (q.z < 0) continue;
+    ctx.save();
+    ctx.translate(q.x, q.y + H.R * 0.035);
+    ctx.scale(1, 0.38);
+    ctx.fillStyle = rad(ctx, 0, 0, 0, H.R * 0.36,
+      [[0, "rgba(15,12,25,0.24)"], [0.45, "rgba(15,12,25,0.12)"], [1, "rgba(15,12,25,0)"]]);
+    ctx.fillRect(-H.R * 0.4, -H.R * 0.4, H.R * 0.8, H.R * 0.8);
+    ctx.restore();
+  }
+  paint(true);
+  ctx.restore();
+}
+
 function witchBrim(H: Head): P3[] {
   const y = 0.7;
   const rr = 1.42;
@@ -561,12 +651,12 @@ function closedPath(pts: Pt[]): Path2D {
 }
 
 /** The whole brim, behind the head; front() paints its front half again. */
-function witchHatBack(ctx: Ctx, H: Head) {
-  ctx.fillStyle = lin(ctx, 0, -H.ry, 0, -H.ry * 0.4, [[0, "#2A0A4F"], [1, "#3B0F6B"]]);
+function witchHatBack(ctx: Ctx, H: Head, blue = false) {
+  ctx.fillStyle = lin(ctx, 0, -H.ry, 0, -H.ry * 0.4, [[0, (blue ? "#08142E" : "#2A0A4F")], [1, (blue ? "#102852" : "#3B0F6B")]]);
   ctx.fill(closedPath(witchBrim(H)));
 }
 
-function witchHatFront(ctx: Ctx, H: Head, body: Path2D) {
+function witchHatFront(ctx: Ctx, H: Head, body: Path2D, blue = false) {
   const all = witchBrim(H);
   const brim = closedPath(all);
   const fr = all.filter((p) => p.z >= 0).sort((a, b) => a.x - b.x);
@@ -578,7 +668,7 @@ function witchHatFront(ctx: Ctx, H: Head, body: Path2D) {
   fillAll(ctx, H);
   ctx.restore();
 
-  ctx.fillStyle = lin(ctx, 0, -H.ry * 0.9, 0, -H.ry * 0.3, [[0, "#5B21B6"], [1, "#3B0764"]]);
+  ctx.fillStyle = lin(ctx, 0, -H.ry * 0.9, 0, -H.ry * 0.3, [[0, (blue ? "#193B70" : "#5B21B6")], [1, (blue ? "#0B1B3B" : "#3B0764")]]);
   ctx.fill(brim);
   if (fr.length > 1) {
     polyline(ctx, fr);
@@ -606,7 +696,7 @@ function witchHatFront(ctx: Ctx, H: Head, body: Path2D) {
   cone.bezierCurveTo(br.x - H.rx * 0.18, c.y - H.ry * 0.45, br.x - H.rx * 0.02, br.y - H.ry * 0.2, br.x, br.y);
   for (let i = capFront.length - 1; i >= 0; i--) cone.lineTo(capFront[i].x, capFront[i].y);
   cone.closePath();
-  ctx.fillStyle = lin(ctx, bl.x, top.y, br.x, bl.y, [[0, "#7C3AED"], [0.55, "#4C1D95"], [1, "#2E1065"]]);
+  ctx.fillStyle = lin(ctx, bl.x, top.y, br.x, bl.y, [[0, (blue ? "#29558E" : "#7C3AED")], [0.55, (blue ? "#152F5B" : "#4C1D95")], [1, (blue ? "#08172F" : "#2E1065")]]);
   ctx.fill(cone);
 
   ctx.save();
@@ -627,7 +717,7 @@ function witchHatFront(ctx: Ctx, H: Head, body: Path2D) {
   ctx.beginPath();
   ctx.moveTo(bl.x - 2, bl.y - lift);
   ctx.quadraticCurveTo(fc.x, 2 * (fc.y - lift) - (bl.y + br.y) / 2, br.x + 2, br.y - lift);
-  ctx.strokeStyle = "#F97316";
+  ctx.strokeStyle = (blue ? "#7DD3FC" : "#F97316");
   ctx.lineWidth = H.ry * 0.17;
   ctx.lineCap = "butt";
   ctx.stroke();
@@ -639,10 +729,10 @@ function witchHatFront(ctx: Ctx, H: Head, body: Path2D) {
   ctx.save();
   ctx.translate(fc.x, fc.y - H.ry * 0.11);
   roundRect(ctx, -bw / 2, -bh / 2, bw, bh, bh * 0.25);
-  ctx.fillStyle = "#FCD34D";
+  ctx.fillStyle = (blue ? "#D6F2FF" : "#FCD34D");
   ctx.fill();
   roundRect(ctx, -bw / 2 + bw * 0.24, -bh / 2 + bh * 0.28, bw * 0.52, bh * 0.44, bh * 0.1);
-  ctx.fillStyle = "#C2410C";
+  ctx.fillStyle = (blue ? "#2586BA" : "#C2410C");
   ctx.fill();
   ctx.restore();
 }
@@ -977,7 +1067,7 @@ function withLayer(ctx: Ctx, alpha: number, fn: (c: Ctx) => void) {
 
 /** Glasses, bow, scarf and pumpkin are on the face: behind the head once it has turned away. */
 const ON_FACE: ReadonlySet<Outfit> = new Set(["sunglasses", "roundGlasses", "bow", "scarf", "pumpkin"]);
-const HATS: ReadonlySet<Outfit> = new Set(["beanie", "santaHat", "partyHat", "crown", "witchHat"]);
+const HATS: ReadonlySet<Outfit> = new Set(["beanie", "santaHat", "partyHat", "crown", "witchHat", "blueWitchHat", "catEars", "foxEars", "bearEars", "devilHorns", "halo", "headphones", "flower", "sprout", "antenna", ...LEAGUE_OUTFITS]);
 
 export interface OutfitState {
   /** 0 = gone, 1 = fully on. Animated by the engine. */
@@ -1011,6 +1101,14 @@ function layerAlpha(st: OutfitState): number {
  * centre, tilted and squashed exactly like the body).
  */
 export function drawOutfitBehind(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
+  const appearance = outfitAppearance(outfit);
+  ctx.save();
+  ctx.filter = appearance.filter;
+  drawOutfitBehindBase(ctx, appearance.base as Outfit, H, st);
+  ctx.restore();
+}
+
+function drawOutfitBehindBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
   if (outfit === "none") return;
   const alpha = layerAlpha(st);
   if (alpha <= 0.005) return;
@@ -1029,13 +1127,21 @@ export function drawOutfitBehind(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitSt
   withLayer(ctx, alpha, (l) => {
     if (outfit === "bunnyEars") bunnyEars(l, H);
     else if (outfit === "crown") crownPart(l, H, -1, simple);
-    else if (outfit === "witchHat") witchHatBack(l, H);
+    else if (outfit === "witchHat" || outfit === "blueWitchHat") witchHatBack(l, H, outfit === "blueWitchHat");
   });
   ctx.restore();
 }
 
 /** The parts in front of Mochi, drawn after the body and the eyes. */
 export function drawOutfitFront(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
+  const appearance = outfitAppearance(outfit);
+  ctx.save();
+  ctx.filter = appearance.filter;
+  drawOutfitFrontBase(ctx, appearance.base as Outfit, H, st);
+  ctx.restore();
+}
+
+function drawOutfitFrontBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
   if (outfit === "none" || outfit === "bunnyEars") return;
   if (ON_FACE.has(outfit) && faceTurnedAway(H)) return;
   const alpha = layerAlpha(st);
@@ -1059,12 +1165,17 @@ export function drawOutfitFront(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitSta
     ctx.scale(Math.max(0.001, posP), Math.max(0.001, posP));
   }
   withLayer(ctx, alpha, (l) => {
+    if (outfit.startsWith("lol")) { extraAccessory(l, H, outfit); return; }
     switch (outfit) {
       case "beanie": beanie(l, H, body, simple); break;
       case "santaHat": santaHat(l, H, body); break;
       case "partyHat": partyHat(l, H, simple); break;
       case "crown": crownFront(l, H, body, simple); break;
       case "witchHat": witchHatFront(l, H, body); break;
+      case "blueWitchHat": witchHatFront(l, H, body, true); break;
+      case "catEars": case "foxEars": case "bearEars": case "devilHorns":
+      case "halo": case "headphones": case "flower": case "sprout": case "antenna":
+        extraAccessory(l, H, outfit); break;
       default: drawFace(l, outfit, H, body, simple);
     }
   });
@@ -1086,9 +1197,13 @@ function iconMochi(ctx: Ctx, size: number, outfit: Outfit) {
   ctx.translate(cx, cy);
   drawOutfitBehind(ctx, outfit, H, st);
   const body = bodyOutline(H.rx, H.ry);
-  const [top, bottom] = outfit === "pumpkin" ? PUMPKIN_BODY : ["rgb(237,237,239)", "rgb(196,197,202)"];
+  const appearance = outfitAppearance(outfit);
+  const [top, bottom] = appearance.base === "pumpkin" ? PUMPKIN_BODY : ["rgb(237,237,239)", "rgb(196,197,202)"];
+  ctx.save();
+  if (appearance.base === "pumpkin") ctx.filter = appearance.filter;
   ctx.fillStyle = lin(ctx, H.rx * 0.7, -H.ry * 0.85, -H.rx * 0.8, H.ry * 0.9, [[0, top], [1, bottom]]);
   ctx.fill(body);
+  ctx.restore();
   ctx.fillStyle = rad(ctx, 0, 0, R * 0.15, R * 1.25, [[0, "rgba(0,0,0,0)"], [0.6, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0.2)"]]);
   ctx.fill(body);
   ctx.fillStyle = rad(ctx, H.rx * 0.34, -H.ry * 0.46, 0, R * 0.42, [[0, "rgba(255,255,255,0.55)"], [1, "rgba(255,255,255,0)"]]);

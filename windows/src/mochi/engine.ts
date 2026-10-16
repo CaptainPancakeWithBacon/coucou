@@ -9,7 +9,7 @@ import { beatPosition, danceCalm } from "./beat";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName } from "../core/layout";
 import { PUMPKIN_BODY, drawOutfitBehind, drawOutfitFront, makeHead } from "./outfits";
-import type { Outfit } from "./wardrobe";
+import { outfitAppearance, type Outfit } from "./wardrobe";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -864,7 +864,7 @@ export class BotEngine {
 
   /** How much of the pumpkin's orange shows on the body (it comes and goes with the outfit). */
   private get pumpkinAlpha(): number {
-    if (this.isMini || this.outfit !== "pumpkin") return 0;
+    if (this.isMini || outfitAppearance(this.outfit).base !== "pumpkin") return 0;
     return Math.min(1, this.outfitPresence * 2.5) * (1 - this.morph);
   }
 
@@ -889,7 +889,10 @@ export class BotEngine {
       pg.addColorStop(1, PUMPKIN_BODY[1]);
       x.globalAlpha = pumpkin;
       x.fillStyle = pg;
+      x.save();
+      x.filter = outfitAppearance(this.outfit).filter;
       x.fill(body);
+      x.restore();
       // A flat-coloured body only gets the shading while it is a pumpkin.
       x.globalAlpha = this.bodyColor ? pumpkin : 1;
     }

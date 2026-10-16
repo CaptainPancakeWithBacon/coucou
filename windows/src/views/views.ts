@@ -17,6 +17,7 @@ import {
   PlanCard, buildPlanPill, claudePillVisible, codexPillVisible, planCardOpen, refreshCodexPlanUsage,
 } from "./usage";
 import { buildDiffCard } from "./diff";
+import { buildSessionDetail } from "./session-detail";
 import { lastTextStep } from "../core/diff";
 import { Bridge } from "../core/bridge";
 import { buildRecap } from "./recap";
@@ -115,6 +116,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const tabDrop = h("button", { class: "tab", title: tl("Drop"), onclick: () => go("upload") }, svg(ICONS.plus, 13));
 
   const gearBtn = h("button", { title: tl("Settings"), onclick: () => go("settings") }, svg(ICONS.gear, 14));
+  const wardrobeBtn = h("button", { title: tl("Wardrobe"), "aria-label": tl("Wardrobe"),
+    onclick: () => go(State.view === "wardrobe" ? "overview" : "wardrobe") }, svg(ICONS.wardrobe, 14, { stroke: 1.7 }));
   const dragBtn = h("button", { class: "island-drag", title: tl("Island position") }, svg(ICONS.move, 12, { stroke: 1.7 }));
   dragBtn.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -138,7 +141,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
     "div",
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
-    h("div", { class: "header-actions" }, planPills, dragBtn, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, planPills, dragBtn, wardrobeBtn, gearBtn, soundBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 
@@ -151,6 +154,8 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
       gearBtn.classList.toggle("on", v === "settings");
+      wardrobeBtn.classList.toggle("on", v === "wardrobe");
+      wardrobeBtn.setAttribute("aria-pressed", String(v === "wardrobe"));
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
       clear(soundBtn);
@@ -218,14 +223,16 @@ function buildOverview(actions: ViewActions): ViewHost {
 
   let pillIds = "";
   let detailOpen = false;
+  let sessionDetailOpen = false;
   let lastFocus: string | null = null;
-  let mode: "ticker" | "card" | "plan" | "diff" | "spotify" | null = null;
+  let mode: "ticker" | "history" | "card" | "plan" | "diff" | "spotify" | null = null;
   let cardKey = "";
   /** The list row highlighted at the last sync, to scroll only when it moves. */
   let shownSelection: number | null = null;
 
   // Leaving the overview or folding the island closes the diff, as on macOS.
   State.subscribe(() => {
+    if (State.view !== "overview" || State.mode !== "expanded") sessionDetailOpen = false;
     if (activeDiffId != null && (State.view !== "overview" || State.mode !== "expanded")) {
       activeDiffId = null;
     }
@@ -234,7 +241,14 @@ function buildOverview(actions: ViewActions): ViewHost {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (e.key !== "Escape" || activeDiffId == null || State.view !== "overview") return;
+      if (e.key !== "Escape" || State.view !== "overview") return;
+      if (activeDiffId == null && sessionDetailOpen) {
+        e.stopImmediatePropagation();
+        sessionDetailOpen = false;
+        State.notify();
+        return;
+      }
+      if (activeDiffId == null) return;
       e.stopImmediatePropagation();
       closeDiff();
     },
@@ -304,6 +318,7 @@ function buildOverview(actions: ViewActions): ViewHost {
       if (task?.id !== lastFocus) {
         lastFocus = task?.id ?? null;
         detailOpen = false;
+        sessionDetailOpen = false;
         activeDiffId = null;
         cardKey = "";
         mode = null;
@@ -345,6 +360,19 @@ function buildOverview(actions: ViewActions): ViewHost {
             open: (path) => void Bridge.openFileInEditor(path, editorOf(State.focusTask?.id)),
           }));
         }
+      } else if (task && sessionActive && sessionDetailOpen) {
+        const files = State.sessionDiffs.get(task.id) ?? [];
+        const key = `history~${language()}~${task.id}~${task.stepSeq}~${task.steps.join("|")}~${files.map(f => f.id).join(",")}`;
+        if (mode !== "history" || cardKey !== key) {
+          const scroll = leftBody.querySelector(".session-history-rows")?.scrollTop ?? 0;
+          clear(leftBody);
+          const history = buildSessionDetail(task, files, () => { sessionDetailOpen = false; State.notify(); },
+            id => { activeDiffId = id; State.notify(); });
+          leftBody.append(history);
+          history.querySelector(".session-history-rows")!.scrollTop = scroll;
+          cardKey = key;
+          mode = "history";
+        }
       } else if (task && sessionActive) {
         if (mode !== "ticker") {
           clear(leftBody);
@@ -366,6 +394,8 @@ function buildOverview(actions: ViewActions): ViewHost {
             text: `${Math.min(task.stepIndex + 1, task.steps.length)}/${task.steps.length}`,
           }));
         }
+        who.append(h("button", { class: "session-details-btn", text: tl("Details"),
+          onclick: () => { sessionDetailOpen = true; State.notify(); } }));
         ticker.sync(task);
       } else if (task && task.id === SPOTIFY_ID) {
         // Its own card for every state: playing, idle, not installed.
@@ -391,7 +421,7 @@ function buildOverview(actions: ViewActions): ViewHost {
         }
       }
 
-      jump.style.display = detailOpen || mode === "plan" || mode === "diff" ? "none" : "";
+      jump.style.display = detailOpen || sessionDetailOpen || mode === "plan" || mode === "diff" ? "none" : "";
 
       // Ctrl+↓ Ctrl+↑ walk the open GitHub list (cardItemCount / cardSelection).
       const rows = mode === "card" ? listRows(leftBody) : [];
@@ -781,7 +811,7 @@ function buildSettings(actions: ViewActions): ViewHost {
     { class: "settings-rows" },
     h("div", { class: "settings-row" }, soundSwitch, h("span", { text: tl("Sound") }), volume),
     h("div", { class: "settings-row" },
-      svg(ICONS.gear, 12), h("span", { text: tl("Island opacity") }), opacitySlider, opacityLabel,
+      svg(ICONS.opacity, 12, { evenOdd: true }), h("span", { text: tl("Island opacity") }), opacitySlider, opacityLabel,
     ),
     h("div", { class: "settings-row" },
       svg(ICONS.move, 12, { stroke: 1.7 }),

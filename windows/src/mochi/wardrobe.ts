@@ -6,13 +6,32 @@
 import { N_, labels, t } from "../i18n/i18n";
 
 /** Every outfit, plus "auto" (dress for the season) and "none". Order of the wardrobe. */
-export const OUTFIT_SELECTIONS = [
+export const CLASSIC_OUTFITS = [
   "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
   "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
 ] as const;
 
+export const EXTRA_OUTFITS = [
+  "catEars", "blueWitchHat", "foxEars", "bearEars", "devilHorns",
+  "halo", "headphones", "flower", "sprout", "antenna",
+] as const;
+export const LEAGUE_OUTFITS = ["lolAhri", "lolJinx", "lolEkko", "lolYasuo", "lolVi",
+  "lolTeemo", "lolDarius", "lolBraum", "lolIllaoi", "lolWarwick"] as const;
+export const OUTFIT_SELECTIONS = [...CLASSIC_OUTFITS, ...EXTRA_OUTFITS, ...LEAGUE_OUTFITS] as const;
+export const OUTFIT_STYLES = {
+  rose: { name: N_("Rose"), color: "#e694bc", filter: "sepia(0.65) saturate(2.2) hue-rotate(285deg)" },
+  ice: { name: N_("Ice"), color: "#8ccff3", filter: "sepia(0.6) saturate(2.4) hue-rotate(155deg)" },
+  forest: { name: N_("Forest"), color: "#8fc997", filter: "sepia(0.65) saturate(1.8) hue-rotate(65deg)" },
+  gold: { name: N_("Gold"), color: "#e1bd72", filter: "sepia(0.85) saturate(2)" },
+  arcane: { name: "Arcane", color: "#bd8be4", filter: "hue-rotate(25deg) saturate(1.25)" },
+  spirit: { name: "Spirit", color: "#c4daee", filter: "saturate(0.3) brightness(1.3)" },
+} as const;
+export type OutfitStyle = keyof typeof OUTFIT_STYLES;
+export type BaseSelection = (typeof OUTFIT_SELECTIONS)[number];
+export type BaseOutfit = Exclude<BaseSelection, "auto">;
+
 /** What can be stored in the preferences. The raw values are the Mac's, keep them stable. */
-export type OutfitSelection = (typeof OUTFIT_SELECTIONS)[number];
+export type OutfitSelection = BaseSelection | `${BaseOutfit}:${OutfitStyle}`;
 
 /** What Mochi actually wears: a selection with "auto" resolved. */
 export type Outfit = Exclude<OutfitSelection, "auto">;
@@ -22,7 +41,7 @@ export const DEFAULT_OUTFIT: OutfitSelection = "auto";
 // ── User-visible strings ──────────────────────────────────────────────────────
 
 /** The English names, the keys of their translations (src/i18n). */
-export const OUTFIT_KEYS: Record<OutfitSelection, string> = {
+export const OUTFIT_KEYS: Record<BaseSelection, string> = {
   auto: N_("Auto (seasons)"),
   none: N_("None"),
   partyHat: N_("Party hat"),
@@ -36,10 +55,51 @@ export const OUTFIT_KEYS: Record<OutfitSelection, string> = {
   pumpkin: N_("Pumpkin"),
   santaHat: N_("Santa hat"),
   bunnyEars: N_("Bunny ears"),
+  catEars: N_("Cat ears"),
+  blueWitchHat: N_("Midnight witch hat"),
+  foxEars: N_("Fox ears"),
+  bearEars: N_("Bear ears"),
+  devilHorns: N_("Devil horns"),
+  halo: N_("Halo"),
+  headphones: N_("Headphones"),
+  flower: N_("Flower"),
+  sprout: N_("Sprout"),
+  antenna: N_("Antenna"),
+  lolAhri: "Ahri", lolJinx: "Jinx", lolEkko: "Ekko", lolYasuo: "Yasuo", lolVi: "Vi",
+  lolTeemo: "Teemo", lolDarius: "Darius", lolBraum: "Braum", lolIllaoi: "Illaoi", lolWarwick: "Warwick",
 };
 
 /** In the current language: every read goes through `t()`. */
-export const OUTFIT_LABELS: Record<OutfitSelection, string> = labels(OUTFIT_KEYS);
+export const OUTFIT_LABELS: Record<BaseSelection, string> = labels(OUTFIT_KEYS);
+
+export function outfitAppearance(selection: OutfitSelection): { base: BaseSelection; style: OutfitStyle | null; filter: string } {
+  const [base, rawStyle] = selection.split(":");
+  const style = rawStyle && Object.hasOwn(OUTFIT_STYLES, rawStyle) ? rawStyle as OutfitStyle : null;
+  return { base: base as BaseSelection, style, filter: style ? OUTFIT_STYLES[style].filter : "none" };
+}
+
+export function outfitLabel(selection: OutfitSelection): string {
+  const { base, style } = outfitAppearance(selection);
+  return `${OUTFIT_LABELS[base]}${style ? ` · ${t(OUTFIT_STYLES[style].name)}` : ""}`;
+}
+
+export function outfitVariants(base: BaseSelection): OutfitSelection[] {
+  if (base === "auto" || base === "none") return [base];
+  const styles: OutfitStyle[] = base.startsWith("lol") ? ["arcane", "spirit"] : ["rose", "ice", "forest", "gold"];
+  return [base, ...(base === "witchHat" ? ["blueWitchHat" as const] : []),
+    ...styles.map(style => `${base}:${style}` as OutfitSelection)];
+}
+
+export const WARDROBE_COLLECTIONS = [
+  { name: N_("Wardrobe"), items: CLASSIC_OUTFITS },
+  { name: "Extra", items: EXTRA_OUTFITS.filter(id => id !== "blueWitchHat") },
+  { name: "League of Legends", items: LEAGUE_OUTFITS },
+] as const;
+
+export function outfitFamily(selection: OutfitSelection): BaseSelection {
+  const { base } = outfitAppearance(selection);
+  return base === "blueWitchHat" ? "witchHat" : base;
+}
 
 export const WARDROBE_STRINGS = {
   get title() { return t("Wardrobe"); },
@@ -58,7 +118,12 @@ const SELECTION_SET: ReadonlySet<string> = new Set(OUTFIT_SELECTIONS);
  * exactly like `Outfit.stored` on macOS.
  */
 export function parseOutfit(raw: unknown): OutfitSelection {
-  return typeof raw === "string" && SELECTION_SET.has(raw) ? (raw as OutfitSelection) : DEFAULT_OUTFIT;
+  if (typeof raw !== "string") return DEFAULT_OUTFIT;
+  if (SELECTION_SET.has(raw)) return raw as BaseSelection;
+  const [base, style, extra] = raw.split(":");
+  if (style && !extra && SELECTION_SET.has(base) && base !== "auto" && base !== "none" &&
+      outfitVariants(base as BaseSelection).includes(raw as OutfitSelection)) return raw as OutfitSelection;
+  return DEFAULT_OUTFIT;
 }
 
 /** Easter Sunday of `year` (Meeus/Jones/Butcher), as [month 1–12, day]. */
@@ -86,7 +151,7 @@ const DAY_MS = 86_400_000;
  * The seasonal outfit for `date`, read in the user's local calendar.
  * Priority: party hat > Santa hat > witch hat > bunny ears > sunglasses > none.
  */
-export function seasonalOutfit(date: Date): Outfit {
+export function seasonalOutfit(date: Date): BaseOutfit {
   const day = date.getDate();
   const month = date.getMonth() + 1;
   const year = date.getFullYear();
@@ -122,8 +187,8 @@ export function wardrobeHeader(
   date: Date,
 ): string {
   const season = OUTFIT_LABELS[seasonalOutfit(date)];
-  if (hovered) return hovered === "auto" ? WARDROBE_STRINGS.autoHover(season) : OUTFIT_LABELS[hovered];
-  return selection === "auto" ? WARDROBE_STRINGS.autoNow(season) : OUTFIT_LABELS[selection];
+  if (hovered) return hovered === "auto" ? WARDROBE_STRINGS.autoHover(season) : outfitLabel(hovered);
+  return selection === "auto" ? WARDROBE_STRINGS.autoNow(season) : outfitLabel(selection);
 }
 
 /** Same as resolveOutfit, remembered for the day — it is asked every frame. */

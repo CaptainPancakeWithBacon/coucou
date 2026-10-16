@@ -6,13 +6,85 @@ const report = (bpm, now, offset = 1000, confidence = 5) => ({
 });
 const distance = (v) => Math.abs(v - Math.round(v));
 
+test("a 30-second analysis gap and reacquisition cannot slow a confirmed beat", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 12000; now += 250) feedBeat(report(150, now), now);
+  const calm = danceCalm(12000);
+  for (let now = 12250; now <= 42000; now += 250) {
+    feedBeat(report(75, now, 1000, 1.2), now); // rejected, uncertain analysis
+    assert.equal(beatDiagnostics(now).danceBpm, 150);
+    assert.equal(danceCalm(now), calm);
+    const speed = (beatPosition(now + 10) - beatPosition(now)) * 6000;
+    assert.ok(Math.abs(speed - 150) < 1, `keeps its beat: ${speed}`);
+  }
+  for (let now = 42250; now <= 45000; now += 250) {
+    feedBeat(report(150, now), now);
+    assert.equal(currentBpm(), 150);
+  }
+});
+
+test("phase realignment cannot cause a large slowdown or speedup", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 12000; now += 250) feedBeat(report(120, now), now);
+  for (let now = 12250; now <= 30000; now += 250) {
+    feedBeat(report(120, now, 1150), now);
+    for (let delta = 0; delta < 250; delta += 10) {
+      const speed = (beatPosition(now + delta + 1) - beatPosition(now + delta)) * 60000;
+      assert.ok(speed >= 114 && speed <= 126, `phase correction stays subtle: ${speed}`);
+    }
+  }
+});
+
+test("two, four and six consistent reports progressively move toward a new tempo", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 12000; now += 250) feedBeat(report(120, now), now);
+  const expected = [120, 130, 130, 146, 146, 160];
+  for (let i = 0; i < 6; i++) {
+    const now = 12250 + i * 250;
+    const before = beatPosition(now);
+    feedBeat(report(160, now), now);
+    assert.equal(currentBpm(), expected[i]);
+    assert.ok(Math.abs(beatPosition(now) - before) < 1e-8);
+  }
+  for (let now = 13750; now < 23500; now += 250) {
+    feedBeat(report(90, now), now);
+    assert.equal(currentBpm(), 160, "hold starts after the sixth report");
+  }
+});
+
+test("30 seconds of tempo changes respect the hold and keep position and speed continuous", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 31000; now += 250) {
+    const measured = now <= 3000 ? 120 : now < 18000 ? 150 : 90;
+    const before = beatPosition(now);
+    const speedBefore = (before - beatPosition(now - 0.01)) / 0.01;
+    feedBeat(report(measured, now), now);
+    assert.ok(Math.abs(beatPosition(now) - before) < 1e-8, "no position jump");
+    const speedAfter = (beatPosition(now + 0.01) - beatPosition(now)) / 0.01;
+    assert.ok(Math.abs(speedAfter - speedBefore) < 0.00001, "no speed jump");
+    if (now >= 2250 && now < 12250) assert.equal(currentBpm(), 120);
+    if (now >= 12250 && now < 22250) assert.equal(currentBpm(), 150);
+    if (now >= 22250) assert.equal(currentBpm(), 90);
+  }
+});
+
+test("jitter and brief false tempo estimates do not replace a confirmed tempo", () => {
+  resetBeat(true, 1000);
+  for (let now = 1000; now <= 3000; now += 250) feedBeat(report(120, now), now);
+  for (let now = 3250; now <= 31000; now += 250) {
+    const measured = now % 4000 < 250 ? 160 : now % 500 === 0 ? 119 : 121;
+    feedBeat(report(measured, now), now);
+    assert.equal(currentBpm(), 120);
+  }
+});
+
 test("Spotify audio controls tempo and phase without a database key", () => {
   resetBeat(true, 1000);
   assert.equal(danceCalm(1000), 1);
-  for (let at = 1000; at <= 3000; at += 250) feedBeat(report(128, at), at);
+  for (let at = 1000; at <= 12000; at += 250) feedBeat(report(128, at), at);
   assert.equal(currentBpm(), 128);
-  assert.equal(beatDiagnostics(3000).phaseLocked, true);
-  const beatAt = 1000 + 5 * 60000 / 128;
+  assert.equal(beatDiagnostics(12000).phaseLocked, true);
+  const beatAt = 1000 + 24 * 60000 / 128;
   assert.ok(distance(beatPosition(beatAt)) < 0.01);
 });
 
@@ -39,23 +111,24 @@ test("inconsistent and low confidence estimates leave the default rhythm running
 
 test("audio timestamps compensate delayed event delivery", () => {
   resetBeat(true, 1000);
-  for (let audio = 1000; audio <= 4000; audio += 250) {
+  for (let audio = 1000; audio <= 12000; audio += 250) {
     feedBeat(report(120, audio, 1100), audio + 90);
   }
-  assert.ok(distance(beatPosition(4100)) < 0.01);
+  assert.ok(distance(beatPosition(12100)) < 0.01);
 });
 
 test("seek phase corrections settle on the new beats", () => {
   resetBeat(true, 1000);
   for (let now = 1000; now <= 3000; now += 250) feedBeat(report(120, now), now);
-  for (let now = 3250; now <= 6250; now += 250) feedBeat(report(120, now, 1150), now);
-  assert.ok(distance(beatPosition(6150)) < 0.04);
+  for (let now = 3250; now <= 12250; now += 250) feedBeat(report(120, now, 1150), now);
+  assert.ok(distance(beatPosition(12650)) < 0.04);
 });
 
-test("lost audio returns to the default rhythm without stopping", () => {
+test("lost audio keeps the confirmed rhythm without stopping", () => {
   resetBeat(true, 1000);
   for (let now = 1000; now <= 3000; now += 250) feedBeat(report(120, now), now);
-  assert.equal(danceCalm(6000), 1);
+  assert.equal(danceCalm(6000), 0.8);
+  assert.equal(currentBpm(), 120);
   assert.equal(beatDiagnostics(6000).phaseLocked, false);
   resetBeat(true, 1000);
   assert.equal(danceCalm(7000), 1);
@@ -71,15 +144,15 @@ test("default dance keeps moving while analysis is unavailable", () => {
   for (const now of [1000, 2000, 6000, 60000]) assert.ok(danceCalm(now) > 0);
 });
 
-test("fallback preserves phase instead of jumping or stopping", () => {
+test("missing reports preserve tempo and phase instead of falling back", () => {
   resetBeat(true, 1000);
   for (let now = 1000; now <= 3000; now += 250) feedBeat(report(128, now), now);
   const justBefore = beatPosition(5499.999);
   const atFallback = beatPosition(5500);
   assert.ok(Math.abs(atFallback - justBefore) < 0.001);
-  assert.equal(currentBpm(), DEFAULT_BPM);
-  assert.ok(Math.abs(beatPosition(6500) - atFallback - DEFAULT_BPM / 60) < 1e-6);
-  assert.equal(danceCalm(6500), 1);
+  assert.equal(currentBpm(), 128);
+  assert.ok(Math.abs(beatPosition(6500) - atFallback - 128 / 60) < 0.001);
+  assert.equal(danceCalm(6500), 0.72);
   const beforeReset = beatPosition(6500);
   resetBeat(true, 6500);
   assert.equal(beatPosition(6500), beforeReset);

@@ -50,9 +50,9 @@ mod statusline;
 
 /// The live diff needs the whole text of a file edit, once it has happened:
 /// PostToolUse of these tools keeps its edit strings far longer than the rest.
-const DIFF_TOOLS: &[&str] = &["Edit", "MultiEdit", "Write"];
+const DIFF_TOOLS: &[&str] = &["Edit", "MultiEdit", "Write", "apply_patch", "functions.apply_patch"];
 /// The `tool_input` keys holding the text being replaced or written.
-const DIFF_FIELDS: &[&str] = &["old_string", "new_string", "content"];
+const DIFF_FIELDS: &[&str] = &["old_string", "new_string", "content", "command", "patch", "input"];
 /// Per edit string. The island stops diffing at 200 KB anyway (DiffEngine).
 const MAX_DIFF_FIELD_LEN: usize = 256 * 1024;
 /// For all edit strings of one event together, so the line stays well under the
@@ -401,6 +401,25 @@ fn talk(payload: &str, waits_for_answer: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_patches_survive_the_relay_as_complete_diff_inputs() {
+        let patch = format!("*** Begin Patch\n*** Add File: a.ts\n+{}\n*** End Patch", "x".repeat(5000));
+        let raw = serde_json::json!({ "hook_event_name": "PostToolUse", "tool_name": "apply_patch", "tool_input": patch });
+        let (v, _) = run(&raw.to_string(), "codex", "");
+        assert_eq!(v["tool_input"]["command"], patch);
+        assert_eq!(v["coucou_agent"], "codex");
+        assert!(v.get("coucou_diff_truncated").is_none());
+        let raw = serde_json::json!({ "hook_event_name": "PostToolUse", "tool_name": "apply_patch",
+            "tool_input": { "command": patch }, "tool_response": { "isError": true } });
+        let (failed, _) = run(&raw.to_string(), "codex", "");
+        assert_eq!(failed["hook_event_name"], "PostToolUseFailure");
+        assert!(failed.get("tool_response").is_none());
+        let oversized = serde_json::json!({ "tool_name": "apply_patch", "tool_input": { "command": "x".repeat(MAX_DIFF_FIELD_LEN + 1) } });
+        let mut oversized = oversized;
+        truncate_payload(&mut oversized, "PostToolUse");
+        assert_eq!(oversized["coucou_diff_truncated"], true);
+    }
 
     fn run(raw: &str, agent: &str, event: &str) -> (Value, Event) {
         let args = Args { agent: agent.into(), event: event.into() };

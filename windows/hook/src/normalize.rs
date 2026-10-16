@@ -61,6 +61,14 @@ fn non_empty_str<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a str> 
 /// agent put them. A field the payload already has is never overwritten.
 /// `env` reads an environment variable (a parameter so tests stay pure).
 pub fn fields(map: &mut Map<String, Value>, env: &dyn Fn(&str) -> Option<String>) {
+    // JSON tools may supply encoded arguments; apply_patch also has a raw-text form.
+    if let Some(Value::String(raw)) = map.get("tool_input") {
+        let parsed = serde_json::from_str::<Value>(raw).ok().filter(Value::is_object);
+        let patch = matches!(map.get("tool_name").and_then(Value::as_str), Some("apply_patch" | "functions.apply_patch"));
+        if let Some(input) = parsed.or_else(|| patch.then(|| serde_json::json!({ "command": raw }))) {
+            map.insert("tool_input".into(), input);
+        }
+    }
     let tool_call = map.get("toolCall").and_then(Value::as_object).cloned();
 
     if !map.contains_key("tool_name") {
@@ -124,6 +132,11 @@ pub fn fields(map: &mut Map<String, Value>, env: &dyn Fn(&str) -> Option<String>
 /// The event once the payload is known: a stop that reports an error (Cursor's
 /// `status: "error"`) is a StopFailure.
 pub fn refine(event: &str, map: &Map<String, Value>) -> String {
+    if event == "PostToolUse" && map.get("tool_response").is_some_and(|v|
+        v.get("isError").and_then(Value::as_bool) == Some(true) ||
+        v.get("success").and_then(Value::as_bool) == Some(false)) {
+        return "PostToolUseFailure".into();
+    }
     if event == "Stop" && map.get("status").and_then(Value::as_str) == Some("error") {
         return "StopFailure".into();
     }

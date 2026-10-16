@@ -71,7 +71,7 @@ class WardrobeTest {
 
     @Test fun theListsAreTheSameAsOnTheComputer() {
         val ts = ReferenceFiles.read("windows/src/mochi/wardrobe.ts")
-        val body = ts.substringAfter("export const OUTFIT_SELECTIONS = [").substringBefore("] as const")
+        val body = ts.substringAfter("export const CLASSIC_OUTFITS = [").substringBefore("] as const")
         val ids = Regex("\"(\\w+)\"").findAll(body).map { it.groupValues[1] }.toList()
         assertEquals(ids, Wardrobe.SELECTIONS)
         assertEquals(Wardrobe.SELECTIONS.toSet(), Wardrobe.LABELS.keys)
