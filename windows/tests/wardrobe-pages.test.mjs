@@ -4,7 +4,7 @@ import { installFakeDom } from "./fakedom.mjs";
 import { State, DEFAULT_SETTINGS } from "../src/core/state.ts";
 import { buildWardrobe } from "../src/views/wardrobe.ts";
 import { LEAGUE_OUTFITS, OVERWATCH_OUTFITS, outfitVariants, parseOutfit, outfitAppearance } from "../src/mochi/wardrobe.ts";
-import { accessoryMesh } from "../src/mochi/extra-outfits.ts";
+import { accessoryParts } from "../src/mochi/accessory-parts.ts";
 installFakeDom();
 
 test("collections arrive centered without styles; choosing reveals them and scrolling clears them", () => {
@@ -42,11 +42,9 @@ test("every champion has bounded lit geometry and valid persistent color choices
   assert.equal(LEAGUE_OUTFITS.length,10);
   assert.ok(OVERWATCH_OUTFITS.includes("owKiriko") && OVERWATCH_OUTFITS.includes("owReinhardt"));
   for (const base of [...LEAGUE_OUTFITS,...OVERWATCH_OUTFITS]) {
-    for(const small of [false,true]) {
-      const mesh=accessoryMesh(base,0,small);
-      assert.ok(mesh.faces.length>0 && mesh.faces.length<4000,`${base}: ${mesh.faces.length} faces`);
-      assert.ok(mesh.faces.every(f=>f.points.flat().every(Number.isFinite)));
-    }
+    const parts=accessoryParts(base);
+    assert.ok(parts.length>0 && parts.length<=20,`${base}: ${parts.length} surfaces`);
+    assert.ok(parts.every(p=>p.points.flat().every(Number.isFinite)));
     for(const variant of outfitVariants(base)) {
       assert.equal(parseOutfit(variant),variant);
       assert.equal(outfitAppearance(variant).base,base);

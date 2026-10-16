@@ -17,7 +17,7 @@ export const EXTRA_OUTFITS = [
 ] as const;
 export const LEAGUE_OUTFITS = ["lolAhri", "lolJinx", "lolEkko", "lolYasuo", "lolVi",
   "lolTeemo", "lolDarius", "lolBraum", "lolIllaoi", "lolWarwick"] as const;
-export const OVERWATCH_OUTFITS = ["owKiriko", "owReinhardt", "owDva", "owMercy", "owGenji", "owTracer"] as const;
+export const OVERWATCH_OUTFITS = ["owKiriko", "owReinhardt", "owDva", "owMercy", "owJunkrat", "owTracer"] as const;
 export const OUTFIT_SELECTIONS = [...CLASSIC_OUTFITS, ...EXTRA_OUTFITS, ...LEAGUE_OUTFITS, ...OVERWATCH_OUTFITS] as const;
 export const OUTFIT_STYLES = {
   rose: { name: N_("Rose"), color: "#e694bc", filter: "sepia(0.65) saturate(2.2) hue-rotate(285deg)" },
@@ -68,7 +68,7 @@ export const OUTFIT_KEYS: Record<BaseSelection, string> = {
   antenna: N_("Antenna"),
   lolAhri: "Ahri", lolJinx: "Jinx", lolEkko: "Ekko", lolYasuo: "Yasuo", lolVi: "Vi",
   lolTeemo: "Teemo", lolDarius: "Darius", lolBraum: "Braum", lolIllaoi: "Illaoi", lolWarwick: "Warwick",
-  owKiriko: "Kiriko", owReinhardt: "Reinhardt", owDva: "D.Va", owMercy: "Mercy", owGenji: "Genji", owTracer: "Tracer",
+  owKiriko: "Kiriko", owReinhardt: "Reinhardt", owDva: "D.Va", owMercy: "Mercy", owJunkrat: "Junkrat", owTracer: "Tracer",
 };
 
 /** In the current language: every read goes through `t()`. */
@@ -122,6 +122,7 @@ const SELECTION_SET: ReadonlySet<string> = new Set(OUTFIT_SELECTIONS);
  */
 export function parseOutfit(raw: unknown): OutfitSelection {
   if (typeof raw !== "string") return DEFAULT_OUTFIT;
+  if (raw === "owGenji" || raw.startsWith("owGenji:")) return parseOutfit("owJunkrat" + raw.slice(7));
   if (SELECTION_SET.has(raw)) return raw as BaseSelection;
   const [base, style, extra] = raw.split(":");
   if (style && !extra && SELECTION_SET.has(base) && base !== "auto" && base !== "none" &&
