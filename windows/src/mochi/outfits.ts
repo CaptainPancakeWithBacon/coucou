@@ -11,10 +11,10 @@
 // slightly from above and follow the head pitch only partly, so a hat never
 // flips to a top-down view.
 
-import { accessoryMesh } from "./extra-outfits";
+import { drawSimpleAccessory } from "./simple-outfits";
 import { Ease } from "../core/anim";
-import type { Outfit, OutfitSelection } from "./wardrobe";
-import { outfitAppearance, LEAGUE_OUTFITS, OVERWATCH_OUTFITS } from "./wardrobe";
+import type { Outfit, OutfitSelection, OutfitStyle } from "./wardrobe";
+import { outfitAppearance, EXTRA_OUTFITS, LEAGUE_OUTFITS, OVERWATCH_OUTFITS } from "./wardrobe";
 import { SCRIPT_FONTS } from "../core/fonts";
 
 const EXP = 2.7;
@@ -542,125 +542,7 @@ function crownFront(ctx: Ctx, H: Head, body: Path2D, simple: boolean) {
 
 // ── Witch hat ─────────────────────────────────────────────────────────────────
 
-/** Volumetric surfaces, lit from the upper left and occluded by the head. */
-// Cache shaded accessories, not the animated blob. Pose buckets keep memory bounded.
-const accessorySprites = new Map<string, { canvas: HTMLCanvasElement; side: number; pixels: number }>();
-let accessoryPixels = 0;
-const ACCESSORY_PIXEL_BUDGET = 1_500_000; // at most 6 MB of RGBA backing stores
-function extraAccessory(ctx: Ctx, H: Head, outfit: Outfit) {
-  const bucket = (n: number, step: number) => Math.round(n / step) * step;
-  const pose: Head = { ...H, R: bucket(H.R, 1), rx: bucket(H.rx, 1), ry: bucket(H.ry, 1),
-    yaw: bucket(H.yaw, 0.1), pitch: bucket(H.pitch, 0.1), physDx: bucket(H.physDx, 0.2), physDy: bucket(H.physDy, 0.2) };
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const key = `${outfit}:${Object.values(pose).join(":")}:${dpr}`;
-  let sprite = accessorySprites.get(key);
-  if (!sprite) {
-    const side = Math.ceil(Math.max(H.rx, H.ry) * 5.4);
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = Math.ceil(side * dpr);
-    const c = canvas.getContext("2d");
-    if (!c) return;
-    c.setTransform(dpr, 0, 0, dpr, side / 2 * dpr, side / 2 * dpr);
-    drawExtraAccessory(c, pose, outfit);
-    sprite = { canvas, side, pixels: canvas.width * canvas.height };
-    accessoryPixels += sprite.pixels;
-    accessorySprites.set(key, sprite);
-    while (accessoryPixels > ACCESSORY_PIXEL_BUDGET && accessorySprites.size > 1) {
-      const oldest = accessorySprites.keys().next().value!;
-      accessoryPixels -= accessorySprites.get(oldest)!.pixels;
-      accessorySprites.delete(oldest);
-    }
-  } else {
-    accessorySprites.delete(key); accessorySprites.set(key, sprite);
-  }
-  ctx.drawImage(sprite.canvas, -sprite.side / 2, -sprite.side / 2, sprite.side, sprite.side);
-}
-function drawExtraAccessory(ctx: Ctx, H: Head, outfit: Outfit) {
-  const mesh = accessoryMesh(outfit, H.physDx, H.R < SIMPLIFY_BELOW_R);
-  const projected = mesh.faces.map(face => {
-    const points = face.points.map(p => proj(H, p));
-    return { face, points, depth: points.reduce((sum, p) => sum + p.z, 0) / 3 };
-  }).sort((a, b) => a.depth - b.depth);
-  const body = bodyOutline(H.rx, H.ry);
-  const paint = (inside: boolean) => {
-    for (const { face, points } of projected) {
-      let visible = points;
-      if (inside) {
-        const clearance = (p: P3) => p.z - Math.pow(Math.max(0, 1 -
-          Math.pow(Math.abs(p.x / H.rx), EXP) - Math.pow(Math.abs(p.y / H.ry), EXP)), 1 / EXP) + 0.015;
-        visible = [];
-        for (let i = 0; i < points.length; i++) {
-          const a = points[i], b = points[(i + 1) % points.length];
-          const fa = clearance(a), fb = clearance(b);
-          if (fa >= 0) visible.push(a);
-          if ((fa >= 0) !== (fb >= 0)) {
-            let lo = 0, hi = 1;
-            for (let step = 0; step < 9; step++) {
-              const t = (lo + hi) / 2;
-              const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
-              if ((clearance(q) >= 0) === (fa >= 0)) lo = t; else hi = t;
-            }
-            const t = (lo + hi) / 2;
-            visible.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t });
-          }
-        }
-        if (visible.length < 3) continue;
-      }
-      const light = face.normals.map(n => {
-        const normal = proj(H, n);
-        const facing = normal.z < 0 ? -1 : 1;
-        const nx = normal.x / H.rx * facing, ny = -normal.y / H.ry * facing, nz = normal.z * facing;
-        const diffuse = Math.max(0, -nx * 0.44 + ny * 0.65 + nz * 0.62);
-        const specular = Math.pow(Math.max(0, -nx * 0.22 + ny * 0.35 + nz * 0.91), 22) * face.gloss;
-        return 0.53 + diffuse * 0.48 + specular;
-      });
-      const color = (value: number) => {
-        const hex = face.color.slice(1);
-        const rgb = [0, 2, 4].map(i => Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * Math.min(1, value) + Math.max(0, value - 1) * 220)));
-        return `rgb(${rgb.join(",")})`;
-      };
-      // Interpolate vertex lighting across each surface; no flat triangle facets.
-      const [a, b, c] = points;
-      const dx = b.x - a.x, dy = b.y - a.y, ex = c.x - a.x, ey = c.y - a.y;
-      const det = dx * ey - dy * ex;
-      if (Math.abs(det) < 0.00001) continue;
-      const gx = ((light[1] - light[0]) * ey - (light[2] - light[0]) * dy) / det;
-      const gy = (dx * (light[2] - light[0]) - ex * (light[1] - light[0])) / det;
-      const length = gx * gx + gy * gy;
-      let fill: string | CanvasGradient = color(light[0]);
-      if (length > 0.000001) {
-        const low = Math.min(...light), high = Math.max(...light);
-        fill = lin(ctx, a.x + gx * (low - light[0]) / length, a.y + gy * (low - light[0]) / length,
-          a.x + gx * (high - light[0]) / length, a.y + gy * (high - light[0]) / length,
-          [[0, color(low)], [1, color(high)]]);
-      }
-      ctx.fillStyle = ctx.strokeStyle = fill;
-      const path = closedPath(visible);
-      ctx.fill(path);
-      ctx.lineWidth = 0.3;
-      ctx.stroke(path);
-    }
-  };
-  ctx.save();
-  ctx.clip(invert(body, H), "evenodd");
-  paint(false);
-  ctx.restore();
-  ctx.save();
-  ctx.clip(body);
-  for (const root of mesh.roots) {
-    const q = proj(H, root);
-    if (q.z < 0) continue;
-    ctx.save();
-    ctx.translate(q.x, q.y + H.R * 0.035);
-    ctx.scale(1, 0.38);
-    ctx.fillStyle = rad(ctx, 0, 0, 0, H.R * 0.36,
-      [[0, "rgba(15,12,25,0.24)"], [0.45, "rgba(15,12,25,0.12)"], [1, "rgba(15,12,25,0)"]]);
-    ctx.fillRect(-H.R * 0.4, -H.R * 0.4, H.R * 0.8, H.R * 0.8);
-    ctx.restore();
-  }
-  paint(true);
-  ctx.restore();
-}
+const SIMPLE_ADDED = new Set<string>([...EXTRA_OUTFITS.filter(id => id !== "blueWitchHat"), ...LEAGUE_OUTFITS, ...OVERWATCH_OUTFITS]);
 
 function witchBrim(H: Head): P3[] {
   const y = 0.7;
@@ -1135,12 +1017,12 @@ function layerAlpha(st: OutfitState): number {
 export function drawOutfitBehind(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
   const appearance = outfitAppearance(outfit);
   ctx.save();
-  ctx.filter = appearance.filter;
-  drawOutfitBehindBase(ctx, appearance.base as Outfit, H, st);
+  ctx.filter = SIMPLE_ADDED.has(appearance.base) ? "none" : appearance.filter;
+  drawOutfitBehindBase(ctx, appearance.base as Outfit, H, st, appearance.style);
   ctx.restore();
 }
 
-function drawOutfitBehindBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
+function drawOutfitBehindBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState, style: OutfitStyle | null) {
   if (outfit === "none") return;
   const alpha = layerAlpha(st);
   if (alpha <= 0.005) return;
@@ -1151,6 +1033,7 @@ function drawOutfitBehindBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState
     if (faceTurnedAway(H)) withLayer(ctx, alpha, (l) => drawFace(l, outfit, H, body, simple));
     return;
   }
+  if (SIMPLE_ADDED.has(outfit)) { withLayer(ctx, alpha, l => drawSimpleAccessory(l, outfit, H, false, body, style)); return; }
   const posP = Ease.back(st.presence);
   const hatScale = 0.85 + 0.15 * posP;
   ctx.save();
@@ -1168,18 +1051,19 @@ function drawOutfitBehindBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState
 export function drawOutfitFront(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
   const appearance = outfitAppearance(outfit);
   ctx.save();
-  ctx.filter = appearance.filter;
-  drawOutfitFrontBase(ctx, appearance.base as Outfit, H, st);
+  ctx.filter = SIMPLE_ADDED.has(appearance.base) ? "none" : appearance.filter;
+  drawOutfitFrontBase(ctx, appearance.base as Outfit, H, st, appearance.style);
   ctx.restore();
 }
 
-function drawOutfitFrontBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState) {
+function drawOutfitFrontBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState, style: OutfitStyle | null) {
   if (outfit === "none" || outfit === "bunnyEars") return;
   if (ON_FACE.has(outfit) && faceTurnedAway(H)) return;
   const alpha = layerAlpha(st);
   if (alpha <= 0.005) return;
   const simple = H.R < SIMPLIFY_BELOW_R;
   const body = bodyOutline(H.rx, H.ry);
+  if (SIMPLE_ADDED.has(outfit)) { withLayer(ctx, alpha, l => drawSimpleAccessory(l, outfit, H, true, body, style)); return; }
   const p = st.presence;
   const posP = Ease.back(p);
 
@@ -1197,7 +1081,6 @@ function drawOutfitFrontBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState)
     ctx.scale(Math.max(0.001, posP), Math.max(0.001, posP));
   }
   withLayer(ctx, alpha, (l) => {
-    if (outfit.startsWith("lol") || outfit.startsWith("ow")) { extraAccessory(l, H, outfit); return; }
     switch (outfit) {
       case "beanie": beanie(l, H, body, simple); break;
       case "santaHat": santaHat(l, H, body); break;
@@ -1205,9 +1088,6 @@ function drawOutfitFrontBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState)
       case "crown": crownFront(l, H, body, simple); break;
       case "witchHat": witchHatFront(l, H, body); break;
       case "blueWitchHat": witchHatFront(l, H, body, true); break;
-      case "catEars": case "foxEars": case "bearEars": case "devilHorns":
-      case "halo": case "headphones": case "flower": case "sprout": case "antenna":
-        extraAccessory(l, H, outfit); break;
       default: drawFace(l, outfit, H, body, simple);
     }
   });
