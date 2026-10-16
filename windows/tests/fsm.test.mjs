@@ -121,6 +121,14 @@ test("the collapse delay is the configured one", () => {
   assert.equal(fsm.state, "petit");
 });
 
+test("with keepVisible the compact island does not hide by itself", () => {
+  fsm.keepVisible = true;
+  fsm.reveal();
+  assert.equal(fsm.state, "petit");
+  seconds(600);
+  assert.equal(fsm.state, "petit");
+});
+
 test("reveal shows the compact island from hidden and hides it again after 60 s", () => {
   fsm.reveal();
   assert.equal(fsm.state, "petit");

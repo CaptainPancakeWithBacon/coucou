@@ -106,6 +106,8 @@ export interface Settings {
   autoCloseInterval: number;
   /** Hovering the island opens it all the way (off: hovering only peeks). */
   openOnHover: boolean;
+  /** The compact island stays on screen when idle instead of hiding after a minute. */
+  keepVisible: boolean;
   /** Mochi dances on the beat of the music (Linux; listens to the speakers' output). */
   beatSync: boolean;
   /** Output used for Spotify beat analysis; empty follows the default device. */
@@ -187,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundVolume: 0.12,
   autoCloseInterval: 15,
   openOnHover: false,
+  keepVisible: true,
   beatSync: HOST_OS === "windows",
   beatOutput: "",
   islandOpacity: 100,

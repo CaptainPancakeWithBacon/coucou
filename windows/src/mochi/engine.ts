@@ -166,6 +166,35 @@ function starPath(x: CanvasRenderingContext2D, ro: number, ri: number) {
 
 const FONT = `system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif`;
 
+const GLYPH_PX = 64;
+const glyphs = new Map<string, HTMLCanvasElement | null>();
+
+/** A letter at `px`, centred on the origin. fillText costs tens of milliseconds a
+ *  call on WebKitGTK's canvas (the sleeping "z" alone froze the Coucou window), so
+ *  each letter is drawn once into a canvas of its own and stamped from there. */
+function stamp(x: CanvasRenderingContext2D, text: string, weight: number, fill: string, px: number) {
+  const key = `${weight}|${fill}|${text}`;
+  let g = glyphs.get(key);
+  if (g === undefined) {
+    g = document.createElement("canvas");
+    g.width = g.height = GLYPH_PX * 2;
+    const c = g.getContext("2d");
+    if (c) {
+      c.fillStyle = fill;
+      c.font = `${weight} ${GLYPH_PX}px ${FONT}`;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText(text, GLYPH_PX, GLYPH_PX);
+    } else {
+      g = null;
+    }
+    glyphs.set(key, g);
+  }
+  if (!g) return;
+  const k = px / GLYPH_PX;
+  x.drawImage(g, -GLYPH_PX * k, -GLYPH_PX * k, GLYPH_PX * 2 * k, GLYPH_PX * 2 * k);
+}
+
 // ── Dance (BotEngine.applyDance, macOS) ──────────────────────────────────────
 
 /** The dance fades in over 0.3 s and out over 0.5 s. */
@@ -1276,11 +1305,10 @@ export class BotEngine {
       x.arc(0, 0, R * 0.23, 0, Math.PI * 2);
       x.fill();
       if (!this.isMini) {
-        x.fillStyle = "#fff";
-        x.font = `900 ${R * 0.32}px ${FONT}`;
-        x.textAlign = "center";
-        x.textBaseline = "middle";
-        x.fillText(badge.kind === "bang" ? "!" : "?", 0, R * 0.02);
+        x.save();
+        x.translate(0, R * 0.02);
+        stamp(x, badge.kind === "bang" ? "!" : "?", 900, "#fff", R * 0.32);
+        x.restore();
       }
     } else {
       x.fillStyle = "#000";
@@ -1335,11 +1363,7 @@ export class BotEngine {
           x.fill();
           break;
         case "z":
-          x.fillStyle = "rgb(209,219,235)";
-          x.font = `700 ${sz * 1.9}px ${FONT}`;
-          x.textAlign = "center";
-          x.textBaseline = "middle";
-          x.fillText("z", 0, 0);
+          stamp(x, "z", 700, "rgb(209,219,235)", sz * 1.9);
           break;
       }
       x.restore();
