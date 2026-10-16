@@ -23,6 +23,8 @@ export class IslandStateMachine {
   }
   /** petit → hidden delay, seconds. */
   petitToHiddenDelay = 60;
+  /** True: the compact island never hides by itself (the wake strip is for the hidden state only). */
+  keepVisible = false;
   /** coucou → petit once the greeting animation ends (no hover). */
   greetAutoCollapseDelay = 0.6;
   /** coucou → petit while the mouse hovers the greeting. */
@@ -160,7 +162,7 @@ export class IslandStateMachine {
     this.clear("petitHide");
     // A card folded away while it waits for an answer keeps the compact island
     // on screen, so it can be reopened (isHeldOpen on macOS).
-    if (this.pinned) return;
+    if (this.pinned || this.keepVisible) return;
     this.petitHide = window.setTimeout(() => {
       this.petitHide = null;
       if (this.state === "petit" && !this.pinned) this.transition("hidden");

@@ -1058,7 +1058,7 @@ pub fn run() {
             create_settings_window(&handle);
             // Same rule for Mochi's desktop window and the dictation pill.
             desktop::setup(&handle);
-            flow::setup(&handle);
+            // Dictation (flow) is not started in this fork: no listener, no dictation pill.
             notes::setup(&handle);
 
             if let Some(win) = island::window(&handle) {
@@ -1112,10 +1112,7 @@ pub fn run() {
                 // writing it again adds it, so the window stays hidden at login.
                 let _ = handle.autolaunch().enable();
             }
-            let open_window = flow::get(&handle).map(|f| f.store.lock().unwrap().prefs.open_at_launch).unwrap_or(true);
-            if open_window && !launched_at_login() {
-                show_hub(&handle, None);
-            }
+            // The Coucou window opens from the tray or the island, never by itself.
             Ok(())
         })
         .build(tauri::generate_context!())

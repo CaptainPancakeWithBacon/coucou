@@ -6,6 +6,7 @@ import { Bridge, onEvent } from "../core/bridge";
 import { toOneLine } from "../core/diff";
 import { Sound } from "../core/sound";
 import { State, type AgentTask } from "../core/state";
+import { t } from "../i18n/i18n";
 import type { Island } from "./island";
 
 export const NOTIFICATIONS_ID = "agent_notifications";
@@ -49,7 +50,7 @@ function handle(island: Island, n: DesktopNotification) {
   const line = noticeLine(n);
   if (!line) return;
   const update = n.app === "Coucou" && !!n.target;
-  State.upsertExternalAgent(NOTIFICATIONS_ID, "Notifications", COLOR);
+  State.upsertExternalAgent(NOTIFICATIONS_ID, t("Notifications"), COLOR);
   State.appendStep(NOTIFICATIONS_ID, line);
   const task = State.tasks.find((t) => t.id === NOTIFICATIONS_ID);
   if (task) {
