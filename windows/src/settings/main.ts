@@ -1062,6 +1062,11 @@ function generalSection(): HTMLElement {
       toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
     ),
     h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
+    h("div", { class: "row" },
+      h("label", { text: t("Keep Mochi on screen") }),
+      toggle(settings.keepVisible, (v) => { settings.keepVisible = v; void save(); }),
+    ),
+    h("div", { class: "hint", text: t("Off: when nothing happens for a minute the island hides, and moving the pointer to the top edge brings it back.") }),
     updateRow(),
     sendLogRow(),
     ...(HOST_OS === "linux" ? [

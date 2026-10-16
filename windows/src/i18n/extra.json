@@ -4273,6 +4273,28 @@
    "pt-BR": "Notificações",
    "ru": "Уведомления",
    "id": "Notifikasi"
+  },
+  "Keep Mochi on screen": {
+   "zh-Hans": "让 Mochi 一直显示在屏幕上",
+   "hi": "Mochi को स्क्रीन पर बनाए रखें",
+   "es": "Mantener a Mochi en pantalla",
+   "ar": "إبقاء Mochi ظاهرًا على الشاشة",
+   "fr": "Garder Mochi à l'écran",
+   "bn": "Mochi-কে স্ক্রিনে রাখুন",
+   "pt-BR": "Manter o Mochi na tela",
+   "ru": "Не скрывать Mochi с экрана",
+   "id": "Biarkan Mochi tetap di layar"
+  },
+  "Off: when nothing happens for a minute the island hides, and moving the pointer to the top edge brings it back.": {
+   "zh-Hans": "关闭时：一分钟没有动静，岛会隐藏，把指针移到顶部边缘即可唤出。",
+   "hi": "बंद होने पर: एक मिनट कुछ न होने पर आइलैंड छिप जाता है, और पॉइंटर को ऊपरी किनारे पर ले जाने से वापस आता है।",
+   "es": "Desactivado: si no pasa nada durante un minuto, la isla se oculta; mueve el puntero al borde superior para recuperarla.",
+   "ar": "عند الإيقاف: إذا لم يحدث شيء لمدة دقيقة تختفي الجزيرة، ويعيدها تحريك المؤشر إلى الحافة العلوية.",
+   "fr": "Désactivé : sans activité pendant une minute, l'îlot se cache ; amenez le pointeur sur le bord supérieur pour le faire revenir.",
+   "bn": "বন্ধ থাকলে: এক মিনিট কিছু না ঘটলে আইল্যান্ড লুকিয়ে যায়, পয়েন্টার উপরের কিনারায় নিলে ফিরে আসে।",
+   "pt-BR": "Desligado: sem atividade por um minuto, a ilha se esconde; leve o ponteiro à borda superior para trazê-la de volta.",
+   "ru": "Выключено: если минуту ничего не происходит, остров скрывается; подведите указатель к верхнему краю, чтобы вернуть его.",
+   "id": "Mati: jika tidak ada aktivitas selama semenit, pulau bersembunyi; gerakkan penunjuk ke tepi atas untuk memunculkannya."
   }
  }
 }
