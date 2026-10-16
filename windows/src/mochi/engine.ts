@@ -5,7 +5,7 @@
 // arc angles produce a different shape.
 
 import { Ease, lerp, type EaseFn } from "../core/anim";
-import { beatPosition, danceCalm } from "./beat";
+import { beatPosition, danceCalm, beatPresentation } from "./beat";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName } from "../core/layout";
 import { PUMPKIN_BODY, drawOutfitBehind, drawOutfitFront, makeHead } from "./outfits";
@@ -749,8 +749,11 @@ export class BotEngine {
 
   // ── Dancing ─────────────────────────────────────────────────────────────────
 
-  setDancing(dancing: boolean) {
-    if (this.isDancing !== dancing) this.isDancing = dancing;
+  beatQuestion = false;
+  setDancing(dancing: boolean, syncToBeat = false) {
+    const presentation = beatPresentation(syncToBeat && dancing);
+    this.beatQuestion = presentation.unknown;
+    this.isDancing = dancing && !presentation.hold;
   }
 
   /**
@@ -828,7 +831,9 @@ export class BotEngine {
     x.restore();
     x.restore();
 
-    if (this.badge && this.badgeS > 0.01 && this.morph < 0.25) {
+    if (this.beatQuestion && this.morph < 0.25 && !this.isMini) {
+      this.drawBadge(x, { kind: "question", color: C.question }, R, cx, cy, 1);
+    } else if (this.badge && this.badgeS > 0.01 && this.morph < 0.25) {
       this.drawBadge(x, this.badge, R, cx, cy);
     }
     this.drawParticles(x, R, cx, cy);
@@ -1181,8 +1186,8 @@ export class BotEngine {
     }
   }
 
-  private drawBadge(x: CanvasRenderingContext2D, badge: Badge, R: number, cx: number, cy: number) {
-    const bs = this.badgeS * (this.isMini ? 1.25 : 1);
+  private drawBadge(x: CanvasRenderingContext2D, badge: Badge, R: number, cx: number, cy: number, presence = this.badgeS) {
+    const bs = presence * (this.isMini ? 1.25 : 1);
     const bx = cx - R * 0.72 * this.sx;
     const by = cy - R * 0.72 * this.sy;
     const t = now();

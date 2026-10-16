@@ -9,9 +9,10 @@ import { emit, sent } from "./tauri.mjs";
 import { installFakeDom } from "./fakedom.mjs";
 import {
   IDLE_SPOTIFY, SPOTIFY_ID, Spotify, currentArtwork, desktopDances, formatTime, isAd, islandDances,
-  musicPlaying, spotifyPosition, volumeLevel, withPlaying,
+  musicPlaying, spotifyPosition, volumeLevel, withPlaying, reconcileSpotify,
 } from "../src/core/spotify.ts";
 import { BotEngine, danceTransform, stepDanceLevel } from "../src/mochi/engine.ts";
+import { resetBeat, feedBeat, pauseBeat, resumeBeat } from "../src/mochi/beat.ts";
 import { applySpotify, registerSpotifyHandlers } from "../src/island/spotify.ts";
 import { buildSpotifyCard, buildSpotifyPill } from "../src/views/spotify.ts";
 import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
@@ -148,6 +149,34 @@ test("112 BPM: still on the beat, highest half a beat later, nothing at level 0"
   assert.deepEqual([off.dx, off.dy, off.rotate, off.sx, off.sy].map((v) => Math.abs(v)), [0, 0, 0, 1, 1]);
 });
 
+test("the unknown-beat badge coexists with dancing without changing expression state", () => {
+  mock.timers.enable({ apis: ["Date"], now: 10000 });
+  try {
+    const engine = new BotEngine();
+    resetBeat(true);
+    engine.setDancing(true, true);
+    assert.equal(engine.isDancing, false);
+    assert.equal(engine.beatQuestion, true);
+    mock.timers.tick(1000);
+    engine.setDancing(true, true);
+    assert.equal(engine.isDancing, true);
+    assert.equal(engine.beatQuestion, true);
+    assert.equal(engine.state, "idle");
+    assert.equal(engine.eyeOverride, null);
+    feedBeat({ bpm: 112, beatAtMs: 11000 });
+    mock.timers.tick(500);
+    feedBeat({ bpm: 112, beatAtMs: 11000 + 60000 / 112 });
+    engine.setDancing(true, true);
+    assert.equal(engine.beatQuestion, false, "a measured default-valued BPM is known");
+    pauseBeat(); resumeBeat(); engine.setDancing(true, true);
+    assert.equal(engine.isDancing, true);
+    assert.equal(engine.beatQuestion, false);
+    resetBeat(true); engine.setDancing(true, false);
+    assert.equal(engine.isDancing, true);
+    assert.equal(engine.beatQuestion, false, "option off leaves normal dance intact");
+  } finally { mock.timers.reset(); resetBeat(); }
+});
+
 test("the engine dances only once asked, and keeps its frames going meanwhile", () => {
   const ops = [];
   const ctx = {
@@ -174,6 +203,18 @@ test("the engine dances only once asked, and keeps its frames going meanwhile", 
 
 const island = { reveals: 0, revealSilently() { this.reveals += 1; } };
 registerSpotifyHandlers(island);
+
+test("small position jitter and stale polls cannot send playback time backwards", () => {
+  const previous = playing({ position: 20, positionAt: 1000 });
+  const jitter = reconcileSpotify(previous, playing({ position: 20.8, positionAt: 2000 }));
+  assert.equal(jitter.position, 21);
+  assert.equal(spotifyPosition(jitter, 2500), 21.5);
+  const stale = reconcileSpotify(jitter, playing({ position: 20.6, positionAt: 1500 }));
+  assert.equal(stale.position, 21);
+  assert.equal(stale.positionAt, 2000);
+  const seek = reconcileSpotify(jitter, playing({ position: 5, positionAt: 3000 }));
+  assert.equal(seek.position, 5, "real backwards seeking still works");
+});
 
 beforeEach(() => {
   setLanguage("en");

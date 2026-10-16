@@ -409,6 +409,26 @@ struct Artwork {
     data_url: String,
 }
 
+/// WinRT DateTime is 100 ns since 1601; the page uses Unix milliseconds.
+#[cfg(any(windows, test))]
+fn timeline_timestamp(ticks: i64, now: f64) -> f64 {
+    let timestamp = ticks as f64 / 10_000.0 - 11_644_473_600_000.0;
+    if timestamp.is_finite() && timestamp > 0.0 && timestamp <= now + 1000.0 { timestamp.min(now) } else { now }
+}
+
+#[cfg(test)]
+mod timeline_tests {
+    use super::timeline_timestamp;
+    #[test]
+    fn timeline_keeps_its_sample_time_instead_of_the_poll_time() {
+        let time = 1_790_000_000_000i64;
+        let ticks = (time + 11_644_473_600_000) * 10_000;
+        assert_eq!(timeline_timestamp(ticks, time as f64 + 5000.0), time as f64);
+        assert_eq!(timeline_timestamp(0, time as f64), time as f64);
+        assert_eq!(timeline_timestamp(ticks + 100_000_000, time as f64), time as f64);
+    }
+}
+
 fn now_ms() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -704,7 +724,9 @@ mod win {
             track: has_title.then(|| Track { id, title, artist, album, duration, art_url: Some(art_url), object_path: String::new() }),
             playing: info.PlaybackStatus().ok()? == Status::Playing,
             position: ticks(timeline.Position().ok()?).max(0.0),
-            position_at: now_ms(),
+            // Position is sampled at LastUpdatedTime, not when we poll SMTC.
+            position_at: timeline.LastUpdatedTime().ok()
+                .map(|t| timeline_timestamp(t.UniversalTime, now_ms())).unwrap_or_else(now_ms),
             shuffle: info.IsShuffleActive().ok().and_then(|r| r.Value().ok()).unwrap_or(false),
             repeat: info
                 .AutoRepeatMode()

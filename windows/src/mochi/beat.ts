@@ -12,7 +12,8 @@ let candidate: { bpm: number; phase: number; at: number; count: number } | null 
 let anchored = false;
 let lockedAt = -Infinity;
 let confirmedBpm = DEFAULT_BPM;
-let previewing = false;
+let known = false;
+let unknownSince: number | null = null;
 // Integrate a decaying speed correction: position and speed stay continuous.
 let speedOffset = 0;
 let phaseOffset = 0;
@@ -27,7 +28,7 @@ function retarget(nowMs: number, nextBpm: number, correction = 0): void {
   // Phase alignment may only borrow 3% of the tempo between reports.
   // Otherwise a noisy beat timestamp sounds like a sudden tempo slowdown.
   const budget = lockedAt === -Infinity ? 0.5 :
-    bpm * 0.03 * Math.min(250, Math.max(0, nowMs - t0)) / 60000;
+    bpm * 0.03 * Math.min(1000, Math.max(0, nowMs - t0)) / 60000;
   correction = Math.max(-budget, Math.min(budget, correction));
   const decay = Math.exp(-Math.max(0, nowMs - t0) / SMOOTH_MS);
   const speed = bpm + (speedOffset + phaseOffset * 60000 / SMOOTH_MS *
@@ -41,20 +42,14 @@ function retarget(nowMs: number, nextBpm: number, correction = 0): void {
 const wrap = (v: number) => v - Math.round(v);
 function useFallback(nowMs: number): void {
   if (!fed || lastAudioAt == null || nowMs - lastAudioAt < 2500) return;
-  // Missing analysis is not evidence that the song changed tempo.
-  // Only abandon an unfinished preview; keep the last confirmed rhythm.
+  // A gap or recalibration is not a song change: coast on the confirmed clock.
   candidate = null;
-  if (previewing) {
-    retarget(nowMs, confirmedBpm);
-    previewing = false;
-    if (lockedAt === -Infinity) fed = false;
-  }
 }
 export function beatDiagnostics(nowMs: number = Date.now()) {
   useFallback(nowMs);
   const locked = fed && lastAudioAt != null && nowMs - lastAudioAt < 2500;
   return { detectedBpm, databaseBpm: null, danceBpm: bpm,
-    phaseLocked: locked, lastAudioAt, waiting };
+    phaseLocked: locked, lastAudioAt, waiting, known };
 }
 export function beatPosition(nowMs: number): number {
   useFallback(nowMs);
@@ -75,30 +70,27 @@ export function feedBeat(msg: BeatMessage, nowMs: number = Date.now()): void {
   if (!candidate || Math.abs(msg.bpm - candidate.bpm) / candidate.bpm > 0.05 ||
       predicted == null || Math.abs(wrap(phase - predicted)) > 0.18) {
     candidate = { bpm: msg.bpm, phase, at: nowMs, count: 1 };
-    if (previewing) retarget(nowMs, confirmedBpm);
-    previewing = false;
     return;
   }
   candidate = { bpm: candidate.bpm * 0.65 + msg.bpm * 0.35,
     phase: predicted + 0.45 * wrap(phase - predicted), at: nowMs, count: candidate.count + 1 };
   if (candidate.count < 2) return;
   const current = beatPosition(nowMs);
-  if (!fed || previewing || Math.abs(confirmedBpm - candidate.bpm) / confirmedBpm > 0.03) {
-    if (nowMs - lockedAt < 10000) return;
-    const count = candidate.count;
-    if (count !== 2 && count !== 4 && count < 6) return;
-    const weight = count >= 6 ? 1 : count >= 4 ? 0.65 : 0.25;
-    retarget(nowMs, confirmedBpm + weight * (candidate.bpm - confirmedBpm),
-      weight * wrap(candidate.phase - current));
-    previewing = weight < 1;
+  if (!known) {
+    retarget(nowMs, candidate.bpm, wrap(candidate.phase - current));
+    confirmedBpm = bpm;
+    known = fed = true;
+    lockedAt = nowMs;
+  } else if (Math.abs(confirmedBpm - candidate.bpm) / confirmedBpm > 0.03) {
+    // Keep dancing at the established tempo while assessing the replacement.
+    if (candidate.count < 6 || nowMs - lockedAt < 10000) return;
+    retarget(nowMs, candidate.bpm, wrap(candidate.phase - current));
+    confirmedBpm = bpm;
+    lockedAt = nowMs;
     fed = true;
-    if (!previewing) {
-      confirmedBpm = bpm;
-      lockedAt = nowMs;
-    }
   } else {
-    // Small detector jitter must not keep changing the selected tempo.
     retarget(nowMs, bpm, wrap(candidate.phase - current));
+    fed = true;
   }
   anchored = true;
 }
@@ -115,7 +107,7 @@ export function pauseBeat(nowMs: number = Date.now()): void {
   detectedBpm = null;
   candidate = null;
   confirmedBpm = bpm;
-  previewing = false;
+
 }
 
 /** Resume at the remembered tempo immediately; audio may refine phase later. */
@@ -137,8 +129,10 @@ export function resetBeat(waitForMusic = false, nowMs: number = Date.now()): voi
   bpm = DEFAULT_BPM;
   speedOffset = phaseOffset = 0;
   lockedAt = -Infinity;
+  known = false;
+  unknownSince = waitForMusic ? nowMs : null;
   confirmedBpm = bpm;
-  previewing = false;
+
   candidate = null;
   detectedBpm = null;
   lastAudioAt = null;
@@ -149,6 +143,15 @@ export function resetBeat(waitForMusic = false, nowMs: number = Date.now()): voi
 export function currentBpm(): number { return bpm; }
 export function danceCalm(nowMs: number = Date.now()): number {
   useFallback(nowMs);
-  if (!fed) return 1;
+  if (!known) return 1;
   return Math.min(1, Math.max(0.45, 1 - (bpm - 100) / 100));
+}
+
+/** Rebuild phase evidence after a seek, keeping this song's tempo and motion. */
+export function reacquireBeat(): void { candidate = null; lastAudioAt = null; }
+
+/** Unknown is a track lifecycle state, never an audio-gap timeout. */
+export function beatPresentation(enabled: boolean, nowMs = Date.now()) {
+  const unknown = enabled && waiting && !known;
+  return { unknown, hold: unknown && unknownSince != null && nowMs - unknownSince < 1000 };
 }

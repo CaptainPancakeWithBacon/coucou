@@ -47,7 +47,7 @@ struct TempoReview {
 }
 impl TempoReview {
     fn due(&self, heard: usize) -> bool {
-        self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 30
+        self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 8
     }
     fn consider(&mut self, heard: usize, current: f64, confidence: f32, next: f64, quality: f32) -> bool {
         if !next.is_finite() || !quality.is_finite() || !(50.0..=220.0).contains(&next) ||
@@ -61,7 +61,7 @@ impl TempoReview {
             _ => heard,
         };
         self.candidate = Some((next, since));
-        if heard.saturating_sub(since) < RATE * 8 { return false; }
+        if heard.saturating_sub(since) < RATE * 2 { return false; }
         self.candidate = None;
         self.last = heard;
         true
@@ -84,8 +84,10 @@ impl BeatTracker {
         self.history.extend(samples.iter().map(|v| *v as f32 / 32768.0));
         self.since_estimate += samples.len();
         self.heard += samples.len();
-        while self.history.len() > RATE * 24 { self.history.pop_front(); }
-        if self.history.len() < RATE * 6 || self.since_estimate < RATE { return None; }
+        while self.history.len() > RATE * 12 { self.history.pop_front(); }
+        let early = self.heard < RATE * 6;
+        let interval = if early { RATE / 2 } else { RATE };
+        if self.history.len() < RATE * 5 / 2 || self.since_estimate < interval { return None; }
         self.since_estimate = 0;
         // No stale beat reports through a silent pause or disconnected stream.
         let recent = self.history.iter().rev().take(RATE / 2);
@@ -118,7 +120,7 @@ impl BeatTracker {
                 }
             }
         }
-        if grid.phase_untrusted || grid.confidence < 0.45 || grid.beats.len() < 4 ||
+        if grid.phase_untrusted || grid.confidence < if early { 0.5 } else { 0.45 } || grid.beats.len() < 3 ||
             !grid.bpm.is_finite() || !(50.0..=220.0).contains(&grid.bpm) { return None; }
         let last = *grid.beats.last()?;
         let ago = (audio.len() as f64 - last) / RATE as f64;
@@ -286,11 +288,9 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
     if !(on && allowed) {
         // Join the old analysis before resetting both renderer clocks.
         slot.take();
-        let _ = app.emit("beat-reset", allowed);
         return false;
     }
     if slot.is_some() { return true; }
-    let _ = app.emit("beat-reset", true);
     let (tx, rx) = std::sync::mpsc::sync_channel(64);
     let mut lost = false;
     match capture::start(move |samples, end_ms, discontinuity| {
@@ -362,6 +362,22 @@ mod tests {
         let (mut beat, at) = last.expect("an estimate");
         beat.last_beat_ago += secs - at as f64 / RATE as f64;
         beat
+    }
+
+    #[test]
+    fn clear_percussion_is_available_in_three_seconds_with_a_real_beat_phase() {
+        for bpm in [100.0, 120.0, 128.0, 146.0] {
+            let mut tracker = BeatTracker::new();
+            let mut heard = 0;
+            let mut first = None;
+            for chunk in click_track(bpm, 4.0, 0.2).chunks(2048) {
+                heard += chunk.len();
+                if let Some(beat) = tracker.push(chunk) { first = Some(beat); break; }
+            }
+            assert!(heard <= RATE * 31 / 10, "{bpm}: first report took {} seconds", heard as f64 / RATE as f64);
+            assert_on_the_beat(first.expect("early estimate"), bpm, 0.2, heard as f64 / RATE as f64);
+            assert!(tracker.history.len() <= RATE * 12);
+        }
     }
 
     fn assert_on_the_beat(beat: Beat, bpm: f64, first_beat: f64, at_secs: f64) {
@@ -492,13 +508,13 @@ mod tests {
 mod review_tests {
     use super::{TempoReview, RATE};
     #[test]
-    fn a_better_tempo_must_remain_stable_for_eight_seconds() {
+    fn a_better_tempo_must_remain_stable_for_two_seconds() {
         let mut review = TempoReview::default();
-        assert!(!review.due(RATE * 29));
-        assert!(review.due(RATE * 30));
+        assert!(!review.due(RATE * 7));
+        assert!(review.due(RATE * 8));
         assert!(!review.consider(RATE * 30, 112.0, 0.6, 128.0, 0.8));
         assert!(review.due(RATE * 31));
-        assert!(!review.consider(RATE * 34, 112.0, 0.6, 128.2, 0.8));
+        assert!(!review.consider(RATE * 31, 112.0, 0.6, 128.2, 0.8));
         assert!(review.consider(RATE * 38, 112.0, 0.6, 128.0, 0.8));
         assert!(!review.due(RATE * 39));
     }
@@ -515,7 +531,7 @@ mod review_tests {
         let mut review = TempoReview::default();
         assert!(!review.consider(RATE * 30, 112.0, 0.6, 128.0, 0.8));
         assert!(!review.consider(RATE * 34, 112.0, 0.6, 150.0, 0.8));
-        assert!(!review.consider(RATE * 38, 112.0, 0.6, 150.0, 0.8));
+        assert!(!review.consider(RATE * 35, 112.0, 0.6, 150.0, 0.8));
         assert!(review.consider(RATE * 42, 112.0, 0.6, 150.0, 0.8));
     }
 }

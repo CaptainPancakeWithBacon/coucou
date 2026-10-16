@@ -14,7 +14,7 @@
 import { accessoryMesh } from "./extra-outfits";
 import { Ease } from "../core/anim";
 import type { Outfit, OutfitSelection } from "./wardrobe";
-import { outfitAppearance, LEAGUE_OUTFITS } from "./wardrobe";
+import { outfitAppearance, LEAGUE_OUTFITS, OVERWATCH_OUTFITS } from "./wardrobe";
 import { SCRIPT_FONTS } from "../core/fonts";
 
 const EXP = 2.7;
@@ -543,7 +543,39 @@ function crownFront(ctx: Ctx, H: Head, body: Path2D, simple: boolean) {
 // ── Witch hat ─────────────────────────────────────────────────────────────────
 
 /** Volumetric surfaces, lit from the upper left and occluded by the head. */
+// Cache shaded accessories, not the animated blob. Pose buckets keep memory bounded.
+const accessorySprites = new Map<string, { canvas: HTMLCanvasElement; side: number; pixels: number }>();
+let accessoryPixels = 0;
+const ACCESSORY_PIXEL_BUDGET = 1_500_000; // at most 6 MB of RGBA backing stores
 function extraAccessory(ctx: Ctx, H: Head, outfit: Outfit) {
+  const bucket = (n: number, step: number) => Math.round(n / step) * step;
+  const pose: Head = { ...H, R: bucket(H.R, 1), rx: bucket(H.rx, 1), ry: bucket(H.ry, 1),
+    yaw: bucket(H.yaw, 0.1), pitch: bucket(H.pitch, 0.1), physDx: bucket(H.physDx, 0.2), physDy: bucket(H.physDy, 0.2) };
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const key = `${outfit}:${Object.values(pose).join(":")}:${dpr}`;
+  let sprite = accessorySprites.get(key);
+  if (!sprite) {
+    const side = Math.ceil(Math.max(H.rx, H.ry) * 5.4);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = Math.ceil(side * dpr);
+    const c = canvas.getContext("2d");
+    if (!c) return;
+    c.setTransform(dpr, 0, 0, dpr, side / 2 * dpr, side / 2 * dpr);
+    drawExtraAccessory(c, pose, outfit);
+    sprite = { canvas, side, pixels: canvas.width * canvas.height };
+    accessoryPixels += sprite.pixels;
+    accessorySprites.set(key, sprite);
+    while (accessoryPixels > ACCESSORY_PIXEL_BUDGET && accessorySprites.size > 1) {
+      const oldest = accessorySprites.keys().next().value!;
+      accessoryPixels -= accessorySprites.get(oldest)!.pixels;
+      accessorySprites.delete(oldest);
+    }
+  } else {
+    accessorySprites.delete(key); accessorySprites.set(key, sprite);
+  }
+  ctx.drawImage(sprite.canvas, -sprite.side / 2, -sprite.side / 2, sprite.side, sprite.side);
+}
+function drawExtraAccessory(ctx: Ctx, H: Head, outfit: Outfit) {
   const mesh = accessoryMesh(outfit, H.physDx, H.R < SIMPLIFY_BELOW_R);
   const projected = mesh.faces.map(face => {
     const points = face.points.map(p => proj(H, p));
@@ -1067,7 +1099,7 @@ function withLayer(ctx: Ctx, alpha: number, fn: (c: Ctx) => void) {
 
 /** Glasses, bow, scarf and pumpkin are on the face: behind the head once it has turned away. */
 const ON_FACE: ReadonlySet<Outfit> = new Set(["sunglasses", "roundGlasses", "bow", "scarf", "pumpkin"]);
-const HATS: ReadonlySet<Outfit> = new Set(["beanie", "santaHat", "partyHat", "crown", "witchHat", "blueWitchHat", "catEars", "foxEars", "bearEars", "devilHorns", "halo", "headphones", "flower", "sprout", "antenna", ...LEAGUE_OUTFITS]);
+const HATS: ReadonlySet<Outfit> = new Set(["beanie", "santaHat", "partyHat", "crown", "witchHat", "blueWitchHat", "catEars", "foxEars", "bearEars", "devilHorns", "halo", "headphones", "flower", "sprout", "antenna", ...LEAGUE_OUTFITS, ...OVERWATCH_OUTFITS]);
 
 export interface OutfitState {
   /** 0 = gone, 1 = fully on. Animated by the engine. */
@@ -1165,7 +1197,7 @@ function drawOutfitFrontBase(ctx: Ctx, outfit: Outfit, H: Head, st: OutfitState)
     ctx.scale(Math.max(0.001, posP), Math.max(0.001, posP));
   }
   withLayer(ctx, alpha, (l) => {
-    if (outfit.startsWith("lol")) { extraAccessory(l, H, outfit); return; }
+    if (outfit.startsWith("lol") || outfit.startsWith("ow")) { extraAccessory(l, H, outfit); return; }
     switch (outfit) {
       case "beanie": beanie(l, H, body, simple); break;
       case "santaHat": santaHat(l, H, body); break;

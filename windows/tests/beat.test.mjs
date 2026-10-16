@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, pauseBeat, resumeBeat, resetBeat, DEFAULT_BPM } from "../src/mochi/beat.ts";
+import { beatPosition, beatDiagnostics, currentBpm, danceCalm, feedBeat, pauseBeat, resumeBeat, resetBeat, reacquireBeat, beatPresentation, DEFAULT_BPM } from "../src/mochi/beat.ts";
 const report = (bpm, now, offset = 1000, confidence = 5) => ({
   bpm, beatAtMs: offset + Math.floor((now - offset) * bpm / 60000) * 60000 / bpm, confidence,
 });
@@ -35,10 +35,10 @@ test("phase realignment cannot cause a large slowdown or speedup", () => {
   }
 });
 
-test("two, four and six consistent reports progressively move toward a new tempo", () => {
+test("the confirmed tempo keeps playing until six replacement reports agree", () => {
   resetBeat(true, 1000);
   for (let now = 1000; now <= 12000; now += 250) feedBeat(report(120, now), now);
-  const expected = [120, 130, 130, 146, 146, 160];
+  const expected = [120, 120, 120, 120, 120, 160];
   for (let i = 0; i < 6; i++) {
     const now = 12250 + i * 250;
     const before = beatPosition(now);
@@ -62,9 +62,9 @@ test("30 seconds of tempo changes respect the hold and keep position and speed c
     assert.ok(Math.abs(beatPosition(now) - before) < 1e-8, "no position jump");
     const speedAfter = (beatPosition(now + 0.01) - beatPosition(now)) / 0.01;
     assert.ok(Math.abs(speedAfter - speedBefore) < 0.00001, "no speed jump");
-    if (now >= 2250 && now < 12250) assert.equal(currentBpm(), 120);
-    if (now >= 12250 && now < 22250) assert.equal(currentBpm(), 150);
-    if (now >= 22250) assert.equal(currentBpm(), 90);
+    if (now >= 1250 && now < 11250) assert.equal(currentBpm(), 120);
+    if (now >= 11250 && now < 21250) assert.equal(currentBpm(), 150);
+    if (now >= 21250) assert.equal(currentBpm(), 90);
   }
 });
 
@@ -169,4 +169,36 @@ test("pausing and resuming the same Spotify song preserves its last BPM", () => 
   assert.equal(beatDiagnostics(20000).danceBpm, 108);
   resetBeat(true, 21000); // Different song: existing reset behavior
   assert.equal(currentBpm(), DEFAULT_BPM);
+});
+
+
+test("unknown tempo holds once for one second; the blue badge survives fallback dancing", () => {
+  resetBeat(true, 1000);
+  assert.deepEqual(beatPresentation(true, 1000), { unknown: true, hold: true });
+  assert.deepEqual(beatPresentation(true, 1999), { unknown: true, hold: true });
+  assert.deepEqual(beatPresentation(true, 2000), { unknown: true, hold: false });
+  assert.deepEqual(beatPresentation(true, 12000), { unknown: true, hold: false });
+  assert.deepEqual(beatPresentation(false, 12000), { unknown: false, hold: false });
+  feedBeat(report(128, 12000), 12000); feedBeat(report(128, 12500), 12500);
+  assert.deepEqual(beatPresentation(true, 12500), { unknown: false, hold: false });
+  pauseBeat(13000); resumeBeat(20000);
+  assert.equal(currentBpm(), 128);
+  assert.deepEqual(beatPresentation(true, 20000), { unknown: false, hold: false });
+  reacquireBeat();
+  assert.equal(currentBpm(), 128);
+  assert.deepEqual(beatPresentation(true, 22000), { unknown: false, hold: false });
+  resetBeat(true, 23000);
+  assert.deepEqual(beatPresentation(true, 23000), { unknown: true, hold: true });
+});
+
+test("seeking and reanalysing the same song never inserts a default-tempo step", () => {
+  resetBeat(true, 1000);
+  for(let now=1000;now<=12000;now+=250) feedBeat(report(150,now),now);
+  reacquireBeat();
+  const at = beatPosition(13000);
+  assert.equal(currentBpm(),150);
+  assert.ok(Math.abs(beatPosition(14000)-at-2.5)<0.001);
+  for(let now=14000;now<=14750;now+=250) feedBeat(report(90,now),now);
+  assert.equal(currentBpm(),150,"unconfirmed replacement cannot change the established rhythm");
+  assert.equal(beatPresentation(true,14750).unknown,false);
 });
