@@ -6,12 +6,15 @@ import { Bridge, onEvent } from "../core/bridge";
 import { toOneLine } from "../core/diff";
 import { Sound } from "../core/sound";
 import { State, type AgentTask } from "../core/state";
+import { t } from "../i18n/i18n";
 import type { Island } from "./island";
 
 export const NOTIFICATIONS_ID = "agent_notifications";
 const COLOR = "#5AC8FA";
 /** How long the pill stays on screen before the previous one returns. */
 const SHOWN_MS = 8000;
+/** A new version waits for a look: the card stays open this long (the island stays pinned). */
+const UPDATE_MS = 120_000;
 
 interface DesktopNotification {
   app: string;
@@ -46,7 +49,8 @@ function handle(island: Island, n: DesktopNotification) {
   if (State.paused || (!State.settings.showNotifications && n.app !== "Coucou")) return;
   const line = noticeLine(n);
   if (!line) return;
-  State.upsertExternalAgent(NOTIFICATIONS_ID, "Notifications", COLOR);
+  const update = n.app === "Coucou" && !!n.target;
+  State.upsertExternalAgent(NOTIFICATIONS_ID, t("Notifications"), COLOR);
   State.appendStep(NOTIFICATIONS_ID, line);
   const task = State.tasks.find((t) => t.id === NOTIFICATIONS_ID);
   if (task) {
@@ -67,13 +71,15 @@ function handle(island: Island, n: DesktopNotification) {
   // The compact island has no text: the card with the message opens, as it does
   // when Claude Code finishes.
   if (State.mode !== "expanded") island.alert("finished");
+  if (update) island.stay();
 
   if (restoreTimer != null) window.clearTimeout(restoreTimer);
   restoreTimer = window.setTimeout(() => {
     restoreTimer = null;
+    if (update) island.dropPin();
     State.updateTask(NOTIFICATIONS_ID, "idle");
     if (State.focusId === NOTIFICATIONS_ID && before && State.tasks.some((t) => t.id === before)) {
       State.setFocus(before);
     }
-  }, SHOWN_MS);
+  }, update ? UPDATE_MS : SHOWN_MS);
 }
