@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 /// The canonical name of an agent's event. Unknown names pass through.
 pub fn event(name: &str) -> &str {
     match name {
+        "agent-turn-complete" => "Stop",
         // Gemini CLI
         "BeforeTool" | "BeforeToolSelection" => "PreToolUse",
         "AfterTool" | "AfterModel" => "PostToolUse",
@@ -65,7 +66,10 @@ pub fn fields(map: &mut Map<String, Value>, env: &dyn Fn(&str) -> Option<String>
     if let Some(Value::String(raw)) = map.get("tool_input") {
         let parsed = serde_json::from_str::<Value>(raw).ok().filter(Value::is_object);
         let patch = matches!(map.get("tool_name").and_then(Value::as_str), Some("apply_patch" | "functions.apply_patch"));
-        if let Some(input) = parsed.or_else(|| patch.then(|| serde_json::json!({ "command": raw }))) {
+        let code = matches!(map.get("tool_name").and_then(Value::as_str), Some("exec" | "functions.exec"));
+        if let Some(input) = parsed
+            .or_else(|| patch.then(|| serde_json::json!({ "command": raw })))
+            .or_else(|| code.then(|| serde_json::json!({ "code": raw }))) {
             map.insert("tool_input".into(), input);
         }
     }
@@ -106,13 +110,19 @@ pub fn fields(map: &mut Map<String, Value>, env: &dyn Fn(&str) -> Option<String>
     }
 
     if non_empty_str(map, "session_id").is_none() {
-        let sid = ["conversationId", "conversation_id", "sessionId", "GEMINI_SESSION_ID"]
+        let sid = ["thread-id", "thread_id", "conversationId", "conversation_id", "sessionId", "GEMINI_SESSION_ID"]
             .iter()
             .find_map(|k| non_empty_str(map, k))
             .map(str::to_string)
             .or_else(|| env("GEMINI_SESSION_ID").filter(|s| !s.is_empty()));
         if let Some(sid) = sid {
             map.insert("session_id".into(), Value::String(sid));
+        }
+    }
+
+    if non_empty_str(map, "last_assistant_message").is_none() {
+        if let Some(text) = non_empty_str(map, "last-assistant-message").map(str::to_string) {
+            map.insert("last_assistant_message".into(), Value::String(text));
         }
     }
 

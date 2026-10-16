@@ -99,13 +99,23 @@ struct Event {
     question: Option<Value>,
 }
 
+/// Codex's older notify command supplies JSON as an argument, with no stdin pipe.
+fn notification_argument(arg: &str) -> Option<Vec<u8>> {
+    let value: Value = serde_json::from_str(arg).ok()?;
+    (value.get("type").and_then(Value::as_str) == Some("agent-turn-complete"))
+        .then(|| arg.as_bytes().to_vec())
+}
+
 fn main() {
     if std::env::args().skip(1).any(|a| a == "--statusline") {
         statusline::run();
     }
     let args = args();
-    let mut raw = Vec::new();
-    let _ = std::io::stdin().read_to_end(&mut raw);
+    let raw = notification_argument(&args.event).unwrap_or_else(|| {
+        let mut raw = Vec::new();
+        let _ = std::io::stdin().read_to_end(&mut raw);
+        raw
+    });
     let env = |key: &str| std::env::var(key).ok();
     let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
 
@@ -157,7 +167,12 @@ fn prepare(raw: &[u8], args: &Args, env: &dyn Fn(&str) -> Option<String>, cwd: &
     // pill. Absent means Claude Code, so existing hook commands keep working
     // unchanged; invalid names are discarded by the app, not here. A Claude Code
     // session started from the Claude desktop app is tagged `claude-desktop`.
-    if let Some(tag) = agent_tag(&args.agent, env) {
+    let codex_payload = map.get("type").and_then(Value::as_str) == Some("agent-turn-complete") ||
+        map.get("transcript_path").and_then(Value::as_str).is_some_and(|path| {
+            path.replace('\\', "/").contains("/.codex/sessions/")
+        });
+    let inferred = if args.agent.is_empty() && codex_payload { "codex" } else { &args.agent };
+    if let Some(tag) = agent_tag(inferred, env) {
         map.insert("coucou_agent".into(), Value::String(tag));
     }
     // Claude Code in Cursor's terminal goes on the Cursor pill (Mac #120).
@@ -172,6 +187,7 @@ fn prepare(raw: &[u8], args: &Args, env: &dyn Fn(&str) -> Option<String>, cwd: &
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+        .or_else(|| map.get("type").and_then(Value::as_str).filter(|s| *s == "agent-turn-complete").map(str::to_string))
         .unwrap_or_else(|| args.event.clone());
     normalize::fields(map, env);
     let name = normalize::refine(normalize::event(&raw_event), map);
@@ -401,6 +417,32 @@ fn talk(payload: &str, waits_for_answer: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_codex_notify_and_transcripts_never_become_claude_events() {
+        let arg = r#"{"type":"agent-turn-complete","thread-id":"c1","last-assistant-message":"Done"}"#;
+        assert_eq!(notification_argument(arg).unwrap(), arg.as_bytes());
+        assert!(notification_argument("Stop").is_none());
+        let (v, event) = run(r#"{"type":"agent-turn-complete","thread-id":"c1","last-assistant-message":"Done"}"#, "", "");
+        assert_eq!(event.name, "Stop");
+        assert_eq!(v["coucou_agent"], "codex");
+        assert_eq!(v["session_id"], "c1");
+        assert_eq!(v["last_assistant_message"], "Done");
+        let raw = r#"{"hook_event_name":"Stop","transcript_path":"C:\\Users\\me\\.codex\\sessions\\2026\\rollout.jsonl"}"#;
+        let (v, _) = run(raw, "", "");
+        assert_eq!(v["coucou_agent"], "codex");
+        assert!(v.get("transcript_path").is_none());
+        let (v, _) = run(raw, "copilot", "");
+        assert_eq!(v["coucou_agent"], "copilot", "explicit installation always wins");
+        let (v, _) = run(r#"{"hook_event_name":"Stop","transcript_path":"/home/me/.claude/projects/p/session.jsonl"}"#, "", "");
+        assert!(v.get("coucou_agent").is_none());
+    }
+
+    #[test]
+    fn code_mode_source_survives_as_a_step_input() {
+        let (v, _) = run(r#"{"hook_event_name":"PreToolUse","tool_name":"functions.exec","tool_input":"await tools.exec_command({cmd: 'cargo test'});"}"#, "codex", "");
+        assert_eq!(v["tool_input"]["code"], "await tools.exec_command({cmd: 'cargo test'});");
+    }
 
     #[test]
     fn codex_patches_survive_the_relay_as_complete_diff_inputs() {

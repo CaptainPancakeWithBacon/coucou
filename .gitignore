@@ -25,3 +25,5 @@ NotchBuddy/Sources/App/Voice/GitHash.generated.swift
 
 # Local build artifacts
 /output/
+build-apk.cmd
+build-exe.cmd

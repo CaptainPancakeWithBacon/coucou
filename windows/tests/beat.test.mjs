@@ -172,23 +172,23 @@ test("pausing and resuming the same Spotify song preserves its last BPM", () => 
 });
 
 
-test("unknown tempo holds once for one second; the blue badge survives fallback dancing", () => {
+test("unknown tempo is a lifecycle state independent of the renderer hold", () => {
   resetBeat(true, 1000);
-  assert.deepEqual(beatPresentation(true, 1000), { unknown: true, hold: true });
-  assert.deepEqual(beatPresentation(true, 1999), { unknown: true, hold: true });
-  assert.deepEqual(beatPresentation(true, 2000), { unknown: true, hold: false });
-  assert.deepEqual(beatPresentation(true, 12000), { unknown: true, hold: false });
-  assert.deepEqual(beatPresentation(false, 12000), { unknown: false, hold: false });
+  assert.deepEqual(beatPresentation(true, 1000), { unknown: true });
+  assert.deepEqual(beatPresentation(true, 1999), { unknown: true });
+  assert.deepEqual(beatPresentation(true, 2000), { unknown: true });
+  assert.deepEqual(beatPresentation(true, 12000), { unknown: true });
+  assert.deepEqual(beatPresentation(false, 12000), { unknown: false });
   feedBeat(report(128, 12000), 12000); feedBeat(report(128, 12500), 12500);
-  assert.deepEqual(beatPresentation(true, 12500), { unknown: false, hold: false });
+  assert.deepEqual(beatPresentation(true, 12500), { unknown: false });
   pauseBeat(13000); resumeBeat(20000);
   assert.equal(currentBpm(), 128);
-  assert.deepEqual(beatPresentation(true, 20000), { unknown: false, hold: false });
+  assert.deepEqual(beatPresentation(true, 20000), { unknown: false });
   reacquireBeat();
   assert.equal(currentBpm(), 128);
-  assert.deepEqual(beatPresentation(true, 22000), { unknown: false, hold: false });
+  assert.deepEqual(beatPresentation(true, 22000), { unknown: false });
   resetBeat(true, 23000);
-  assert.deepEqual(beatPresentation(true, 23000), { unknown: true, hold: true });
+  assert.deepEqual(beatPresentation(true, 23000), { unknown: true });
 });
 
 test("seeking and reanalysing the same song never inserts a default-tempo step", () => {

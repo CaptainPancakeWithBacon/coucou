@@ -13,7 +13,7 @@ let anchored = false;
 let lockedAt = -Infinity;
 let confirmedBpm = DEFAULT_BPM;
 let known = false;
-let unknownSince: number | null = null;
+let episode = 0;
 // Integrate a decaying speed correction: position and speed stay continuous.
 let speedOffset = 0;
 let phaseOffset = 0;
@@ -123,6 +123,7 @@ export function resumeBeat(nowMs: number = Date.now()): void {
 }
 
 export function resetBeat(waitForMusic = false, nowMs: number = Date.now()): void {
+  episode++;
   const current = beatPosition(nowMs);
   waiting = waitForMusic;
   fed = false;
@@ -130,7 +131,6 @@ export function resetBeat(waitForMusic = false, nowMs: number = Date.now()): voi
   speedOffset = phaseOffset = 0;
   lockedAt = -Infinity;
   known = false;
-  unknownSince = waitForMusic ? nowMs : null;
   confirmedBpm = bpm;
 
   candidate = null;
@@ -151,7 +151,8 @@ export function danceCalm(nowMs: number = Date.now()): number {
 export function reacquireBeat(): void { candidate = null; lastAudioAt = null; }
 
 /** Unknown is a track lifecycle state, never an audio-gap timeout. */
-export function beatPresentation(enabled: boolean, nowMs = Date.now()) {
+export function beatEpisode(): number { return episode; }
+export function beatPresentation(enabled: boolean, _nowMs = Date.now()) {
   const unknown = enabled && waiting && !known;
-  return { unknown, hold: unknown && unknownSince != null && nowMs - unknownSince < 1000 };
+  return { unknown };
 }

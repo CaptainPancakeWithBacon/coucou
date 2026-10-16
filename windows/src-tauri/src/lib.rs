@@ -502,9 +502,9 @@ fn codex_setup(app: &AppHandle) {
     if marker.exists() || !codex_is_here {
         return;
     }
-    let _ = std::fs::write(&marker, b"");
     match agents::preview("codex", true).and_then(|plan| agents::apply("codex", true, &plan.fingerprint)) {
         Ok(_) => {
+            let _ = std::fs::write(&marker, b"");
             log::line("codex: hooks installed (a backup was made)".to_string());
             let shared = app.state::<Shared>();
             let mut current = shared.settings.lock().unwrap();

@@ -15,7 +15,10 @@ The renderer confirms the initial estimate across two reports, integrates tempo 
 phase corrections continuously, and keeps the current tempo until a replacement has
 enough supporting observations. Pausing, seeking or restarting capture does not reset
 the remembered tempo. Only changing songs or disabling beat sync clears it. The
-unknown-tempo badge has a one-second initial hold per new track, independently of eyes.
+unknown-tempo transition eases the dance out over 0.5 seconds, then holds completely
+still for a full second with the existing question expression, tilt and blue tint.
+It eases back in over 0.3 seconds once per unknown episode. The question badge stays
+independent of happy dancing eyes and fades out over 0.35 seconds when BPM is known.
 
 ## Repositories reviewed
 

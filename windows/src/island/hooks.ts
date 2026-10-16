@@ -117,6 +117,7 @@ const TOOL_LABELS: Record<string, string> = {
   apply_patch: N_("Edits"),
   exec_command: N_("Runs"),
   shell_command: N_("Runs"),
+  exec: N_("Runs"),
   update_plan: N_("Tasks"),
 };
 
@@ -138,6 +139,8 @@ function stepLabel(tool: string, input: Record<string, unknown>): string {
     return paths.length ? `${label} · ${paths.join(", ")}` : label;
   }
   if (cmd) return `${label} · ${cmd}`;
+  const code = str("code");
+  if (code) return `${label} · ${code}`;
   const path = str("path");
   if (path) return `${label} · ${path}`;
   const file = str("file_path");
@@ -373,6 +376,7 @@ function handleHook(island: Island, payload: HookPayload) {
     }
 
     case "PostToolUse":
+      if (validAgent === "codex") ensurePill();
       supersedeStop();
       // The question was answered in the terminal: the card would be lying.
       if (
@@ -389,6 +393,7 @@ function handleHook(island: Island, payload: HookPayload) {
       break;
 
     case "PostToolUseFailure":
+      if (validAgent === "codex") ensurePill();
       supersedeStop();
       State.updateTask(agentId, "working");
       State.appendStep(agentId, t("⚠ failed"));
@@ -410,12 +415,13 @@ function handleHook(island: Island, payload: HookPayload) {
     }
 
     case "Stop": {
+      if (validAgent === "codex") ensurePill();
       State.updateTask(agentId, "finished");
       // Claude Code puts the turn's answer in the Stop payload itself, so there is
       // no transcript to read (the relay does not even forward its path). Other
       // agents report their last words the same way (Hermes, Codex) or as
       // `message`.
-      const finalText = toOneLine(payload.last_assistant_message ?? payload.message ?? "");
+      const finalText = toOneLine(payload.last_assistant_message || payload.message || "");
       if (finalText) {
         State.appendStep(agentId, finalText);
         const t = State.tasks.find((x) => x.id === agentId);

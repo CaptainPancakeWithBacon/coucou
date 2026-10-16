@@ -15,9 +15,9 @@ if not defined COUCOU_VS goto missing_cpp
 call "%COUCOU_VS%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
 if errorlevel 1 goto failed
 call npm.cmd ci
-if errorlevel 1 goto failed
+if not "%errorlevel%"=="0" goto failed
 call npm.cmd run tauri -- build --bundles nsis
-if errorlevel 1 goto failed
+if not "%errorlevel%"=="0" goto failed
 if not exist "%~dp0output" mkdir "%~dp0output"
 if errorlevel 1 goto failed
 copy /y "target\release\coucou.exe" "%~dp0output\Coucou.exe" >nul
