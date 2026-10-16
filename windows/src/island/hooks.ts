@@ -359,7 +359,9 @@ function handleHook(island: Island, payload: HookPayload) {
       State.updateTask(agentId, "thinking");
       // The field is `prompt`; reading `message` meant this step was always blank.
       const asked = payload.prompt ?? payload.message;
-      if (asked) State.appendStep(agentId, asked.slice(0, 60));
+      // Keep the complete prompt available in Details instead of discarding
+      // everything after the ticker's first 60 characters (notably Copilot CLI).
+      if (asked) State.appendStep(agentId, asked.slice(0, 4000));
       surface("overview", false);
       break;
     }
