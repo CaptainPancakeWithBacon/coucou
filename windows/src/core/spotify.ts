@@ -68,6 +68,16 @@ export function spotifyPosition(s: SpotifyState, nowMs: number): number {
   return d > 0 ? Math.min(p, d) : p;
 }
 
+/** Smooth sub-second transport jitter while retaining real seeks and track changes. */
+export function reconcileSpotify(previous: SpotifyState, next: SpotifyState): SpotifyState {
+  if (!previous.track?.id || previous.track.id !== next.track?.id || !previous.playing || !next.playing) return next;
+  if (next.positionAt < previous.positionAt) return { ...next, position: previous.position, positionAt: previous.positionAt };
+  const expected = spotifyPosition(previous, next.positionAt);
+  const delta = next.position - expected;
+  if (Math.abs(delta) > 1.25) return next;
+  return { ...next, position: expected + Math.max(0, delta) * 0.15 };
+}
+
 /**
  * The clock frozen or restarted where it is now — what a play/pause click
  * does at once, before Spotify confirms it (SpotifyController.setPlaying).

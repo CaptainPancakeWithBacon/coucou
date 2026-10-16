@@ -17,7 +17,8 @@ export const EXTRA_OUTFITS = [
 ] as const;
 export const LEAGUE_OUTFITS = ["lolAhri", "lolJinx", "lolEkko", "lolYasuo", "lolVi",
   "lolTeemo", "lolDarius", "lolBraum", "lolIllaoi", "lolWarwick"] as const;
-export const OUTFIT_SELECTIONS = [...CLASSIC_OUTFITS, ...EXTRA_OUTFITS, ...LEAGUE_OUTFITS] as const;
+export const OVERWATCH_OUTFITS = ["owKiriko", "owReinhardt", "owDva", "owMercy", "owGenji", "owTracer"] as const;
+export const OUTFIT_SELECTIONS = [...CLASSIC_OUTFITS, ...EXTRA_OUTFITS, ...LEAGUE_OUTFITS, ...OVERWATCH_OUTFITS] as const;
 export const OUTFIT_STYLES = {
   rose: { name: N_("Rose"), color: "#e694bc", filter: "sepia(0.65) saturate(2.2) hue-rotate(285deg)" },
   ice: { name: N_("Ice"), color: "#8ccff3", filter: "sepia(0.6) saturate(2.4) hue-rotate(155deg)" },
@@ -67,6 +68,7 @@ export const OUTFIT_KEYS: Record<BaseSelection, string> = {
   antenna: N_("Antenna"),
   lolAhri: "Ahri", lolJinx: "Jinx", lolEkko: "Ekko", lolYasuo: "Yasuo", lolVi: "Vi",
   lolTeemo: "Teemo", lolDarius: "Darius", lolBraum: "Braum", lolIllaoi: "Illaoi", lolWarwick: "Warwick",
+  owKiriko: "Kiriko", owReinhardt: "Reinhardt", owDva: "D.Va", owMercy: "Mercy", owGenji: "Genji", owTracer: "Tracer",
 };
 
 /** In the current language: every read goes through `t()`. */
@@ -94,6 +96,7 @@ export const WARDROBE_COLLECTIONS = [
   { name: N_("Wardrobe"), items: CLASSIC_OUTFITS },
   { name: "Extra", items: EXTRA_OUTFITS.filter(id => id !== "blueWitchHat") },
   { name: "League of Legends", items: LEAGUE_OUTFITS },
+  { name: "Overwatch", items: OVERWATCH_OUTFITS },
 ] as const;
 
 export function outfitFamily(selection: OutfitSelection): BaseSelection {

@@ -1,9 +1,10 @@
+import { responsiveFrame } from "../core/frame-clock";
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
-import { pauseBeat, resetBeat, resumeBeat } from "../mochi/beat";
+import { pauseBeat, resetBeat, resumeBeat, reacquireBeat } from "../mochi/beat";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -92,7 +93,7 @@ export class Island {
 
   private running = false;
   private lastFrame = 0;
-  private rafId = 0;
+  private cancelFrame: () => void = () => {};
   private dirty = true;
   private canvasDpr = 0;
 
@@ -448,7 +449,7 @@ export class Island {
     // Drive the state machine rather than the mode: setting the mode behind its
     // back left it thinking the island was still open, and a click on the compact
     // island then did nothing — the island could never be reopened.
-    this.fsm.forcePetit();
+    this.fsm.forcePetit(this.wasInIsland);
   }
 
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
@@ -746,6 +747,7 @@ export class Island {
     this.beatSongId = songId;
     if (!wanted && wasPlaying && sameSong) pauseBeat();
     else if (wanted && !wasPlaying && sameSong) resumeBeat();
+    else if (sameSong && wanted) reacquireBeat();
     else resetBeat(wanted);
     if (restart) {
       void Bridge.beatEnable(false).then(() => {
@@ -805,6 +807,12 @@ export class Island {
       }
       if (State.mode !== "expanded") {
         this.fsm.click();
+        return;
+      }
+      // The empty header space between the + tab and agent status closes the island.
+      // Interactive header buttons keep their own click actions.
+      if (e.button === 0 && e.target === this.header.el) {
+        this.collapse();
         return;
       }
       if (this.isBotHit(e.clientX, e.clientY)) {
@@ -1003,7 +1011,7 @@ export class Island {
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
-    this.rafId = requestAnimationFrame(this.frame);
+    this.cancelFrame = responsiveFrame(this.frame);
   }
 
   /**
@@ -1034,7 +1042,7 @@ export class Island {
         this.loggedErrors.add(message);
         void Bridge.log(`island frame error: ${message}`);
       }
-      this.rafId = requestAnimationFrame(this.frame);
+      this.cancelFrame = responsiveFrame(this.frame);
     }
   };
 
@@ -1046,7 +1054,7 @@ export class Island {
     const opacity = Math.max(20, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
     this.islandEl.style.opacity = String(opacity);
     // One chain only: a frame forced by the watchdog replaces the pending one.
-    cancelAnimationFrame(this.rafId);
+    this.cancelFrame();
     const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
     this.lastFrame = nowMs;
 
@@ -1105,7 +1113,7 @@ export class Island {
         greetingActive || this.engine.busy || UploadSeq.isActive || viewAnimating;
 
     if (busy) {
-      this.rafId = requestAnimationFrame(this.frame);
+      this.cancelFrame = responsiveFrame(this.frame);
     } else {
       this.running = false;
       Sound.idle();
@@ -1197,7 +1205,7 @@ export class Island {
       mode: State.mode,
       view: State.view,
       focusId: State.focusTask?.id,
-    }));
+    }), State.settings.beatSync);
 
     this.syncBeat(State.settings.beatSync && State.spotifyPlaying);
 

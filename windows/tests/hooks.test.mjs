@@ -24,6 +24,22 @@ const hook = (payload) => emit("hook", payload);
 const task = (id = CLAUDE) => State.tasks.find((t) => t.id === id);
 const seconds = (n) => mock.timers.tick(n * 1000);
 
+test("Codex can finish or report edits as its first event, and code-mode steps remain inspectable", () => {
+  State.tasks = [];
+  hook({ hook_event_name: "Stop", coucou_agent: "codex", session_id: "codex-first", last_assistant_message: "", message: "Changes complete" });
+  assert.equal(task("agent_codex").source, "agent");
+  assert.equal(task("agent_codex").name, "Codex");
+  assert.equal(task("agent_codex").finalLine, "Changes complete");
+  assert.equal(task("agent_codex").state, "finished");
+  assert.equal(task(CLAUDE), undefined);
+  State.tasks = [];
+  hook({ hook_event_name: "PostToolUse", coucou_agent: "codex", tool_name: "apply_patch", tool_input: { command: "*** Begin Patch\n*** Add File: codex.ts\n+hello\n*** End Patch" } });
+  assert.equal(State.sessionDiffs.get("agent_codex").at(-1).path, "codex.ts");
+  const code = "await tools.exec_command({cmd: 'cargo test'});";
+  hook({ hook_event_name: "PreToolUse", coucou_agent: "codex", tool_name: "functions.exec", tool_input: { code } });
+  assert.equal(task("agent_codex").steps.at(-1), `Runs · ${code}`);
+});
+
 test("Codex patches, exact shell steps and plans reach both the pill and phone snapshot", async () => {
   const { linkSnapshot, linkDiff } = await import("../src/island/phone-link.ts");
   const base = { coucou_agent: "codex", session_id: "codex-test", cwd: "C:/project" };

@@ -502,9 +502,9 @@ fn codex_setup(app: &AppHandle) {
     if marker.exists() || !codex_is_here {
         return;
     }
-    let _ = std::fs::write(&marker, b"");
     match agents::preview("codex", true).and_then(|plan| agents::apply("codex", true, &plan.fingerprint)) {
         Ok(_) => {
+            let _ = std::fs::write(&marker, b"");
             log::line("codex: hooks installed (a backup was made)".to_string());
             let shared = app.state::<Shared>();
             let mut current = shared.settings.lock().unwrap();
@@ -774,7 +774,7 @@ fn shortcuts_suspend(app: AppHandle, shared: State<Shared>, suspended: bool) {
 /// for the *same* arguments as the island (see `additionalBrowserArgs` in
 /// tauri.conf.json) — a mismatch makes the second window come up blank, with no
 /// error anywhere.
-pub(crate) const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+pub(crate) const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required";
 
 /// In a dev build the pages are served by Vite, so the second window needs the
 /// absolute dev URL; a bundled build resolves it inside the app bundle.

@@ -18,6 +18,8 @@ export function buildWardrobe(actions: ViewActions): ViewHost {
   const notes: HTMLElement[] = [];
   const families = WARDROBE_COLLECTIONS.map(c => c.items.includes(outfitFamily(initial) as never) ? outfitFamily(initial) : c.items[0]);
   const variantRows: HTMLElement[] = [];
+  const panels: HTMLElement[] = [];
+  const stylePanels: HTMLElement[] = [];
 
   function makeItem(selection: OutfitSelection, page: number, variant = false) {
     const canvas = h("canvas"), a = outfitAppearance(selection);
@@ -33,7 +35,13 @@ export function buildWardrobe(actions: ViewActions): ViewHost {
       hovered = null; actions.previewOutfit(null); update();
     });
     button.addEventListener("click", () => {
-      if (!variant) { families[page] = outfitFamily(selection); renderVariants(page); }
+      if (!variant) {
+        families[page] = outfitFamily(selection); renderVariants(page);
+        const open = selection !== "auto" && selection !== "none";
+        panels[page].classList.toggle("styles-open", open);
+        stylePanels[page].setAttribute("aria-hidden", String(!open));
+        stylePanels[page].inert = !open;
+      }
       hovered = null; actions.chooseOutfit(selection); actions.previewOutfit(null); update(); drawIcons();
     });
     items.push({ selection, button, canvas, page });
@@ -48,15 +56,23 @@ export function buildWardrobe(actions: ViewActions): ViewHost {
   const pages = WARDROBE_COLLECTIONS.map((collection, page) => {
     const note = h("span", { class: "wardrobe-note" }); notes.push(note);
     const variants = h("div", { class: "wardrobe-variants" }); variantRows.push(variants);
-    const panel = h("div", { class: "wardrobe-collection" },
-      h("div", { class: "wardrobe-head" }, h("span", { class: "wardrobe-title", text: tl(collection.name) }), note),
-      h("div", { class: "wardrobe-grid" }, ...collection.items.map(sel => makeItem(sel, page))),
+    const styles = h("div", { class: "wardrobe-styles", "aria-hidden": "true" },
       h("div", { class: "wardrobe-styles-label", text: tl("Styles") }), variants);
-    renderVariants(page);
+    styles.inert = true; stylePanels.push(styles);
+    const panel = h("div", { class: "wardrobe-collection" },
+      h("div", { class: "wardrobe-choice" },
+        h("div", { class: "wardrobe-head" }, h("span", { class: "wardrobe-title", text: tl(collection.name) }), note),
+        h("div", { class: "wardrobe-grid" }, ...collection.items.map(sel => makeItem(sel, page)))), styles);
+    panels.push(panel);
     return { name: t(collection.name), el: panel };
   });
   const pager = buildCollectionPages(pages, page => {
-    activePage = page; hovered = null; actions.previewOutfit(null); update(); drawIcons();
+    activePage = page; hovered = null;
+    panels.forEach(panel => panel.classList.remove("styles-open"));
+    stylePanels.forEach(panel => { panel.setAttribute("aria-hidden", "true"); panel.inert = true; });
+    variantRows.forEach(row => row.replaceChildren());
+    items = items.filter(item => !item.button.classList.contains("wardrobe-variant"));
+    actions.previewOutfit(null); update(); drawIcons();
   });
   const el = h("div", { class: "view wardrobe" }, h("div", { class: "card" }, pager.el));
   function update() {

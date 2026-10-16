@@ -6,7 +6,7 @@
 
 import { Bridge, onEvent } from "../core/bridge";
 import { pillDefinition } from "../core/pills";
-import { SPOTIFY_ID, Spotify, isAd, spotifyPosition, type SpotifyState } from "../core/spotify";
+import { SPOTIFY_ID, Spotify, isAd, spotifyPosition, reconcileSpotify, type SpotifyState } from "../core/spotify";
 import { State } from "../core/state";
 
 import { t } from "../i18n/i18n";
@@ -32,7 +32,8 @@ export function registerSpotifyHandlers(island: SpotifyHost) {
 export function applySpotify(island: SpotifyHost, next: SpotifyState) {
   const wasPlaying = State.spotifyPlaying;
   const previous = Spotify.state;
-  if (previous.track?.id && previous.track.id === next.track?.id && next.playing &&
+  next = reconcileSpotify(previous, next);
+  if (previous.track?.id && previous.track.id === next.track?.id && previous.playing && next.playing &&
       Math.abs(next.position - spotifyPosition(previous, next.positionAt)) > 1.25) {
     Spotify.beatRevision++;
   }

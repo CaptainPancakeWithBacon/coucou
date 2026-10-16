@@ -5,7 +5,7 @@
 // arc angles produce a different shape.
 
 import { Ease, lerp, type EaseFn } from "../core/anim";
-import { beatPosition, danceCalm } from "./beat";
+import { beatPosition, danceCalm, beatPresentation, beatEpisode } from "./beat";
 import { Sound } from "../core/sound";
 import type { BotEmoteName, BotStateName } from "../core/layout";
 import { PUMPKIN_BODY, drawOutfitBehind, drawOutfitFront, makeHead } from "./outfits";
@@ -176,6 +176,9 @@ export function stepDanceLevel(level: number, dancing: boolean, dt: number): num
   return level;
 }
 
+/** Zero velocity at both ends, including the last frame before stillness. */
+export const danceEase = (level: number) => level * level * (3 - 2 * level);
+
 /**
  * The 112-BPM bounce at `seconds`, for a body of radius R and a dance `level`
  * (0…1): a sideways sway, a hop, a tilt, and a squash on landing.
@@ -234,6 +237,14 @@ export class BotEngine {
   /** Dancing to music; `dancingLevel` follows it, 0→1 in 0.3 s, 1→0 in 0.5 s. */
   isDancing = false;
   dancingLevel = 0;
+  private danceEnergy = 1;
+  beatQuestionLevel = 0;
+  beatConfusedLevel = 0;
+  private beatRequested = false;
+  private beatUnknownSeen = false;
+  private beatEpisode = -1;
+  private beatStopping = false;
+  private beatStillSeconds = 0;
 
   // Mouth spring (fraction of R)
   slotH = 0; slotHTarget = 0; slotHVel = 0; isChewing = false;
@@ -549,7 +560,7 @@ export class BotEngine {
       this.particles.length > 0 ||
       this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat ||
       this.isMini ||
-      this.isDancing || this.dancingLevel > 0.001 ||
+      this.isDancing || this.dancingLevel > 0 || this.beatStopping || this.beatQuestionLevel > 0 || this.beatConfusedLevel > 0 ||
       Math.abs(this.tgYaw - this.yaw) > 0.002 ||
       Math.abs(this.tgPitch - this.pitch) > 0.002 ||
       Math.abs(this.tgTilt - this.tilt) > 0.002 ||
@@ -689,7 +700,19 @@ export class BotEngine {
     this.slotHVel += acc * dt;
     this.slotH = Math.max(0, this.slotH + this.slotHVel * dt);
 
+    const previousDanceLevel = this.dancingLevel;
     this.dancingLevel = stepDanceLevel(this.dancingLevel, this.isDancing, dt);
+    this.danceEnergy += (danceCalm() - this.danceEnergy) * (1 - Math.exp(-dt / 0.3));
+    if (this.beatStopping && this.beatRequested && this.dancingLevel === 0) {
+      this.beatStillSeconds += Math.max(0, dt - previousDanceLevel * 0.5);
+      if (this.beatStillSeconds >= 1) {
+        this.beatStopping = false;
+        this.isDancing = this.beatRequested;
+      }
+    }
+    this.beatQuestionLevel = Math.max(0, Math.min(1, this.beatQuestionLevel + dt / (this.beatQuestion ? 0.2 : -0.35)));
+    const confused = this.beatStopping && this.dancingLevel === 0;
+    this.beatConfusedLevel = Math.max(0, Math.min(1, this.beatConfusedLevel + dt / (confused ? 0.25 : -0.3)));
 
     // Soft-part spring: lags behind head turns, hops and rolls (stiffness 60, damping 9).
     if (dt > 0) {
@@ -749,8 +772,23 @@ export class BotEngine {
 
   // ── Dancing ─────────────────────────────────────────────────────────────────
 
-  setDancing(dancing: boolean) {
-    if (this.isDancing !== dancing) this.isDancing = dancing;
+  beatQuestion = false;
+  setDancing(dancing: boolean, syncToBeat = false) {
+    const { unknown } = beatPresentation(syncToBeat);
+    const episode = beatEpisode();
+    if (episode !== this.beatEpisode) {
+      this.beatUnknownSeen = false;
+      this.beatEpisode = episode;
+    }
+    if (!unknown) { this.beatUnknownSeen = false; this.beatStopping = false; }
+    if (unknown && dancing && !this.beatUnknownSeen) {
+      this.beatUnknownSeen = true;
+      this.beatStopping = true;
+      this.beatStillSeconds = 0;
+    }
+    this.beatRequested = dancing;
+    this.beatQuestion = unknown && dancing;
+    this.isDancing = dancing && !this.beatStopping;
   }
 
   /**
@@ -762,7 +800,7 @@ export class BotEngine {
     const R = W * 0.3;
     const px = W / 2 + this.ox * R;
     const py = H / 2 + this.particleOverhang / 2 + this.oy * R + R * 0.06 + R * 0.88;
-    const d = danceAtBeat(beatPosition(Date.now()), this.dancingLevel * danceCalm(), R);
+    const d = danceAtBeat(beatPosition(Date.now()), danceEase(this.dancingLevel) * this.danceEnergy, R);
     x.translate(px + d.dx, py + d.dy);
     x.rotate(d.rotate);
     x.scale(d.sx, d.sy);
@@ -795,7 +833,8 @@ export class BotEngine {
 
     x.save();
     x.translate(cx, cy);
-    if (this.tilt !== 0) x.rotate(this.tilt);
+    const tilt = this.tilt + BOT_STATES.question.tilt * danceEase(this.beatConfusedLevel);
+    if (tilt !== 0) x.rotate(tilt);
     x.scale(this.sx, this.sy);
 
     const dressed = !this.isMini && this.outfit !== "none";
@@ -828,7 +867,12 @@ export class BotEngine {
     x.restore();
     x.restore();
 
-    if (this.badge && this.badgeS > 0.01 && this.morph < 0.25) {
+    if (this.beatQuestionLevel > 0 && this.morph < 0.25 && !this.isMini) {
+      x.save();
+      x.globalAlpha *= danceEase(this.beatQuestionLevel);
+      this.drawBadge(x, { kind: "question", color: C.question }, R, cx, cy, 1);
+      x.restore();
+    } else if (this.badge && this.badgeS > 0.01 && this.morph < 0.25) {
       this.drawBadge(x, this.badge, R, cx, cy);
     }
     this.drawParticles(x, R, cx, cy);
@@ -897,11 +941,13 @@ export class BotEngine {
       x.globalAlpha = this.bodyColor ? pumpkin : 1;
     }
 
-    const effectiveTint = this.tint * (1 - this.morph);
+    const confused = danceEase(this.beatConfusedLevel);
+    const effectiveTint = lerp(this.tint, BOT_STATES.question.tint, confused) * (1 - this.morph);
+    const tintColor = mix3(this.col, C.question, confused);
     if (effectiveTint > 0.01) {
       const tg = x.createLinearGradient(0, ry, 0, -ry);
-      tg.addColorStop(0, rgba(this.col, 0.72 * effectiveTint));
-      tg.addColorStop(1, rgba(this.col, 0));
+      tg.addColorStop(0, rgba(tintColor, 0.72 * effectiveTint));
+      tg.addColorStop(1, rgba(tintColor, 0));
       x.fillStyle = tg;
       x.fill(body);
     }
@@ -922,9 +968,10 @@ export class BotEngine {
   }
 
   private drawEyes(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
-    let shape: EyeShape = this.eyeOverride ?? this.cfg.eye;
+    let shape: EyeShape = this.beatConfusedLevel > 0.5 && this.dancingLevel === 0
+      ? BOT_STATES.question.eye : this.eyeOverride ?? this.cfg.eye;
     // Dancing: happy eyes in the calm states.
-    if (this.isDancing && this.dancingLevel > 0.15 && !this.isMini && (this.state === "idle" || this.state === "finished")) {
+    if (this.dancingLevel > 0 && !this.isMini && (this.state === "idle" || this.state === "finished")) {
       shape = "happy";
     }
     if (this.morph > 0.5) {
@@ -1181,8 +1228,8 @@ export class BotEngine {
     }
   }
 
-  private drawBadge(x: CanvasRenderingContext2D, badge: Badge, R: number, cx: number, cy: number) {
-    const bs = this.badgeS * (this.isMini ? 1.25 : 1);
+  private drawBadge(x: CanvasRenderingContext2D, badge: Badge, R: number, cx: number, cy: number, presence = this.badgeS) {
+    const bs = presence * (this.isMini ? 1.25 : 1);
     const bx = cx - R * 0.72 * this.sx;
     const by = cy - R * 0.72 * this.sy;
     const t = now();

@@ -1,6 +1,7 @@
 // Small, genuinely volumetric accessory meshes in head-local coordinates.
 // Lighting and occlusion are shared with the Canvas outfit renderer.
 import { leagueAccessory } from "./league-outfits";
+import { overwatchAccessory } from "./overwatch-outfits";
 export type V3 = readonly [number, number, number];
 export interface AccessoryFace { points: [V3, V3, V3]; normals: [V3, V3, V3]; color: string; gloss: number }
 export interface AccessoryMesh { faces: AccessoryFace[]; roots: V3[] }
@@ -22,9 +23,9 @@ export function accessoryMesh(outfit: string, sway = 0, small = false): Accessor
 
 function buildAccessoryMesh(outfit: string, sway: number, small: boolean): AccessoryMesh {
   const faces: AccessoryFace[] = [], roots: V3[] = [];
-  const n = small ? 12 : 16;
+  const n = small ? 8 : 10;
   const patch = (fn: (u: number, v: number) => V3, color: string, gloss = 0.12,
-    nu = n, nv = small ? 5 : 8) => {
+    nu = n, nv = small ? 4 : 5) => {
     const grid = Array.from({ length: nu + 1 }, (_, i) => Array.from({ length: nv + 1 }, (_, j) => {
       const u = i / nu, v = j / nv, e = 0.0001;
       const a = fn(Math.max(0, u - e), v), b = fn(Math.min(1, u + e), v);
@@ -85,7 +86,9 @@ function buildAccessoryMesh(outfit: string, sway: number, small: boolean): Acces
     // Rounded base nestles into the head instead of ending in a hard edge.
     ellipsoid([center, 0.77, 0.02], [width, 0.13, 0.22], fox ? "#C87838" : "#454957");
   };
-  if (outfit.startsWith("lol")) {
+  if (outfit.startsWith("ow")) {
+    overwatchAccessory(outfit, { patch, ellipsoid, tube, roots });
+  } else if (outfit.startsWith("lol")) {
     leagueAccessory(outfit, { patch, ellipsoid, tube, roots }, sway, small);
   } else if (outfit === "catEars" || outfit === "foxEars") {
     for (const side of [-1, 1]) ear(side, outfit === "foxEars");

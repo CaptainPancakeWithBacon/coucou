@@ -19,7 +19,7 @@ export function leagueAccessory(outfit: string, s: LeagueSculpt, sway: number, s
       const r = width * (0.85 + Math.sin(u*Math.PI)*0.15) * Math.pow(1-u,0.4), angle=v*Math.PI*2;
       return [c[0]-dy/len*r*Math.cos(angle)+sway*u*u*0.04,
         c[1]+dx/len*r*Math.cos(angle),c[2]+r*Math.sin(angle)];
-    },color,gloss,small?8:16,small?6:10);
+    },color,gloss,small?4:6,small?4:6);
   };
   const cap = (color: string, height = 1.06) => {
     patch((u,v) => {
@@ -44,7 +44,7 @@ export function leagueAccessory(outfit: string, s: LeagueSculpt, sway: number, s
     for(const front of [true,false])patch((u,v)=>shell(u,v,front),outer,0.18);
     for(const edge of [0,1])patch((u,v)=>{
       const a=shell(edge,u,false),b=shell(edge,u,true);return[a[0],a[1],a[2]+v*(b[2]-a[2])];
-    },outer,0.2,small?8:16,3);
+    },outer,0.2,small?4:6,3);
     patch((u,v)=> {
       const t=0.17+v*0.64, p=shell(0.19+u*0.62,t,true);
       return [p[0],p[1],p[2]+0.013+Math.abs(u*2-1)*0.025];
@@ -74,7 +74,7 @@ export function leagueAccessory(outfit: string, s: LeagueSculpt, sway: number, s
         const phase=u*Math.PI*7+strand*Math.PI*2/3, r=0.06*(1-u*0.55), a=v*Math.PI*2;
         return [side*(0.91+Math.sin(u*3)*0.19)+Math.cos(phase)*0.065+r*Math.cos(a)+sway*u*0.1,
           0.65-u*1.48,-0.17+Math.sin(phase)*0.065+r*Math.sin(a)];
-      },strand===1?"#46AFE0":"#1687C1",0.25,small?12:28,6);
+      },strand===1?"#46AFE0":"#1687C1",0.25,small?8:14,6);
       ring([side*1.03,-0.63,-0.16],0.11,0.035,0.035,"#6C3C70");
       lock([[side*1.03,-0.72,-0.16],[side*1.1,-0.8,-0.18],[side*1.15,-0.94,-0.16],[side*0.98,-1.02,-0.1]],0.12,"#2E9ACD");
     }

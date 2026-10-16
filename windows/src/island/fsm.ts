@@ -50,6 +50,8 @@ export class IslandStateMachine {
 
   private homeDelay = 15;
   private byHover = false;
+  /** Manual collapse cannot immediately reopen from the same pointer hover. */
+  private hoverNeedsExit = false;
   private petitHide: number | null = null;
   private homeCollapse: number | null = null;
   private greetCollapse: number | null = null;
@@ -62,6 +64,7 @@ export class IslandStateMachine {
   }
 
   mouseEntered() {
+    if (this.hoverNeedsExit) return;
     if (this.openOnHover && (this.state === "hidden" || this.state === "petit") && !this.pinned) {
       this.cancelTimers();
       this.byHover = true;
@@ -86,6 +89,7 @@ export class IslandStateMachine {
   }
 
   mouseLeft() {
+    this.hoverNeedsExit = false;
     switch (this.state) {
       case "hidden":
         break;
@@ -142,7 +146,8 @@ export class IslandStateMachine {
   }
 
   /// Explicit close (OK button, Escape, an alert being answered).
-  forcePetit() {
+  forcePetit(waitForMouseExit = false) {
+    this.hoverNeedsExit = waitForMouseExit && this.openOnHover;
     this.byHover = false;
     this.cancelTimers();
     this.transition("petit");
