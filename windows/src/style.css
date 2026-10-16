@@ -276,6 +276,7 @@ body {
 }
 
 .view.on {
+  visibility: visible;
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
@@ -285,8 +286,14 @@ body {
 /* A view that is not on is only transparent, not gone: an infinite animation
    inside it (the drop frame's marching dashes) would keep the webview
    repainting every frame for as long as the app runs, island hidden or not. */
+/* Hidden cards must not retain invisible interactive descendants when a
+   notification/update card replaces the wardrobe. */
+.view:not(.on) {
+  visibility: hidden;
+}
 .view:not(.on) * {
   animation-play-state: paused;
+  pointer-events: none;
 }
 
 /* ── Cards ──────────────────────────────────────────────────────────────── */
