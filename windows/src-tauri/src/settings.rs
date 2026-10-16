@@ -19,6 +19,9 @@ pub struct Settings {
     /// Hovering the island opens it all the way, and it folds again shortly
     /// after the pointer leaves (the Mac's "Open on hover"). Off by default.
     pub open_on_hover: bool,
+    /// The compact island stays on screen when idle (off: it hides after a minute
+    /// and a hover at the top edge brings it back).
+    pub keep_visible: bool,
     /// Mochi dances on the beat of the music, found by listening to the
     /// speakers' output (beat.rs, Linux). Off by default.
     pub beat_sync: bool,
@@ -139,6 +142,7 @@ impl Default for Settings {
             sound_volume: 0.12,
             auto_close_interval: 15.0,
             open_on_hover: false,
+            keep_visible: true,
             beat_sync: false,
             chat_memory: false,
             show_notifications: false,
@@ -491,6 +495,7 @@ mod tests {
   "soundVolume": 0.5,
   "autoCloseInterval": 30.0,
   "openOnHover": true,
+  "keepVisible": false,
   "beatSync": true,
   "chatMemory": false,
   "showNotifications": false,
@@ -1003,6 +1008,7 @@ mod tests {
                 "soundVolume",
                 "autoCloseInterval",
                 "openOnHover",
+                "keepVisible",
                 "beatSync",
                 "chatMemory",
                 "showNotifications",

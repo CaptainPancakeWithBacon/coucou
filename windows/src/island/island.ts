@@ -327,6 +327,7 @@ export class Island {
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.openOnHover = State.settings.openOnHover;
+    this.fsm.keepVisible = State.settings.keepVisible;
     this.fsm.onTransition = (from, to) => {
       // The greeting is over, however it ended: back to his desktop spot.
       if (from === "coucou" && to !== "coucou") this.desktop.launch();
@@ -486,6 +487,11 @@ export class Island {
     }
     if (State.paused) return;
     this.alert("wardrobe");
+  }
+
+  /** Keep the island open until `dropPin` (a card that must be seen). */
+  stay() {
+    this.fsm.pinned = true;
   }
 
   /** An alert stopped waiting for an answer: let the island auto-close again. */
@@ -1267,6 +1273,7 @@ export class Island {
     Sound.setVolume(State.settings.soundVolume);
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
     this.fsm.openOnHover = State.settings.openOnHover;
+    this.fsm.keepVisible = State.settings.keepVisible;
     State.notify();
   }
 

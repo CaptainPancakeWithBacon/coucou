@@ -104,6 +104,27 @@ function notificationAppsRow(): HTMLElement {
   return box;
 }
 
+/** "Check for updates": asks the release page now instead of waiting for the hourly look. */
+function updateRow(): HTMLElement {
+  const status = h("span", { class: "hint" });
+  const button = h("button", { text: t("Check for updates") });
+  button.addEventListener("click", () => {
+    button.setAttribute("disabled", "true");
+    status.textContent = "";
+    void Bridge.checkForUpdates()
+      .then((r) => {
+        status.textContent =
+          r === "available" ? t("A new version is out. See the card in the island.")
+          : r === "current" ? t("Coucou is up to date.")
+          : r === "unstamped" ? t("This build does not check for updates.")
+          : t("Could not check. Try again later.");
+      })
+      .catch(() => { status.textContent = t("Could not check. Try again later."); })
+      .finally(() => button.removeAttribute("disabled"));
+  });
+  return h("div", { class: "row" }, h("label", { text: t("Updates") }), button, status);
+}
+
 function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   const el = h("button", { class: on ? "switch on" : "switch", "aria-pressed": on });
   el.addEventListener("click", () => {
@@ -933,6 +954,25 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
 // ── General section ───────────────────────────────────────────────────────────
 
+/** The notifications page: the switch for the island's mirror and one switch per app. */
+function notificationsSection(): HTMLElement {
+  return h(
+    "section",
+    {},
+    h("h2", {}, h("span", { text: t("Notifications") })),
+    h("div", { class: "row" },
+      h("label", { text: t("Notifications in the island") }),
+      toggle(settings.showNotifications, (v) => {
+        settings.showNotifications = v;
+        void save();
+        void render();
+      }),
+    ),
+    h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
+    notificationAppsRow(),
+  );
+}
+
 function generalSection(): HTMLElement {
   const volume = h("input", {
     type: "range", min: "0", max: "0.2", step: "0.005",
@@ -1023,11 +1063,11 @@ function generalSection(): HTMLElement {
     ),
     h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
     h("div", { class: "row" },
-      h("label", { text: t("Notifications in the island") }),
-      toggle(settings.showNotifications, (v) => { settings.showNotifications = v; void save(); }),
+      h("label", { text: t("Keep Mochi on screen") }),
+      toggle(settings.keepVisible, (v) => { settings.keepVisible = v; void save(); }),
     ),
-    h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
-    notificationAppsRow(),
+    h("div", { class: "hint", text: t("Off: when nothing happens for a minute the island hides, and moving the pointer to the top edge brings it back.") }),
+    updateRow(),
     sendLogRow(),
     ...(HOST_OS === "linux" ? [
       h("div", { class: "row" },
@@ -1444,6 +1484,7 @@ async function render() {
   const sections: Partial<Record<PageId, () => HTMLElement[]>> = {
     general: () => [generalSection()],
     pills: () => [activePillsSection(connected)],
+    notifications: () => [notificationsSection()],
     agents: () => [claudeSection(status), agentsSection(agents), planSection(status)],
     chat: () => [apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     integrations: () => [integrationsSection(present)],

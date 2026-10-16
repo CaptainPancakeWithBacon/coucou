@@ -17,6 +17,7 @@ const island = {
   setView: (view) => asked.push(`setView:${view}`),
   reveal: () => asked.push("reveal"),
   dropPin: () => asked.push("dropPin"),
+  stay: () => asked.push("stay"),
 };
 registerHookHandlers(island);
 
@@ -772,6 +773,13 @@ test("an update notice from Coucou shows even with notification mirroring off", 
   notice({ app: "Coucou", summary: "Update available", body: "Fixes the notifications", target: "https://github.com/x/y" });
   assert.equal(task("agent_notifications").noticeTarget, "https://github.com/x/y");
   assert.match(task("agent_notifications").finalLine, /Coucou: Update available/);
+  // A new version waits for a look: the island stays open, for two minutes.
+  assert.ok(asked.includes("stay"));
+  seconds(9);
+  assert.equal(task("agent_notifications").state, "finished");
+  seconds(120);
+  assert.equal(task("agent_notifications").state, "idle");
+  assert.ok(asked.includes("dropPin"));
 });
 
 test("the 'Something isn't working' card sends the log through the same button", () => {
