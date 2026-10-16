@@ -58,7 +58,10 @@ export function drawSimpleAccessory(ctx:CanvasRenderingContext2D,outfit:string,h
   const parts=accessoryParts(outfit).map(part=>({part,points:part.points.map(p=>projectAccessory(p,h))}))
     .sort((a,b)=>a.points.reduce((n,p)=>n+p.z,0)/a.points.length-b.points.reduce((n,p)=>n+p.z,0)/b.points.length);
   ctx.save();
-  if(front)ctx.clip(body);
+  // Do not clip the entire foreground accessory to Mochi's silhouette.
+  // Ears, horns, wings and headpieces extend beyond the body as the head turns;
+  // per-surface depth clipping below decides which portions are occluded.
+  void body;
   for(const {part,points} of parts) {
     const color=materialColor(part.color,style);
     const contour=front?visibleAccessory(points,h):points;
