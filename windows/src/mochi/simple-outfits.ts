@@ -72,7 +72,8 @@ export function drawSimpleAccessory(ctx:CanvasRenderingContext2D,outfit:string,h
       ctx.save();ctx.translate(h.R*.025,h.R*.035);ctx.fillStyle='rgba(18,21,35,.15)';ctx.fill(outline,'evenodd');ctx.restore();
     }
     if(part.depth>0&&!part.glass) {
-      const back=part.points.map(([x,y,z])=>projectAccessory([x,y,z-part.depth],h));
+      const axis=part.axis??[0,0,1];
+      const back=part.points.map(([x,y,z])=>projectAccessory([x-axis[0]*part.depth,y-axis[1]*part.depth,z-axis[2]*part.depth],h));
       const walls=new Path2D();
       for(let i=0;i<points.length;i++) {
         const j=(i+1)%points.length;
@@ -84,12 +85,21 @@ export function drawSimpleAccessory(ctx:CanvasRenderingContext2D,outfit:string,h
       ctx.fillStyle=shade(color,.66);ctx.fill(walls);
     }
     const xs=contour.map(p=>p.x),ys=contour.map(p=>p.y);
-    const g=ctx.createLinearGradient(Math.min(...xs),Math.min(...ys),Math.max(...xs)+.01,Math.max(...ys)+.01);
-    g.addColorStop(0,shade(color,1.20));g.addColorStop(.38,color);g.addColorStop(1,shade(color,.71));
+    const left=Math.min(...xs),top=Math.min(...ys),right=Math.max(...xs),bottom=Math.max(...ys);
+    const g=part.round&&!part.glass
+      ?ctx.createRadialGradient(left+(right-left)*.3,top+(bottom-top)*.25,0,(left+right)/2,(top+bottom)/2,Math.max(right-left,bottom-top)*.66+.01)
+      :ctx.createLinearGradient(left,top,right+.01,bottom+.01);
+    let light=1;
+    if(part.panel) {
+      const [a,b,c]=part.points,u=b.map((p,i)=>p-a[i]),v=c.map((p,i)=>p-a[i]);
+      const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],length=Math.hypot(...n)||1,sign=n[2]<0?-1:1;
+      light=.82+.22*Math.max(0,(-n[0]*.4+n[1]*.65+n[2]*.65)*sign/length);
+    }
+    g.addColorStop(0,shade(color,1.20*light));g.addColorStop(.38,shade(color,light));g.addColorStop(1,shade(color,.71*light));
     ctx.save();
     if(part.glass)ctx.globalAlpha*=.38;
     ctx.fillStyle=g;ctx.fill(outline,'evenodd');
-    if(!part.face&&!part.glass) {ctx.strokeStyle=shade(color,.62);ctx.lineWidth=h.R*.012;ctx.stroke(outline);}
+    if(!part.face&&!part.glass&&!part.panel) {ctx.strokeStyle=shade(color,.62);ctx.lineWidth=h.R*.012;ctx.stroke(outline);}
     if(part.glass) {
       ctx.globalAlpha*=.7;ctx.strokeStyle='#FFF6D8';ctx.lineWidth=h.R*.025;
       const a=contour[9],b=contour[12];if(a&&b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}

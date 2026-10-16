@@ -1,6 +1,6 @@
 import { h, svg } from "./dom";
 import { ICONS } from "./icons";
-import { parseDiffStep, type FileDiff } from "../core/diff";
+import { fileName, parseDiffStep, type FileDiff } from "../core/diff";
 import type { AgentTask } from "../core/state";
 import { tl } from "../i18n/i18n";
 
@@ -9,9 +9,9 @@ export function buildSessionDetail(task: AgentTask, files: FileDiff[], back: () 
   openDiff: (id: number) => void): HTMLElement {
   const rows = h("div", { class: "session-history-rows" });
   for (const file of [...files].reverse()) {
-    rows.append(h("button", { class: "session-history-file", title: file.path,
+    rows.append(h("button", { class: "session-history-file", title: file.path, "aria-label": file.path,
       onclick: () => openDiff(file.id) },
-    h("span", { text: file.path }),
+    h("span", {}, h("span", { text: fileName(file.path) }), h("span", { class: "session-history-path", text: file.path })),
     h("span", { class: "tick-count plus", text: `+${file.added}` }),
     h("span", { class: "tick-count minus", text: `−${file.removed}` })));
   }
