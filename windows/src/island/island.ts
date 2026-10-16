@@ -449,7 +449,7 @@ export class Island {
     // Drive the state machine rather than the mode: setting the mode behind its
     // back left it thinking the island was still open, and a click on the compact
     // island then did nothing — the island could never be reopened.
-    this.fsm.forcePetit();
+    this.fsm.forcePetit(this.wasInIsland);
   }
 
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
@@ -807,6 +807,12 @@ export class Island {
       }
       if (State.mode !== "expanded") {
         this.fsm.click();
+        return;
+      }
+      // The empty header space between the + tab and agent status closes the island.
+      // Interactive header buttons keep their own click actions.
+      if (e.button === 0 && e.target === this.header.el) {
+        this.collapse();
         return;
       }
       if (this.isBotHit(e.clientX, e.clientY)) {
