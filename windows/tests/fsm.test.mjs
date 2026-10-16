@@ -377,3 +377,36 @@ test("open on hover: an island opened by an alert keeps the normal delay", () =>
   seconds(2);
   assert.equal(fsm.state, "petit");
 });
+
+
+test("manual collapse with open-on-hover waits for pointer exit before reopening", () => {
+  fsm.openOnHover = true;
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "home");
+  fsm.forcePetit(true);
+  assert.equal(fsm.state, "petit");
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit", "hover cannot undo the manual close");
+  fsm.mouseLeft();
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "home", "a new hover after leaving opens again");
+});
+
+test("manual collapse keeps clicking to reopen available", () => {
+  fsm.openOnHover = true;
+  fsm.mouseEntered();
+  fsm.forcePetit(true);
+  fsm.click();
+  assert.equal(fsm.state, "home");
+});
+
+test("without hover-to-open, manual collapse keeps normal behavior", () => {
+  fsm.mouseEntered();
+  fsm.click();
+  fsm.forcePetit(true);
+  fsm.mouseLeft();
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit");
+  fsm.click();
+  assert.equal(fsm.state, "home");
+});
