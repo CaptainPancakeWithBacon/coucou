@@ -24,6 +24,9 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    # The log webhook is a secret of this environment, which only `main` may use:
+    # a branch (or a collaborator's workflow on one) cannot read it.
+    environment: friends-release
     defaults:
       run:
         working-directory: windows
@@ -31,7 +34,8 @@ jobs:
       # Stamped into the program: it is what the update check compares with.
       COUCOU_BUILD_SHA: ${{ github.sha }}
       # Where "Send log" posts (windows/src-tauri/src/report.rs). A repository
-      # secret; without it the build simply has no such button.
+      # secret of the friends-release environment; without it the build simply has
+      # no such button.
       COUCOU_LOG_WEBHOOK: ${{ secrets.COUCOU_LOG_WEBHOOK }}
 
     steps:
