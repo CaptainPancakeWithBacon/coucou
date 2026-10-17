@@ -1050,10 +1050,10 @@ function generalSection(): HTMLElement {
     void save();
   });
 
-  const opacity = h("input", { type: "range", min: "20", max: "100", step: "1", value: String(settings.islandOpacity ?? 100) }) as HTMLInputElement;
-  const opacityValue = h("span", { class: "hint", text: `${settings.islandOpacity ?? 100}%` });
+  const opacity = h("input", { type: "range", min: "50", max: "100", step: "1", value: String(Math.max(50, settings.islandOpacity ?? 100)) }) as HTMLInputElement;
+  const opacityValue = h("span", { class: "hint", text: `${Math.max(50, settings.islandOpacity ?? 100)}%` });
   opacity.addEventListener("input", () => {
-    settings.islandOpacity = Number(opacity.value);
+    settings.islandOpacity = Math.max(50, Number(opacity.value));
     opacityValue.textContent = `${settings.islandOpacity}%`;
     void save();
   });
