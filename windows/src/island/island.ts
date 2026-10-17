@@ -250,7 +250,7 @@ export class Island {
         State.notify();
       },
       setIslandOpacity: (percent) => {
-        State.settings.islandOpacity = Math.max(20, Math.min(100, percent));
+        State.settings.islandOpacity = Math.max(50, Math.min(100, percent));
         this.islandEl.style.opacity = String(Math.max(50, Math.min(100, State.settings.islandOpacity ?? 100)) / 100);
         void Bridge.saveSettings(State.settings);
         State.notify();
