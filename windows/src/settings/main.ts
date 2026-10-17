@@ -79,7 +79,7 @@ function sendLogRow(): HTMLElement {
 
 /** One switch per app that has notified: on = shown in the island. */
 function notificationAppsRow(): HTMLElement {
-  const box = h("div");
+  const box = h("div", { class: "notification-app-list" });
   let shown = "";
   const fill = () => void Bridge.notificationApps().then((apps) => {
     const key = `${settings.showNotifications}|${(apps ?? []).join("|")}`;
@@ -90,8 +90,8 @@ function notificationAppsRow(): HTMLElement {
     box.append(h("div", { class: "hint", text: t("Show notifications from:") }));
     for (const app of apps) {
       const muted = settings.mutedNotificationApps.some((m) => m.toLowerCase() === app.toLowerCase());
-      box.append(h("div", { class: "row" },
-        h("label", { text: app }),
+      box.append(h("div", { class: "row notification-app-row" },
+        h("label", { text: app, title: app }),
         toggle(!muted, (on) => {
           const rest = settings.mutedNotificationApps.filter((m) => m.toLowerCase() !== app.toLowerCase());
           settings.mutedNotificationApps = on ? rest : [...rest, app];
