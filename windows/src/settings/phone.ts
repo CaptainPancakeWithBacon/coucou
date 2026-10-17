@@ -16,8 +16,21 @@ type Toggle = (on: boolean, onChange: (v: boolean) => void) => HTMLElement;
  */
 const SHOW_RELAY_SETTINGS = false;
 
+function phoneHelp(message: string): HTMLElement {
+  return h("span", { class: "setting-help", tabindex: "0", role: "note",
+    "aria-label": t(message), "data-help": t(message), text: "?" });
+}
+function phoneGroup(name: string, ...children: HTMLElement[]): HTMLElement {
+  return h("div", { class: "phone-group" }, h("h3", { text: t(name) }), ...children);
+}
+function phoneSetting(name: string, explanation: string, control: HTMLElement): HTMLElement {
+  return h("div", { class: "row phone-setting" },
+    h("div", { class: "setting-name" }, h("label", { text: t(name) }), phoneHelp(explanation)),
+    h("div", { class: "setting-controls" }, control));
+}
+
 export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings): HTMLElement {
-  const detail = h("div", {});
+  const detail = h("div", { class: "phone-groups" });
   const note = h("div", { class: "hint" });
   /** Where the pairing code is drawn, so showing it never hides the switches below. */
   const pairingBox = h("div", {});
@@ -58,19 +71,16 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
     const address = status.host ? `${status.host}:${status.port}` : `:${status.port}`;
     clients.textContent = t("Phones connected: {count}", { count: status.clients });
     detail.append(
-      h("div", { class: "row" }, show),
-      pairingBox,
-      clients,
-      h("div", { class: "hint", text: t("The phone connects to {address}", { address }) }),
-      h("div", { class: "hint", text: t("If Windows asks about the firewall, allow Coucou on private networks. The phone and this computer must be on the same Wi-Fi.") }),
-      h("div", { class: "hint", text: t("Your phone finds this computer again by itself when the network changes. It is announced on your local network only while this switch is on. Some hotspots and guest networks block this.") }),
-      ...(SHOW_RELAY_SETTINGS ? [relayBlock(makeToggle, () => void refreshPairing())] : []),
-      detailsBlock(makeToggle),
-      answersBlock(makeToggle),
-      diffsBlock(makeToggle),
-      usageBlock(makeToggle),
-      servicesBlock(),
-      chatBlock(makeToggle, settings),
+      phoneGroup("Connection",
+        h("div", { class: "phone-connection-status" }, clients,
+          h("span", { class: "hint", text: t("The phone connects to {address}", { address }) }),
+          phoneHelp("Both devices must be on the same Wi-Fi. Allow Coucou through the private network firewall. Guest networks may block discovery.")),
+        h("div", { class: "row" }, show),
+        pairingBox,
+        ...(SHOW_RELAY_SETTINGS ? [relayBlock(makeToggle, () => void refreshPairing())] : [])),
+      phoneGroup("Sessions & approvals", detailsBlock(makeToggle), answersBlock(makeToggle), diffsBlock(makeToggle)),
+      phoneGroup("Usage & services", usageBlock(makeToggle), servicesBlock()),
+      phoneGroup("AI chat", chatBlock(makeToggle, settings)),
     );
   };
 
@@ -106,7 +116,7 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
     h("h2", {}, h("span", { text: t("Android phone") })),
     h("div", { class: "hint", text: t("Send your agents' sessions to Coucou for Android and answer permission requests from the phone. Off by default; it only listens on your local network.") }),
     h("div", { class: "hint", text: t("Allow on the phone asks for the fingerprint or the screen lock. Deny does not.") }),
-    h("div", { class: "row" }, h("label", { text: t("Phone link") }), switchEl),
+    phoneSetting("Phone link", "Connect over local Wi-Fi. Allow requires your phone fingerprint or screen lock.", switchEl),
     note,
     detail,
   );
