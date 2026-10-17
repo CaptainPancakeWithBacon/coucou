@@ -21,16 +21,32 @@ export function visibleAccessory(points: readonly Projected[], h: Head): Project
     return p.z-headSurface(x,y);
   };
   const out:Projected[]=[];
+  // An edge can cross the head silhouette even when *both endpoints* are
+  // occluded. Testing only the original polygon vertices makes a whole layer
+  // suddenly pop in or out as the character rotates. Sample the projected
+  // edges before clipping, so those intermediate visible arcs survive.
+  const sample=(a:Projected,b:Projected,t:number):Projected=>({
+    x:a.x+(b.x-a.x)*t,
+    y:a.y+(b.y-a.y)*t,
+    z:a.z+(b.z-a.z)*t,
+  });
+  const edgeSteps=16;
   for(let i=0;i<points.length;i++) {
-    const a=points[i],b=points[(i+1)%points.length],fa=clearance(a),fb=clearance(b);
-    if(fa>=0)out.push(a);
-    if((fa>=0)!==(fb>=0)) {
-      let lo=0,hi=1;
-      for(let k=0;k<7;k++) {
-        const t=(lo+hi)/2,q={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};
-        if((clearance(q)>=0)===(fa>=0))lo=t;else hi=t;
+    const a=points[i],b=points[(i+1)%points.length];
+    for(let step=0;step<edgeSteps;step++) {
+      const p=sample(a,b,step/edgeSteps);
+      const q=sample(a,b,(step+1)/edgeSteps);
+      const fp=clearance(p),fq=clearance(q);
+      if(fp>=0)out.push(p);
+      if((fp>=0)!==(fq>=0)) {
+        let lo=0,hi=1;
+        for(let k=0;k<9;k++) {
+          const mid=(lo+hi)/2;
+          if((clearance(sample(p,q,mid))>=0)===(fp>=0))lo=mid;
+          else hi=mid;
+        }
+        out.push(sample(p,q,(lo+hi)/2));
       }
-      const t=fa>=0?lo:hi;out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t});
     }
   }
   return out;
