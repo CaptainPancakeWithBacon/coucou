@@ -117,6 +117,9 @@ pub fn setup(app: &AppHandle) {
         }
         match builder.build() {
             Ok(win) => {
+                // A parked/preloaded Windows WebView must never intercept the
+                // pointer before dictation (or another explicit activity) starts.
+                let _ = win.set_ignore_cursor_events(true);
                 if !platform::prepare_pill_window(&win, mode) {
                     let _ = win.destroy();
                     mode = DesktopMode::Off;
@@ -197,6 +200,9 @@ fn show(app: &AppHandle, pill: &Pill, visible: bool) {
     match pill.mode {
         DesktopMode::Poll => {
             if !visible {
+                let _ = win.set_ignore_cursor_events(true);
+                pill.hot.lock().unwrap().clear();
+                pill.hovered.store(false, Ordering::Relaxed);
                 let _ = win.set_position(PhysicalPosition::new(PARKED.0, PARKED.1));
             }
             let (lock, cv) = &pill.poll;

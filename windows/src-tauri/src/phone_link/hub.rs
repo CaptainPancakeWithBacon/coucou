@@ -28,7 +28,8 @@ pub const APPROVAL_TTL_MS: u64 = 115_000;
 const MAX_SESSIONS: usize = 16;
 const MAX_COMMAND_CHARS: usize = 500;
 const MAX_TEXT_CHARS: usize = 200;
-/// Details (cap `details`): at most this many steps per session, each cut at MAX_TEXT_CHARS.
+const MAX_STEP_CHARS: usize = 1000;
+/// Details (cap `details`): at most this many steps, each cut at MAX_STEP_CHARS.
 pub const MAX_STEPS: usize = 20;
 const MAX_PROJECT_CHARS: usize = 64;
 /// A `sessions` line with details stays under this, so it never reaches the 64 KiB limit of a line
@@ -1032,9 +1033,9 @@ fn clean_files(files: &[FileIn]) -> Vec<FileIn> {
     kept[kept.len().saturating_sub(MAX_FILES)..].to_vec()
 }
 
-/// The last MAX_STEPS non-empty steps, each cut to MAX_TEXT_CHARS.
+/// The last MAX_STEPS non-empty steps, each cut to MAX_STEP_CHARS.
 fn clean_steps(steps: &[String]) -> Vec<String> {
-    let kept: Vec<String> = steps.iter().filter(|s| !s.trim().is_empty()).map(|s| clip(s, MAX_TEXT_CHARS)).collect();
+    let kept: Vec<String> = steps.iter().filter(|s| !s.trim().is_empty()).map(|s| clip(s, MAX_STEP_CHARS)).collect();
     kept[kept.len().saturating_sub(MAX_STEPS)..].to_vec()
 }
 
@@ -1224,10 +1225,10 @@ mod tests {
     #[test]
     fn only_the_last_twenty_steps_are_kept_each_cut_short_and_empties_dropped() {
         let mut s = rich("a");
-        s.steps = (0..30).map(|i| format!("step {i}")).chain([String::new(), "   ".into(), "x".repeat(500)]).collect();
+        s.steps = (0..30).map(|i| format!("step {i}")).chain([String::new(), "   ".into(), "x".repeat(MAX_STEP_CHARS + 1)]).collect();
         let steps = clean_steps(&s.steps);
         assert_eq!(steps.len(), MAX_STEPS);
-        assert_eq!(steps.last().unwrap().chars().count(), MAX_TEXT_CHARS);
+        assert_eq!(steps.last().unwrap().chars().count(), MAX_STEP_CHARS);
         assert_eq!(steps[0], "step 11");
         assert!(clean_steps(&[]).is_empty());
     }
@@ -1681,9 +1682,9 @@ mod tests {
     }
 
     #[test]
-    fn the_outfit_list_is_the_one_of_the_island() {
+    fn the_phone_outfit_list_matches_the_islands_classic_row() {
         let ts = include_str!("../../../src/mochi/wardrobe.ts");
-        let body = ts.split("export const OUTFIT_SELECTIONS = [").nth(1).unwrap().split("] as const").next().unwrap();
+        let body = ts.split("export const CLASSIC_OUTFITS = [").nth(1).unwrap().split("] as const").next().unwrap();
         let ids: Vec<&str> = body.split('"').skip(1).step_by(2).collect();
         assert_eq!(ids, OUTFIT_CHOICES.to_vec());
     }

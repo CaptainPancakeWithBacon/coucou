@@ -110,6 +110,10 @@ export interface Settings {
   keepVisible: boolean;
   /** Mochi dances on the beat of the music (Linux; listens to the speakers' output). */
   beatSync: boolean;
+  /** Output used for Spotify beat analysis; empty follows the default device. */
+  beatOutput: string;
+  /** Opacity of the entire island, as percent. */
+  islandOpacity: number;
   /** The Claude Code chat shares the user's memory notes (Linux; claude_cli.rs). */
   chatMemory: boolean;
   /** Desktop notifications shown in the island (Linux; notifications.rs). */
@@ -117,14 +121,15 @@ export interface Settings {
   /** Apps whose notifications stay out of the island. */
   mutedNotificationApps: string[];
   absenceInterval: number;
-  /** Declared pills next to the main one (at most 4), in the order they were added. */
+  /** Declared pills next to the main one (at most 8), in the order they were added. */
   activeIntegrations: string[];
   /** The always-on workspace pill: VS Code, Cursor, Codex or Antigravity. */
   mainPill: string;
   /** "primary", "cursor", or `at:<x>,<y>` for one display (logical origin). */
   screen: string;
   /** Where along the top edge the island sits. */
-  islandAlign: "center" | "left" | "right";
+  islandAlign: "center" | "left" | "right" | "custom";
+  islandCustomPosition: [number, number] | null;
   autostart: boolean;
   hooksInstalled: boolean;
   /** Claude model used by the chat. */
@@ -185,7 +190,9 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCloseInterval: 15,
   openOnHover: false,
   keepVisible: true,
-  beatSync: false,
+  beatSync: HOST_OS === "windows",
+  beatOutput: "",
+  islandOpacity: 100,
   chatMemory: false,
   showNotifications: false,
   mutedNotificationApps: [],
@@ -196,6 +203,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mainPill: DEFAULT_MAIN_PILL,
   screen: "primary",
   islandAlign: "center",
+  islandCustomPosition: null,
   autostart: false,
   hooksInstalled: false,
   model: "claude-opus-5",
@@ -434,7 +442,7 @@ class AppState {
       const idx = this.tasks.findIndex((t) => t.id === def.id);
       if (shouldLoad && idx < 0) this.tasks.push(taskFor(def, this.settings.pillColors));
       const busy = idx >= 0 && (this.tasks[idx].state !== "idle" || this.tasks[idx].steps.length > 0);
-      if (!shouldLoad && idx >= 0 && !busy) this.tasks.splice(idx, 1);
+      if (!shouldLoad && idx >= 0 && (!busy || def.id === "agent_notifications")) this.tasks.splice(idx, 1);
     }
     // A colour picked in Settings reaches the pills that are already up.
     for (const t of this.tasks) {

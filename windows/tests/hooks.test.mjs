@@ -25,6 +25,44 @@ const hook = (payload) => emit("hook", payload);
 const task = (id = CLAUDE) => State.tasks.find((t) => t.id === id);
 const seconds = (n) => mock.timers.tick(n * 1000);
 
+test("Codex can finish or report edits as its first event, and code-mode steps remain inspectable", () => {
+  State.tasks = [];
+  hook({ hook_event_name: "Stop", coucou_agent: "codex", session_id: "codex-first", last_assistant_message: "", message: "Changes complete" });
+  assert.equal(task("agent_codex").source, "agent");
+  assert.equal(task("agent_codex").name, "Codex");
+  assert.equal(task("agent_codex").finalLine, "Changes complete");
+  assert.equal(task("agent_codex").state, "finished");
+  assert.equal(task(CLAUDE), undefined);
+  State.tasks = [];
+  hook({ hook_event_name: "PostToolUse", coucou_agent: "codex", tool_name: "apply_patch", tool_input: { command: "*** Begin Patch\n*** Add File: codex.ts\n+hello\n*** End Patch" } });
+  assert.equal(State.sessionDiffs.get("agent_codex").at(-1).path, "codex.ts");
+  const code = "await tools.exec_command({cmd: 'cargo test'});";
+  hook({ hook_event_name: "PreToolUse", coucou_agent: "codex", tool_name: "functions.exec", tool_input: { code } });
+  assert.equal(task("agent_codex").steps.at(-1), `Runs · ${code}`);
+});
+
+test("Codex patches, exact shell steps and plans reach both the pill and phone snapshot", async () => {
+  const { linkSnapshot, linkDiff } = await import("../src/island/phone-link.ts");
+  const base = { coucou_agent: "codex", session_id: "codex-test", cwd: "C:/project" };
+  const command = 'npm test -- --run "src/core/long test path.test.ts"';
+  hook({ ...base, hook_event_name: "PreToolUse", tool_name: "exec_command", tool_input: { cmd: command } });
+  assert.equal(task("agent_codex").steps.at(-1), `Runs · ${command}`);
+  const patch = "*** Begin Patch\n*** Update File: a.ts\n@@\n-old\n+new\n*** Add File: b.ts\n+second\n*** End Patch";
+  hook({ ...base, hook_event_name: "PreToolUse", tool_name: "apply_patch", tool_input: { command: patch } });
+  hook({ ...base, hook_event_name: "PostToolUse", tool_name: "apply_patch", tool_input: { command: patch } });
+  const session = linkSnapshot().sessions.find(s => s.pillId === "agent_codex");
+  assert.ok(session.steps.some(s => s.includes(command)));
+  assert.deepEqual(session.files.map(f => f.name), ["a.ts", "b.ts"]);
+  const diff = linkDiff("agent_codex", session.files[0].id);
+  assert.ok(diff.lines.some(([kind, text]) => kind === "+" && text === "new"));
+  hook({ ...base, hook_event_name: "PreToolUse", tool_name: "update_plan", tool_input: { plan: [{ step: "Run the tests", status: "in_progress" }] } });
+  assert.match(task("agent_codex").steps.at(-1), /Run the tests/);
+  hook({ ...base, hook_event_name: "Stop", last_assistant_message: "Done" });
+  seconds(6);
+  assert.equal(task("agent_codex").finalLine, "Done");
+  assert.equal(State.sessionDiffs.get("agent_codex").length, 2);
+});
+
 beforeEach(() => {
   mock.timers.enable({ apis: ["setTimeout"] });
   asked = [];
@@ -105,9 +143,9 @@ test("a tool call shows as working, labelled with what it acts on", () => {
   };
   assert.equal(step("Bash", { command: "npm run build" }), "Runs · npm run build");
   assert.equal(task().state, "working");
-  assert.equal(step("Bash", { command: "c".repeat(50) }), `Runs · ${"c".repeat(40)}`);
-  assert.equal(step("Read", { file_path: "C:\\Users\\me\\proj\\.env" }), "Reads · .env");
-  assert.equal(step("Grep", { pattern: "x", path: "src/island/" }), "Searches · island");
+  assert.equal(step("Bash", { command: "c".repeat(50) }), `Runs · ${"c".repeat(50)}`);
+  assert.equal(step("Read", { file_path: "C:\\Users\\me\\proj\\.env" }), "Reads · C:\\Users\\me\\proj\\.env");
+  assert.equal(step("Grep", { pattern: "x", path: "src/island/" }), "Searches · src/island/");
   assert.equal(step("WebSearch", { query: "tauri" }), "Searches the web · tauri");
   assert.equal(step("Foo", {}), "Foo");
   assert.equal(step(undefined, undefined), "Tool");
@@ -230,7 +268,7 @@ test("an invalid or reserved agent tag falls back to the Claude Code pill", () =
   assert.equal(task().name, "proj");
 });
 
-test("an agent's pill goes away when its session ends, or 5.2 s after it stops", () => {
+test("Codex keeps its history after a turn and removes it only when the session ends", () => {
   hook({ hook_event_name: "SessionStart", coucou_agent: "gemini" });
   hook({ hook_event_name: "SessionEnd", coucou_agent: "gemini" });
   assert.equal(task("agent_gemini"), undefined);
@@ -239,6 +277,8 @@ test("an agent's pill goes away when its session ends, or 5.2 s after it stops",
   hook({ hook_event_name: "Stop", coucou_agent: "codex" });
   assert.equal(task("agent_codex").state, "finished");
   seconds(5.2);
+  assert.equal(task("agent_codex").state, "idle");
+  hook({ hook_event_name: "SessionEnd", coucou_agent: "codex" });
   assert.equal(task("agent_codex"), undefined);
 });
 

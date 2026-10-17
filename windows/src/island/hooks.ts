@@ -6,7 +6,7 @@
 // Code's (hook/src/normalize.rs), so one handler serves them all.
 
 import { Bridge, onEvent } from "../core/bridge";
-import { buildFileDiff, fileName, makeDiffStep, toOneLine } from "../core/diff";
+import { buildFileDiffs, fileName, makeDiffStep, toOneLine } from "../core/diff";
 import { Sound } from "../core/sound";
 import { State, type AskedQuestion } from "../core/state";
 import { pillDefinition } from "../core/pills";
@@ -114,19 +114,41 @@ const TOOL_LABELS: Record<string, string> = {
   replace_file_content: N_("Edits"),
   read_url_content: N_("Fetches"),
   search_web: N_("Searches the web"),
+  apply_patch: N_("Edits"),
+  exec_command: N_("Runs"),
+  shell_command: N_("Runs"),
+  exec: N_("Runs"),
+  update_plan: N_("Tasks"),
 };
 
 function stepLabel(tool: string, input: Record<string, unknown>): string {
+  tool = tool.replace(/^functions\./, "");
   const label = TOOL_LABELS[tool] ? t(TOOL_LABELS[tool]) : tool;
   const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : null);
-  const cmd = str("command");
-  if (cmd) return `${label} · ${cmd.slice(0, 40)}`;
+  const cmd = str("command") ?? str("cmd");
+  if (tool === "update_plan" && Array.isArray(input.plan)) {
+    const plan = input.plan.map(item => {
+      const entry = item as { step?: unknown; status?: unknown } | null;
+      return typeof entry?.step === "string" ? `${entry.status ?? ""}: ${entry.step}` : "";
+    }).filter(Boolean).join("\n");
+    if (plan) return `${label} · ${plan}`;
+  }
+  if (tool === "apply_patch") {
+    const patch = cmd ?? str("patch") ?? str("input") ?? "";
+    const paths = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)].map(m => m[1]);
+    return paths.length ? `${label} · ${paths.join(", ")}` : label;
+  }
+  if (cmd) return `${label} · ${cmd}`;
+  const code = str("code");
+  if (code) return `${label} · ${code}`;
   const path = str("path");
-  if (path) return `${label} · ${lastPathComponent(path)}`;
+  if (path) return `${label} · ${path}`;
   const file = str("file_path");
-  if (file) return `${label} · ${lastPathComponent(file)}`;
+  if (file) return `${label} · ${file}`;
   const query = str("query");
-  if (query) return `${label} · ${query.slice(0, 40)}`;
+  if (query) return `${label} · ${query}`;
+  const description = str("description") ?? str("explanation");
+  if (description) return `${label} · ${description}`;
   return label;
 }
 
@@ -219,10 +241,10 @@ function clearFinalLine(id: string) {
 function recordDiff(agentId: string, payload: HookPayload) {
   if (payload.coucou_diff_truncated) return;
   if (!State.tasks.some((t) => t.id === agentId)) return;
-  const diff = buildFileDiff(payload.tool_name ?? "", payload.tool_input ?? {});
-  if (!diff) return;
-  const id = State.appendSessionDiff(agentId, diff);
-  State.appendStep(agentId, makeDiffStep(fileName(diff.path), diff.added, diff.removed, id));
+  for (const diff of buildFileDiffs(payload.tool_name ?? "", payload.tool_input ?? {})) {
+    const id = State.appendSessionDiff(agentId, diff);
+    State.appendStep(agentId, makeDiffStep(fileName(diff.path), diff.added, diff.removed, id));
+  }
 }
 
 export function registerHookHandlers(island: Island) {
@@ -337,7 +359,9 @@ function handleHook(island: Island, payload: HookPayload) {
       State.updateTask(agentId, "thinking");
       // The field is `prompt`; reading `message` meant this step was always blank.
       const asked = payload.prompt ?? payload.message;
-      if (asked) State.appendStep(agentId, asked.slice(0, 60));
+      // Keep the complete prompt available in Details instead of discarding
+      // everything after the ticker's first 60 characters (notably Copilot CLI).
+      if (asked) State.appendStep(agentId, asked.slice(0, 4000));
       surface("overview", false);
       break;
     }
@@ -354,6 +378,7 @@ function handleHook(island: Island, payload: HookPayload) {
     }
 
     case "PostToolUse":
+      if (validAgent === "codex") ensurePill();
       supersedeStop();
       // The question was answered in the terminal: the card would be lying.
       if (
@@ -370,6 +395,7 @@ function handleHook(island: Island, payload: HookPayload) {
       break;
 
     case "PostToolUseFailure":
+      if (validAgent === "codex") ensurePill();
       supersedeStop();
       State.updateTask(agentId, "working");
       State.appendStep(agentId, t("⚠ failed"));
@@ -391,12 +417,13 @@ function handleHook(island: Island, payload: HookPayload) {
     }
 
     case "Stop": {
+      if (validAgent === "codex") ensurePill();
       State.updateTask(agentId, "finished");
       // Claude Code puts the turn's answer in the Stop payload itself, so there is
       // no transcript to read (the relay does not even forward its path). Other
       // agents report their last words the same way (Hermes, Codex) or as
       // `message`.
-      const finalText = toOneLine(payload.last_assistant_message ?? payload.message ?? "");
+      const finalText = toOneLine(payload.last_assistant_message || payload.message || "");
       if (finalText) {
         State.appendStep(agentId, finalText);
         const t = State.tasks.find((x) => x.id === agentId);
@@ -411,7 +438,7 @@ function handleHook(island: Island, payload: HookPayload) {
         agentId,
         window.setTimeout(() => {
           stopTimers.delete(agentId);
-          if (isExternalAgent) {
+          if (isExternalAgent && validAgent !== "codex") {
             State.removeTask(agentId);
           } else {
             State.updateTask(agentId, "idle");

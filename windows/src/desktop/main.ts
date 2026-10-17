@@ -1,3 +1,4 @@
+import { responsiveFrame } from "../core/frame-clock";
 // The desktop Mochi's own window (mochi.html): draws him, and turns clicks and
 // drags on him into pokes, flights home, the wardrobe and a new spot. Port of
 // DesktopBotView + the mouse half of DesktopMochiController (DesktopMochi.swift).
@@ -8,7 +9,7 @@
 // all while he sleeps.
 
 import { Bridge, emitToWindow, onEvent, type DesktopMode } from "../core/bridge";
-import { feedBeat, type BeatMessage } from "../mochi/beat";
+import { feedBeat, resetBeat, pauseBeat, resumeBeat, type BeatMessage } from "../mochi/beat";
 import type { BotEmoteName } from "../core/layout";
 import { Sound } from "../core/sound";
 import { BotEngine } from "../mochi/engine";
@@ -104,6 +105,14 @@ class DesktopMochi {
   // ── State ───────────────────────────────────────────────────────────────────
 
   private onSnapshot(s: DesktopSnapshot) {
+    if (s.beatTrack != null) {
+      const previous = this.snap;
+      const active = !!s.beatEnabled && !!s.beatPlaying;
+      const wasActive = !!previous.beatEnabled && !!previous.beatPlaying;
+      if (s.beatTrack !== previous.beatTrack || s.beatEnabled !== previous.beatEnabled) resetBeat(active);
+      else if (!active && wasActive) pauseBeat();
+      else if (active && !wasActive) resumeBeat();
+    }
     this.snap = s;
     this.informed = true;
     Sound.setEnabled(s.soundEnabled);
@@ -179,7 +188,7 @@ class DesktopMochi {
         this.timer = null;
         this.frame(performance.now());
       } else {
-        requestAnimationFrame((t) => {
+        responsiveFrame((t) => {
           this.timer = null;
           this.frame(t);
         });
@@ -209,7 +218,7 @@ class DesktopMochi {
       engine.lookY = g.lookY;
     }
     // Dances while Spotify plays, by the compact island's rules.
-    engine.setDancing(this.snap.dancing && !this.asleep);
+    engine.setDancing(this.snap.dancing && !this.asleep, this.snap.beatEnabled);
     engine.update(dt);
     const dpr = this.dpr();
     ctx.setTransform(dpr, 0, 0, dpr, SIDE * dpr, 0);

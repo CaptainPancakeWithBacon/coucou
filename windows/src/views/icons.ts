@@ -2,6 +2,10 @@
 // Drawn on a 24×24 grid so they read at the same optical size.
 
 export const ICONS = {
+  // Clothes hanger (stroked).
+  wardrobe: "M9 6a3 3 0 1 1 5 2.2L12 10v1L3.5 16a1.3 1.3 0 0 0 .7 2.4h15.6a1.3 1.3 0 0 0 .7-2.4L12 11",
+  // Half-filled circle: opacity / transparency.
+  opacity: "M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zM12 4a8 8 0 0 1 0 16V4z",
   // house.fill
   house: "M12 3.2 2.8 10.6V21h6.6v-5.4h5.2V21h6.6V10.6L12 3.2z",
   // bubble.left.fill
@@ -23,6 +27,7 @@ export const ICONS = {
   chevronRight: "M9 5.5 15.5 12 9 18.5",
   chevronLeft: "M15 5.5 8.5 12 15 18.5",
   // chevron.up
+  move: "M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3",
   chevronUp: "M5.5 15 12 8.5 18.5 15",
   // checkmark
   check: "M5 12.5 9.5 17 19 7.5",

@@ -8,6 +8,8 @@
 // Also home to `toOneLine` (Claude's final message → one line of plain text)
 // and the diff step encoding the ticker reads.
 
+import { patchDiffs } from "./patch-diff";
+
 export type DiffKind = "context" | "added" | "removed";
 
 export interface DiffLine {
@@ -35,6 +37,8 @@ export interface FileDiff {
   tooLarge: boolean;
   /** True when produced by fromNew (Write tool). */
   isNewFile: boolean;
+  /** The event reports deletion but does not contain the deleted file's text. */
+  unavailable?: boolean;
 }
 
 /** FileDiff.maxBytes / maxLines on macOS. */
@@ -107,6 +111,15 @@ export function fromNew(content: string, path: string): FileDiff {
  * HookServer.buildFileDiff — the diff of one Edit, MultiEdit or Write tool call,
  * or null when the call changes nothing (or is not a file edit at all).
  */
+export function buildFileDiffs(tool: string, input: Record<string, unknown>): FileDiff[] {
+  if (tool === "apply_patch" || tool === "functions.apply_patch") {
+    const patch = input.command ?? input.patch ?? input.input;
+    return typeof patch === "string" ? patchDiffs(patch) : [];
+  }
+  const diff = buildFileDiff(tool, input);
+  return diff ? [diff] : [];
+}
+
 export function buildFileDiff(tool: string, input: Record<string, unknown>): FileDiff | null {
   const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
   const path = str(input.file_path);

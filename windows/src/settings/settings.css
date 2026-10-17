@@ -431,3 +431,41 @@ html[dir="rtl"] :is(.diff, .path, .keycap, input[type="password"], input[type="t
 /* Settings → Android phone: the pairing QR code (an SVG from Rust, black on white). */
 .qr { width: 220px; max-width: 100%; background: #fff; border-radius: 8px; padding: 4px; }
 .qr svg { display: block; width: 100%; height: auto; }
+
+/* General: compact, consistent groups using the existing Coucou palette. */
+.general-groups { display:flex; flex-direction:column; gap:16px; min-width:0; }
+.general-group { gap:0; padding:18px 20px; }
+.general-group > h2 { font-size:13px; margin-bottom:9px; padding-bottom:10px; border-bottom:1px solid var(--hairline); }
+.general-group > .setting-row { min-height:49px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.045); }
+.general-group > .setting-row:last-child { border-bottom:0; }
+.setting-row { display:grid; grid-template-columns:minmax(170px, 42%) minmax(0, 1fr); column-gap:16px; align-items:center; }
+.setting-name { display:flex; gap:7px; align-items:center; min-width:0; }
+.setting-name label { font-size:12.5px; color:var(--dim); }
+.setting-controls { display:flex; align-items:center; flex-wrap:wrap; gap:12px; min-width:0; }
+.setting-controls select { max-width:100%; }
+.setting-actions { padding:12px 0 5px; gap:10px; }
+.setting-help { display:inline-grid; place-items:center; width:16px; height:16px; border:1px solid rgba(255,255,255,.19); border-radius:50%; font-size:10px; font-weight:600; color:var(--dim); cursor:help; position:relative; flex-shrink:0; }
+.setting-help:hover,.setting-help:focus-visible { color:var(--ink); border-color:rgba(255,255,255,.5); outline:none; }
+.setting-help:is(:hover,:focus-visible)::after { content:attr(data-help); position:absolute; z-index:50; bottom:calc(100% + 9px); left:0; width:max-content; max-width:min(300px, 75vw); white-space:normal; font:12px/1.5 var(--font); color:var(--ink); background:#22252b; padding:9px 11px; border:1px solid rgba(255,255,255,.16); border-radius:9px; box-shadow:0 10px 25px rgba(0,0,0,.45); pointer-events:none; }
+@media(max-width:620px) { .setting-row { grid-template-columns:minmax(0,1fr); row-gap:9px; } .setting-controls { padding-left:0; } .general-group { padding:15px; } }
+
+/* Notification app switches live only on the dedicated Notifications page. */
+.notification-app-list { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.notification-app-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:16px; min-height:32px; padding:4px 10px; border-radius:8px; background:rgba(255,255,255,.025); }
+.notification-app-row label { min-width:0; max-width:100%; overflow-wrap:anywhere; font-size:12px; }
+
+/* Android phone settings use Coucou's existing grouped settings language. */
+.phone-groups { display:flex; flex-direction:column; gap:16px; margin-top:7px; }
+.phone-group { padding:15px 17px; border:1px solid var(--hairline); border-radius:12px; background:rgba(255,255,255,.025); display:flex; flex-direction:column; gap:12px; min-width:0; }
+.phone-group h3 { font:600 12.5px var(--font); padding-bottom:10px; border-bottom:1px solid var(--hairline); }
+.phone-group > div { min-width:0; }
+.phone-setting { display:grid; grid-template-columns:minmax(170px, 1fr) auto; gap:18px; padding:8px 0; align-items:center; min-height:44px; }
+.phone-setting .setting-name { display:flex; align-items:center; gap:8px; min-width:0; }
+.phone-setting .setting-name label { color:var(--dim); font-size:12.5px; }
+.phone-setting .setting-controls { display:flex; align-items:center; gap:12px; }
+.phone-connection-status { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.phone-connection-status > .hint { overflow-wrap:anywhere; }
+.phone-group .phone-setting + .hint { display:none; }
+.phone-group input[type="checkbox"] { accent-color:var(--green); }
+.phone-group .row:has(input[type="checkbox"]) { padding:3px 0; }
+@media(max-width:620px) { .phone-setting { grid-template-columns:minmax(0,1fr) auto; gap:10px; } .phone-group { padding:13px; } }

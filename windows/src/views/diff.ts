@@ -11,6 +11,7 @@ const STRINGS = {
   open: N_("Open in VS Code"),
   tooLarge: N_("Diff too large"),
   noChanges: N_("No changes"),
+  unavailable: N_("No detail available."),
 };
 
 const SYMBOLS: Record<DiffKind, string> = { added: "+", removed: "−", context: " " };
@@ -43,7 +44,9 @@ export function buildDiffCard(diff: FileDiff, hooks: DiffCardHooks): HTMLElement
 
   const lines = diff.hunks.flatMap((hunk) => hunk.lines);
   let content: HTMLElement;
-  if (diff.tooLarge) {
+  if (diff.unavailable) {
+    content = h("div", { class: "diff-note", text: tl(STRINGS.unavailable) });
+  } else if (diff.tooLarge) {
     content = h("div", { class: "diff-note", text: tl(STRINGS.tooLarge) });
   } else if (lines.length === 0) {
     content = h("div", { class: "diff-note", text: tl(STRINGS.noChanges) });

@@ -3,16 +3,17 @@
 // src/island/spotify.ts and the views in src/views/spotify.ts. The MPRIS side —
 // metadata, position, the bus itself — is tested in src-tauri/src/spotify.rs.
 
-import { beforeEach, test } from "node:test";
+import { beforeEach, test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { emit, sent } from "./tauri.mjs";
 import { installFakeDom } from "./fakedom.mjs";
 import {
   IDLE_SPOTIFY, SPOTIFY_ID, Spotify, currentArtwork, desktopDances, formatTime, isAd, islandDances,
-  musicPlaying, spotifyPosition, volumeLevel, withPlaying,
+  musicPlaying, spotifyPosition, volumeLevel, withPlaying, reconcileSpotify,
 } from "../src/core/spotify.ts";
-import { BotEngine, danceTransform, stepDanceLevel } from "../src/mochi/engine.ts";
-import { registerSpotifyHandlers } from "../src/island/spotify.ts";
+import { BotEngine, danceTransform, stepDanceLevel, danceEase } from "../src/mochi/engine.ts";
+import { resetBeat, feedBeat, pauseBeat, resumeBeat } from "../src/mochi/beat.ts";
+import { applySpotify, registerSpotifyHandlers } from "../src/island/spotify.ts";
 import { buildSpotifyCard, buildSpotifyPill } from "../src/views/spotify.ts";
 import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
 import { lookup, setLanguage } from "../src/i18n/i18n.ts";
@@ -27,6 +28,16 @@ const track = (over = {}) => ({
 const playing = (over = {}) => ({
   ...IDLE_SPOTIFY, running: true, installed: true, track: track(), playing: true,
   position: 10, positionAt: 1_000, volume: 70, ...over,
+});
+
+test("a seek invalidates beat history; normal playback progress does not", () => {
+  Spotify.state = playing({ position: 10, positionAt: 1000 });
+  const revision = Spotify.beatRevision;
+  const host = { revealSilently() {} };
+  applySpotify(host, playing({ position: 11, positionAt: 2000 }));
+  assert.equal(Spotify.beatRevision, revision);
+  applySpotify(host, playing({ position: 45, positionAt: 3000 }));
+  assert.equal(Spotify.beatRevision, revision + 1);
 });
 
 // ── Position ──────────────────────────────────────────────────────────────────
@@ -138,6 +149,80 @@ test("112 BPM: still on the beat, highest half a beat later, nothing at level 0"
   assert.deepEqual([off.dx, off.dy, off.rotate, off.sx, off.sy].map((v) => Math.abs(v)), [0, 0, 0, 1, 1]);
 });
 
+test("the unknown-beat badge coexists with dancing without changing expression state", () => {
+  mock.timers.enable({ apis: ["Date"], now: 10000 });
+  try {
+    const engine = new BotEngine();
+    resetBeat(true);
+    engine.setDancing(true, true);
+    assert.equal(engine.isDancing, false);
+    assert.equal(engine.beatQuestion, true);
+    mock.timers.tick(1000);
+    for (let i = 0; i < 21; i++) engine.update(0.05);
+    engine.setDancing(true, true);
+    assert.equal(engine.isDancing, true);
+    assert.equal(engine.beatQuestion, true);
+    assert.equal(engine.state, "idle");
+    assert.equal(engine.eyeOverride, null);
+    feedBeat({ bpm: 112, beatAtMs: 11000 });
+    mock.timers.tick(500);
+    feedBeat({ bpm: 112, beatAtMs: 11000 + 60000 / 112 });
+    engine.setDancing(true, true);
+    assert.equal(engine.beatQuestion, false, "a measured default-valued BPM is known");
+    pauseBeat(); resumeBeat(); engine.setDancing(true, true);
+    assert.equal(engine.isDancing, true);
+    assert.equal(engine.beatQuestion, false);
+    resetBeat(true); engine.setDancing(true, false);
+    assert.equal(engine.isDancing, true);
+    assert.equal(engine.beatQuestion, false, "option off leaves normal dance intact");
+  } finally { mock.timers.reset(); resetBeat(); }
+});
+
+test("unknown BPM rolls out, waits a full still second, eases in once and fades the badge independently", () => {
+  resetBeat();
+  const engine = new BotEngine();
+  engine.setDancing(true);
+  for (let i = 0; i < 40; i++) engine.update(0.01);
+  assert.equal(engine.dancingLevel, 1);
+  resetBeat(true);
+  engine.setDancing(true, true);
+  engine.update(0.01);
+  assert.ok(engine.dancingLevel > 0.95 && engine.dancingLevel < 1, "no abrupt stop");
+  for (let i = 0; i < 49; i++) { engine.setDancing(true, true); engine.update(0.01); }
+  assert.equal(engine.dancingLevel, 0);
+  for (let i = 0; i < 98; i++) { engine.setDancing(true, true); engine.update(0.01); }
+  assert.equal(engine.isDancing, false, "the second starts after reaching zero");
+  assert.ok(engine.beatConfusedLevel > 0.99);
+  for (let i = 0; i < 4; i++) { engine.setDancing(true, true); engine.update(0.01); }
+  assert.equal(engine.isDancing, true);
+  assert.ok(engine.dancingLevel > 0 && engine.dancingLevel < 0.2, "gradual restart");
+  for (let i = 0; i < 150; i++) { engine.setDancing(true, true); engine.update(0.01); }
+  assert.equal(engine.dancingLevel, 1, "same unknown state never repeats the stop");
+  const eyes = [];
+  engine.drawEyeShape = (_ctx, shape) => eyes.push(shape);
+  const ctx = { save() {}, restore() {}, clip() {}, translate() {}, scale() {} };
+  engine.drawEyes(ctx, {}, 30, 34, 26);
+  assert.deepEqual(eyes, ["happy", "happy"], "question badge preserves cheerful closed eyes");
+  const at = Date.now();
+  feedBeat({ bpm: 120, beatAtMs: at }, at);
+  feedBeat({ bpm: 120, beatAtMs: at + 500 }, at + 500);
+  engine.setDancing(true, true);
+  const before = engine.beatQuestionLevel;
+  engine.update(0.05);
+  assert.ok(engine.beatQuestionLevel > 0 && engine.beatQuestionLevel < before);
+  assert.equal(engine.dancingLevel, 1, "badge fade never interrupts dance");
+  for (let i = 0; i < 8; i++) engine.update(0.05);
+  assert.equal(engine.beatQuestionLevel, 0);
+  resetBeat(true); engine.setDancing(true, true);
+  for (let i = 0; i < 170; i++) { engine.setDancing(true, true); engine.update(0.01); }
+  assert.equal(engine.isDancing, true);
+  resetBeat(true); engine.setDancing(true, true);
+  assert.equal(engine.isDancing, false, "another unknown track gets its own single transition");
+  assert.ok(danceEase(0.001) < 0.000004);
+  assert.ok(1 - danceEase(0.999) < 0.000004);
+  resetBeat();
+});
+
 test("the engine dances only once asked, and keeps its frames going meanwhile", () => {
   const ops = [];
   const ctx = {
@@ -165,6 +250,18 @@ test("the engine dances only once asked, and keeps its frames going meanwhile", 
 const island = { reveals: 0, revealSilently() { this.reveals += 1; } };
 registerSpotifyHandlers(island);
 
+test("small position jitter and stale polls cannot send playback time backwards", () => {
+  const previous = playing({ position: 20, positionAt: 1000 });
+  const jitter = reconcileSpotify(previous, playing({ position: 20.8, positionAt: 2000 }));
+  assert.equal(jitter.position, 21);
+  assert.equal(spotifyPosition(jitter, 2500), 21.5);
+  const stale = reconcileSpotify(jitter, playing({ position: 20.6, positionAt: 1500 }));
+  assert.equal(stale.position, 21);
+  assert.equal(stale.positionAt, 2000);
+  const seek = reconcileSpotify(jitter, playing({ position: 5, positionAt: 3000 }));
+  assert.equal(seek.position, 5, "real backwards seeking still works");
+});
+
 beforeEach(() => {
   setLanguage("en");
   State.settings = { ...DEFAULT_SETTINGS, activeIntegrations: [SPOTIFY_ID] };
@@ -183,14 +280,14 @@ beforeEach(() => {
 const spotifyTask = () => State.tasks.find((t) => t.id === SPOTIFY_ID);
 
 test("the pill wears the track's title, and its own name when nothing plays", () => {
-  assert.equal(spotifyTask().name, "Media");
+  assert.equal(spotifyTask().name, "Spotify");
   emit("spotify", playing());
   assert.equal(Spotify.state.track.title, "Get Lucky");
   assert.equal(spotifyTask().name, "Get Lucky");
   emit("spotify", playing({ track: track({ id: "spotify:ad:1", title: "" }) }));
   assert.equal(spotifyTask().name, "Advertisement");
   emit("spotify", { ...IDLE_SPOTIFY, running: true });
-  assert.equal(spotifyTask().name, "Media");
+  assert.equal(spotifyTask().name, "Spotify");
 });
 
 test("music starting shows the hidden island once, silently; nothing on Windows-like setups", () => {
@@ -237,7 +334,7 @@ test("the idle card: not playing, or not installed with a way to get it", () => 
   const card = buildSpotifyCard();
   Spotify.state = { ...IDLE_SPOTIFY, installed: true };
   card.sync();
-  assert.match(card.el.textContent, /Media.*Integration.*Not playing.*Open Spotify/);
+  assert.match(card.el.textContent, /Spotify.*Integration.*Not playing.*Open Spotify/);
   // A player that runs but has no track is named in the header.
   Spotify.state = { ...IDLE_SPOTIFY, running: true, player: "Firefox" };
   card.sync();
@@ -307,4 +404,62 @@ test("the pill shows play/pause and next on hover, only with a track", () => {
   assert.equal(Spotify.state.playing, false);
   pill.el.fire("mouseleave");
   assert.ok(!pill.el.classList.contains("controls"));
+});
+
+
+test("the volume bar follows Spotify reports instead of retaining an independent value", () => {
+  Spotify.state = playing({ volume: 24, volumeAvailable: true });
+  const card = buildSpotifyCard();
+  card.sync();
+  const volumeBox = card.el.querySelector("np-volume");
+  assert.equal(volumeBox.querySelector("np-fill").style.width, "24%");
+  Spotify.state = playing({ volume: 83, volumeAvailable: true });
+  card.sync();
+  assert.equal(volumeBox.querySelector("np-fill").style.width, "83%");
+  assert.equal(volumeBox.title, "Volume 83%");
+});
+
+test("an unavailable Spotify volume cannot silently control the Windows mixer", () => {
+  Spotify.state = playing({ volume: 65, volumeAvailable: false });
+  const card = buildSpotifyCard();
+  card.sync();
+  const volumeBox = card.el.querySelector("np-volume");
+  const bar = volumeBox.querySelector("np-bar");
+  const before = sent("spotify_control").length;
+  const event = { button: 0, pointerId: 1, clientX: 90, stopPropagation() {} };
+  for (const fn of bar.listeners.get("pointerdown")) fn(event);
+  for (const fn of bar.listeners.get("pointerup")) fn(event);
+  assert.equal(Spotify.state.volume, 65);
+  assert.equal(volumeBox.style.opacity, "0.4");
+  assert.equal(sent("spotify_control").length, before);
+});
+
+test("dragging sends the final volume in order and remote readbacks do not move the held thumb", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    Spotify.state = playing({ volume: 50, volumeAvailable: true });
+    const card = buildSpotifyCard();
+    card.sync();
+    const bar = card.el.querySelector("np-volume").querySelector("np-bar");
+    bar.getBoundingClientRect = () => ({ left: 0, width: 100 });
+    const fire = (type, clientX) => {
+      for (const fn of bar.listeners.get(type) ?? []) fn({ button: 0, pointerId: 1, clientX, stopPropagation() {} });
+      card.sync();
+    };
+    const before = sent("spotify_control").length;
+    fire("pointerdown", 20);
+    mock.timers.tick(0);
+    await new Promise((resolve) => setImmediate(resolve));
+    fire("pointermove", 80);
+    Spotify.state = { ...Spotify.state, volume: 20 }; // an older confirmed readback
+    card.sync();
+    assert.equal(bar.querySelector("np-fill").style.width, "80%");
+    fire("pointerup", 80);
+    mock.timers.tick(120);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(sent("spotify_control").slice(before), [
+      { action: "volume", value: 20 }, { action: "volume", value: 80 },
+    ]);
+    mock.timers.tick(120);
+  } finally { mock.timers.reset(); }
 });

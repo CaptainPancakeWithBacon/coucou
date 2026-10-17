@@ -276,6 +276,7 @@ body {
 }
 
 .view.on {
+  visibility: visible;
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
@@ -285,8 +286,14 @@ body {
 /* A view that is not on is only transparent, not gone: an infinite animation
    inside it (the drop frame's marching dashes) would keep the webview
    repainting every frame for as long as the app runs, island hidden or not. */
+/* Hidden cards must not retain invisible interactive descendants when a
+   notification/update card replaces the wardrobe. */
+.view:not(.on) {
+  visibility: hidden;
+}
 .view:not(.on) * {
   animation-play-state: paused;
+  pointer-events: none;
 }
 
 /* ── Cards ──────────────────────────────────────────────────────────────── */
@@ -525,7 +532,7 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 4px 10px 4px 108px;
+  padding: 4px 10px 4px 136px;
 }
 
 .diff-head {
@@ -668,6 +675,57 @@ body {
   gap: 4px;
   align-content: center;
   padding: 0 8px;
+}
+
+/* Paging stays inside the existing right card; the pill grid keeps its geometry. */
+.pill-pages, .pill-pages-viewport {
+  position: absolute;
+  inset: 0;
+}
+.pill-pages-viewport { overflow: hidden; }
+.pills.pill-page {
+  position: absolute;
+  inset: 0;
+  transition: transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.pill-page-arrow, .pill-page-mark {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--dim-3);
+  cursor: pointer;
+}
+.pill-page-arrow {
+  position: absolute;
+  z-index: 3;
+  left: calc(50% - 10px);
+  width: 20px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+}
+.pill-page-arrow.previous { top: 1px; }
+.pill-page-arrow.next { bottom: 1px; transform: rotate(180deg); }
+.pill-page-indicators {
+  position: absolute;
+  z-index: 3;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pill-page-mark {
+  width: 3px;
+  height: 9px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.pill-page-mark.on { background: var(--ink-2); }
+.pill-page-arrow[hidden], .pill-page-indicators[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pills.pill-page { transition: none; }
 }
 
 .pill {
@@ -2271,6 +2329,72 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ── Wardrobe (right-click on Mochi) — WardrobeView on macOS ─────────────── */
 
+.session-details-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.07);
+  color: var(--dim-2);
+  font: 400 10px var(--font);
+  cursor: pointer;
+}
+.who:has(.session-details-btn) .tool { display: none; }
+.session-history { height: 100%; width: 100%; box-sizing: border-box; padding: 4px 10px 4px 136px; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.session-history > .diff-head { flex-shrink: 0; }
+.session-history-rows { flex: 1; overflow-y: auto; min-height: 0; min-width: 0; padding: 0 0 8px; user-select: text; }
+.session-history-step { padding: 7px 0; border-top: 1px solid var(--hairline); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.session-history-file { display: flex; gap: 6px; width: 100%; padding: 7px 0; background: transparent; border: 0; color: inherit; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.session-history-file > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.session-history-file .session-history-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: var(--dim-3); }
+.session-history-file .tick-count { flex-shrink: 0; }
+
+.collection-pages, .collection-viewport { position: absolute; inset: 0; }
+.collection-viewport { overflow: hidden; }
+.wardrobe-collection {
+  position: absolute;
+  inset: 0;
+  padding: 12px 34px 12px 104px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 280ms cubic-bezier(0.22,0.61,0.36,1);
+}
+.collection-pages .pill-page-arrow { left: auto; right: 4px; }
+.wardrobe-choice {
+  position: absolute; left: 104px; right: 34px; top: 50%;
+  display: flex; flex-direction: column; gap: 9px;
+  transform: translateY(-50%); transition: transform 200ms ease;
+}
+.wardrobe-styles {
+  position: absolute; left: 104px; right: 34px; top: calc(50% + 7px);
+  display: flex; flex-direction: column; gap: 6px; opacity: 0; pointer-events: none;
+  transform: translateY(10px); transition: opacity 160ms ease, transform 200ms ease;
+}
+.styles-open .wardrobe-choice { transform: translateY(calc(-50% - 35px)); }
+.styles-open .wardrobe-styles { opacity: 1; pointer-events: auto; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) { .wardrobe-choice, .wardrobe-styles { transition: none; } }
+.collection-pages .pill-page-arrow.previous { top: 8px; }
+.collection-pages .pill-page-arrow.next { bottom: 8px; }
+.collection-pages .pill-page-indicators { right: 12px; gap: 7px; }
+.collection-pages .pill-page-mark { position: relative; }
+.collection-pages .pill-page-mark::before { content: ""; position: absolute; inset: -4px -7px; }
+.wardrobe-styles-label { font: 500 10px var(--font); color: var(--dim-3); }
+.wardrobe-variants { display: flex; gap: 6px; min-height: 52px; }
+.wardrobe-variant {
+  width: 64px; height: 52px; padding: 3px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px; border-radius: 7px;
+  border: 1px solid var(--hairline); background: rgba(255,255,255,0.035); color: var(--dim-2);
+  cursor: pointer;
+}
+.wardrobe-variant canvas { width: 28px; height: 28px; }
+.wardrobe-variant span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 9px var(--font); }
+.wardrobe-variant:hover, .wardrobe-variant.on { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.4); color: var(--ink); }
+.wardrobe-item { flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) { .wardrobe-collection { transition: none; } }
+
 .wardrobe-stack {
   padding: 12px 16px 12px 104px;
   gap: 10px;
@@ -2287,6 +2411,19 @@ input[type="range"]::-webkit-slider-thumb {
   font: 600 12px var(--font);
   color: var(--ink);
   flex: 0 0 auto;
+}
+
+.wardrobe-beta {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 5px;
+  color: var(--dim-2);
+  background: rgba(255, 255, 255, 0.045);
+  font: 600 9px var(--font);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  pointer-events: none;
 }
 
 .wardrobe-note {
@@ -2628,3 +2765,6 @@ html[data-dir="rtl"] #views :is(.bubble, .reply .md-p, .reply .md-h, .reply .md-
   unicode-bidi: plaintext;
   text-align: start;
 }
+
+.header-actions .island-drag { cursor: grab; touch-action: none; }
+.header-actions .island-drag:active { cursor: grabbing; }

@@ -57,7 +57,7 @@ class ProtocolDetailsTest {
         val s = session("""{"pillId":"p","steps":[$many,5,null,"",{"a":1},"${"x".repeat(500)}"]}""")
         assertEquals(Protocol.MAX_STEPS, s.steps.size)
         assertEquals("s1", s.steps.first())
-        val long = session("""{"pillId":"p","steps":["${"y".repeat(500)}"]}""").steps.single()
+        val long = session("""{"pillId":"p","steps":["${"y".repeat(Protocol.MAX_STEP_CHARS + 1)}"]}""").steps.single()
         assertEquals(Protocol.MAX_STEP_CHARS, long.length)
         assertEquals(emptyList<String>(), session("""{"pillId":"p","steps":"not a list"}""").steps)
     }

@@ -1,7 +1,6 @@
 // Mochi's dance follows the music: the tempo and the beat of what the speakers
-// play, found by listening to the system's own output (PipeWire's monitor of
-// the default sink, read through `pw-record`). Linux only, off by default
-// ("Dance to the beat" in Settings → General), and only while Spotify plays.
+// play, found from system output (WASAPI loopback on Windows, PipeWire on
+// Linux). Controlled by "Dance to the beat", and only while Spotify plays.
 //
 // Nothing is kept or sent anywhere: the samples are read in memory, reduced to
 // a one-number-per-10-ms "how much new sound started" curve, and dropped. The
@@ -15,247 +14,131 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc,
     },
 };
 
+#[cfg(any(windows, target_os = "linux"))]
+use std::sync::Mutex;
+
 use serde::Serialize;
-#[cfg(target_os = "linux")]
+#[cfg(any(windows, target_os = "linux"))]
 use tauri::{AppHandle, Emitter, State};
 
-pub const RATE: usize = 11_025;
-/// One onset value per HOP samples: about 100 a second.
-const HOP: usize = 110;
-const FPS: f64 = RATE as f64 / HOP as f64;
-/// How much of the past the tempo is read from.
-const WINDOW_SECS: f64 = 8.0;
-/// No estimate before this much sound has been heard.
-const MIN_SECS: f64 = 4.0;
-/// The tempo is looked for between these.
-const MIN_BPM: f64 = 70.0;
-const MAX_BPM: f64 = 190.0;
-/// The tempo he dances at is folded into this range.
-const DANCE_MIN_BPM: f64 = 80.0;
-const DANCE_MAX_BPM: f64 = 160.0;
-/// How often a new estimate is made.
-const ESTIMATE_EVERY: usize = FPS as usize;
-/// An estimate whose peak is not this much above the average is not trusted.
-const MIN_CONFIDENCE: f64 = 1.5;
-/// The held tempo stays while its score is at least this share of the best's.
-const HOLD_RATIO: f64 = 0.7;
 
-/// What the island is told.
+pub const RATE: usize = 44_100;
+#[cfg(windows)]
+#[path = "beat_capture.rs"]
+mod capture;
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Beat {
     pub bpm: f64,
-    /// Seconds ago the last beat was, when the estimate was made.
     pub last_beat_ago: f64,
     pub confidence: f64,
 }
 
-/// Reduces sound to onsets and reads the tempo and the beat from them.
+/// Review tempo without bias periodically; isolated spikes cannot replace it.
+#[derive(Default)]
+struct TempoReview {
+    last: usize,
+    candidate: Option<(f64, usize)>,
+    milestone_checked: [bool; 2],
+    forced: bool,
+}
+impl TempoReview {
+    fn due(&self, heard: usize) -> bool {
+        self.forced || self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 8 ||
+            [RATE * 30, RATE * 60].iter().enumerate()
+                .any(|(i, &threshold)| !self.milestone_checked[i] && heard >= threshold)
+    }
+    fn check_milestones(&mut self, heard: usize) {
+        for (i, threshold) in [RATE * 30, RATE * 60].iter().enumerate() {
+            if heard >= *threshold { self.milestone_checked[i] = true; }
+        }
+    }
+    fn consider(&mut self, heard: usize, current: f64, confidence: f32, next: f64, quality: f32) -> bool {
+        if !next.is_finite() || !quality.is_finite() || !(50.0..=220.0).contains(&next) ||
+            (next - current).abs() / current < 0.05 || quality < confidence.max(0.45) * 1.1 {
+            self.candidate = None;
+            self.last = heard;
+            return false;
+        }
+        let since = match self.candidate {
+            Some((bpm, since)) if (bpm - next).abs() / bpm <= 0.03 => since,
+            _ => heard,
+        };
+        self.candidate = Some((next, since));
+        if heard.saturating_sub(since) < RATE * 2 { return false; }
+        self.candidate = None;
+        self.last = heard;
+        true
+    }
+}
+
+/// A bounded audio history, analysed off the capture thread. The library's
+/// tempo path and beat grid jointly resolve tempo and actual beat positions.
 pub struct BeatTracker {
-    /// Left over from the last chunk, less than a hop.
-    pending: Vec<i16>,
-    low: f32,
-    prev_low: f32,
-    prev_high: f32,
-    onsets: VecDeque<f32>,
-    frames_since_estimate: usize,
-    /// The tempo (as a lag in frames, before folding) the last estimate chose.
-    held_lag: Option<f64>,
+    history: VecDeque<f32>,
+    since_estimate: usize,
+    tempo: Option<f64>,
+    heard: usize,
+    review: TempoReview,
 }
-
-impl Default for BeatTracker {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
+impl Default for BeatTracker { fn default() -> Self { Self::new() } }
 impl BeatTracker {
-    pub fn new() -> Self {
-        BeatTracker {
-            pending: Vec::new(),
-            low: 0.0,
-            prev_low: 0.0,
-            prev_high: 0.0,
-            onsets: VecDeque::new(),
-            frames_since_estimate: 0,
-            held_lag: None,
-        }
-    }
-
-    /// Feeds mono samples; returns an estimate about once a second.
+    pub fn new() -> Self { Self { history: VecDeque::new(), since_estimate: 0, tempo: None, heard: 0, review: TempoReview::default() } }
+    pub fn request_review(&mut self) { self.review.forced = true; }
     pub fn push(&mut self, samples: &[i16]) -> Option<Beat> {
-        self.pending.extend_from_slice(samples);
-        let mut estimate = None;
-        let mut used = 0;
-        while self.pending.len() - used >= HOP {
-            let frame: Vec<i16> = self.pending[used..used + HOP].to_vec();
-            used += HOP;
-            self.frame(&frame);
-            self.frames_since_estimate += 1;
-            if self.frames_since_estimate >= ESTIMATE_EVERY {
-                self.frames_since_estimate = 0;
-                if let Some(beat) = self.estimate() {
-                    estimate = Some(beat);
-                }
-            }
-        }
-        self.pending.drain(..used);
-        estimate
-    }
-
-    /// One hop: the new energy in the low band (kick, bass) and in the rest
-    /// (snare, hats, chords), in a log scale so a quiet song and a loud one look
-    /// alike, kept as how much it rose since the hop before.
-    fn frame(&mut self, frame: &[i16]) {
-        let (mut low_e, mut high_e) = (0f32, 0f32);
-        for &s in frame {
-            let x = s as f32 / 32768.0;
-            // One-pole low-pass near 200 Hz at 11 kHz.
-            self.low += 0.1 * (x - self.low);
-            let high = x - self.low;
-            low_e += self.low * self.low;
-            high_e += high * high;
-        }
-        let n = frame.len() as f32;
-        let low = (1.0 + 4000.0 * low_e / n).ln();
-        let high = (1.0 + 4000.0 * high_e / n).ln();
-        let onset = (low - self.prev_low).max(0.0) + 0.6 * (high - self.prev_high).max(0.0);
-        self.prev_low = low;
-        self.prev_high = high;
-        self.onsets.push_back(onset);
-        let cap = (WINDOW_SECS * FPS) as usize;
-        while self.onsets.len() > cap {
-            self.onsets.pop_front();
-        }
-    }
-
-    /// Tempo by autocorrelation of the onset curve, beat by the best comb.
-    fn estimate(&mut self) -> Option<Beat> {
-        if (self.onsets.len() as f64) < MIN_SECS * FPS {
+        self.history.extend(samples.iter().map(|v| *v as f32 / 32768.0));
+        self.since_estimate += samples.len();
+        self.heard += samples.len();
+        while self.history.len() > RATE * 12 { self.history.pop_front(); }
+        let early = self.heard < RATE * 6;
+        let interval = if early { RATE / 2 } else { RATE };
+        if self.history.len() < RATE * 5 / 2 || self.since_estimate < interval { return None; }
+        self.since_estimate = 0;
+        // No stale beat reports through a silent pause or disconnected stream.
+        let recent = self.history.iter().rev().take(RATE / 2);
+        if recent.clone().map(|v| v * v).sum::<f32>() < 1e-8 {
+            self.review.candidate = None;
+            self.review.last = self.heard;
             return None;
         }
-        // Take out the slow level so only the pulses are left.
-        let raw: Vec<f32> = self.onsets.iter().copied().collect();
-        let n = raw.len();
-        let half = (FPS * 0.25) as usize;
-        let mut env = vec![0f32; n];
-        for i in 0..n {
-            let lo = i.saturating_sub(half);
-            let hi = (i + half + 1).min(n);
-            let mean = raw[lo..hi].iter().sum::<f32>() / (hi - lo) as f32;
-            env[i] = (raw[i] - mean).max(0.0);
-        }
-        if env.iter().all(|&v| v < 1e-4) {
-            return None; // silence
-        }
-
-        let min_lag = (60.0 * FPS / MAX_BPM).floor() as usize;
-        let max_lag = (60.0 * FPS / MIN_BPM).ceil() as usize;
-        let ac = |lag: usize| -> f64 {
-            if lag >= n {
-                return 0.0;
-            }
-            let mut sum = 0f64;
-            for i in lag..n {
-                sum += (env[i] * env[i - lag]) as f64;
-            }
-            sum / (n - lag) as f64
+        let peak = self.history.iter().map(|v| v.abs()).fold(0.0f32, f32::max);
+        if peak < 1e-5 { return None; }
+        // Analysis must not depend on Spotify's volume or the Windows mixer.
+        let audio: Vec<f32> = self.history.iter().map(|v| *v * 0.8 / peak).collect();
+        // Keep the metrical level stable within a recording. A soft prior
+        // prevents a snare fill from turning 140 BPM into its 93 BPM rival;
+        // it still allows real tempo drift. Track changes/seeks reset this.
+        let options = timestretch::TempoTrackingOptions {
+            prior_center_bpm: self.tempo.unwrap_or(120.0),
+            prior_octave_sigma: if self.tempo.is_some() { 0.45 } else { 1.0 },
+            ..Default::default()
         };
-        let mut scores = Vec::with_capacity(max_lag - min_lag + 1);
-        for lag in min_lag..=max_lag {
-            // A beat repeats at twice its period too: count that in, so the
-            // true tempo beats its half and its double.
-            let tempo = 60.0 * FPS / lag as f64;
-            let prior = (-(tempo / 125.0).log2().powi(2) / (2.0 * 0.7 * 0.7)).exp();
-            scores.push((ac(lag) + 0.5 * ac(lag * 2)) * prior);
-        }
-        let (mut best_i, mut best) = scores
-            .iter()
-            .copied()
-            .enumerate()
-            .fold((0, f64::MIN), |a, (i, s)| if s > a.1 { (i, s) } else { a });
-        // A tempo already held is kept unless another is clearly stronger: a
-        // song does not change tempo from one second to the next, its
-        // autocorrelation just wobbles between rivals.
-        if let Some(held) = self.held_lag {
-            let near = |i: usize| ((min_lag + i) as f64 - held).abs() <= held * 0.04;
-            if let Some((i, s)) = scores
-                .iter()
-                .copied()
-                .enumerate()
-                .filter(|&(i, _)| near(i))
-                .fold(None, |a: Option<(usize, f64)>, (i, s)| if a.map_or(true, |x| s > x.1) { Some((i, s)) } else { a })
-            {
-                if s >= best * HOLD_RATIO {
-                    best_i = i;
-                    best = s;
+        let mut grid = timestretch::analysis::beat::detect_beats_with_options(&audio, RATE as u32, &options);
+        if let Some(tempo) = self.tempo {
+            if self.review.due(self.heard) {
+                self.review.forced = false;
+                self.review.check_milestones(self.heard);
+                let alternative = timestretch::analysis::beat::detect_beats(&audio, RATE as u32);
+                let timely = alternative.beats.last().is_some_and(|&last|
+                    (0.0..=2.0 * RATE as f64).contains(&(audio.len() as f64 - last)));
+                let quality = if alternative.phase_untrusted || !timely { 0.0 } else { alternative.confidence };
+                if self.review.consider(self.heard, tempo, grid.confidence, alternative.bpm, quality) {
+                    grid = alternative;
                 }
             }
         }
-        let mean = scores.iter().sum::<f64>() / scores.len() as f64;
-        if best <= 0.0 || mean <= 0.0 || best / mean < MIN_CONFIDENCE {
-            return None;
-        }
-        // Between the two neighbouring lags: parabola through the peak.
-        let lag = if best_i > 0 && best_i + 1 < scores.len() {
-            let (a, b, c) = (scores[best_i - 1], scores[best_i], scores[best_i + 1]);
-            let d = a - 2.0 * b + c;
-            let shift = if d.abs() > f64::EPSILON { 0.5 * (a - c) / d } else { 0.0 };
-            (min_lag + best_i) as f64 + shift.clamp(-1.0, 1.0)
-        } else {
-            (min_lag + best_i) as f64
-        };
-        // A beat and its double (or half) look alike to the autocorrelation, so
-        // fold the tempo into the range a hop looks natural at: a song at 170
-        // is danced at 85, a slow one at 70 at 140. The comb is made at the
-        // folded period, which still lands on real beats.
-        let mut period = lag;
-        while 60.0 * FPS / period >= DANCE_MAX_BPM {
-            period *= 2.0;
-        }
-        while 60.0 * FPS / period < DANCE_MIN_BPM {
-            period /= 2.0;
-        }
-        self.held_lag = Some(lag);
-        let bpm = 60.0 * FPS / period;
-
-        // The beat: the offset whose comb of pulses, one every `lag` frames,
-        // gathers the most onsets. Each pulse counts its neighbours a little.
-        let mut best_offset = 0usize;
-        let mut best_sum = f64::MIN;
-        for offset in 0..period.ceil() as usize {
-            let mut sum = 0f64;
-            let mut at = offset as f64;
-            while (at.round() as usize) < n {
-                let i = at.round() as usize;
-                sum += env[i] as f64;
-                if i > 0 {
-                    sum += 0.4 * env[i - 1] as f64;
-                }
-                if i + 1 < n {
-                    sum += 0.4 * env[i + 1] as f64;
-                }
-                at += period;
-            }
-            if sum > best_sum {
-                best_sum = sum;
-                best_offset = offset;
-            }
-        }
-        // The last comb position before the newest frame.
-        let last_index = (n - 1) as f64;
-        let k = ((last_index - best_offset as f64) / period).floor();
-        let beat_index = best_offset as f64 + k * period;
-        let ago_frames = last_index - beat_index;
-        Some(Beat {
-            bpm,
-            last_beat_ago: ago_frames / FPS,
-            confidence: best / mean,
-        })
+        if grid.phase_untrusted || grid.confidence < if early { 0.5 } else { 0.45 } || grid.beats.len() < 3 ||
+            !grid.bpm.is_finite() || !(50.0..=220.0).contains(&grid.bpm) { return None; }
+        let last = *grid.beats.last()?;
+        let ago = (audio.len() as f64 - last) / RATE as f64;
+        if !(0.0..=2.0).contains(&ago) { return None; }
+        self.tempo = Some(grid.bpm);
+        Some(Beat { bpm: grid.bpm, last_beat_ago: ago, confidence: grid.confidence as f64 * 10.0 })
     }
 }
 
@@ -267,8 +150,30 @@ pub struct Listener {
     run: Mutex<Option<Running>>,
 }
 
-/// Nothing listens off Linux; lib.rs still manages one so the setup is the same.
-#[cfg(not(target_os = "linux"))]
+/// Windows captures Spotify's process tree only, never a microphone.
+#[cfg(windows)]
+#[derive(Default)]
+pub struct Listener {
+    run: Mutex<Option<Running>>,
+}
+
+#[cfg(windows)]
+struct Running {
+    capture: Option<capture::Capture>,
+    active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
+    review_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+#[cfg(windows)]
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.active.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.capture.take();
+        if let Some(worker) = self.worker.take() { let _ = worker.join(); }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 #[derive(Default)]
 pub struct Listener;
 
@@ -287,7 +192,7 @@ fn stop_running(running: Running) {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(windows, target_os = "linux"))]
 fn now_ms() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -301,7 +206,8 @@ fn now_ms() -> f64 {
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: State<'_, Listener>, on: bool) -> bool {
-    let allowed = shared.settings.lock().unwrap().beat_sync;
+    let config = shared.settings.lock().unwrap().clone();
+    let allowed = config.beat_sync;
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
         if let Some(running) = slot.take() {
@@ -314,10 +220,14 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
     }
     let stop = Arc::new(AtomicBool::new(false));
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let spawned = Command::new("pw-record")
+    let mut command = Command::new("pw-record");
+    if !config.beat_output.is_empty() {
+        command.arg("--target").arg(&config.beat_output);
+    }
+    let spawned = command
         .args([
             "-P", "stream.capture.sink=true",
-            "--rate", "11025",
+            "--rate", "44100",
             "--channels", "1",
             "--format", "s16",
             "--latency", "20ms",
@@ -365,7 +275,7 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
     true
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(windows, target_os = "linux"))]
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BeatEvent {
@@ -375,11 +285,71 @@ struct BeatEvent {
     confidence: f64,
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(windows, target_os = "linux")))]
 #[tauri::command]
 pub fn beat_enable(_on: bool) -> bool {
     false
 }
+
+// Spotify's process tree only: no system mix and no microphone fallback.
+#[cfg(windows)]
+#[tauri::command]
+pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: State<'_, Listener>, on: bool) -> bool {
+    let config = shared.settings.lock().unwrap().clone();
+    let allowed = config.beat_sync;
+    let mut slot = listener.run.lock().unwrap();
+    if !(on && allowed) {
+        // Join the old analysis before resetting both renderer clocks.
+        slot.take();
+        return false;
+    }
+    if slot.is_some() { return true; }
+    let (tx, rx) = std::sync::mpsc::sync_channel(64);
+    let mut lost = false;
+    match capture::start(move |samples, end_ms, discontinuity| {
+        lost = tx.try_send((samples.to_vec(), end_ms, discontinuity || lost)).is_err();
+    }) {
+        Ok(capture) => {
+            let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+            let running = active.clone();
+            let review_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let worker_review = review_requested.clone();
+            let worker = std::thread::spawn(move || {
+                let mut tracker = BeatTracker::new();
+                while running.load(std::sync::atomic::Ordering::Relaxed) {
+                    let Ok((samples, end_ms, discontinuity)) = rx.recv() else { break };
+                    if discontinuity { tracker = BeatTracker::new(); }
+                    if worker_review.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                        tracker.request_review();
+                    }
+                    if let Some(beat) = tracker.push(&samples) {
+                        if running.load(std::sync::atomic::Ordering::Relaxed) {
+                            let _ = app.emit("beat", BeatEvent { bpm: beat.bpm, beat_at_ms: end_ms - beat.last_beat_ago * 1000.0, confidence: beat.confidence });
+                        }
+                    }
+                }
+            });
+            *slot = Some(Running { capture: Some(capture), active, worker: Some(worker), review_requested });
+            true
+        }
+        Err(err) => { crate::log::line(format!("beat: {err}")); false }
+    }
+}
+
+/// Ask for an unbiased check at a Spotify song-position milestone.
+#[cfg(windows)]
+#[tauri::command]
+pub fn beat_review(listener: State<'_, Listener>) {
+    if let Ok(slot) = listener.run.lock() {
+        if let Some(running) = slot.as_ref() {
+            running.review_requested.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn beat_review() {}
 
 #[cfg(test)]
 mod tests {
@@ -415,12 +385,32 @@ mod tests {
         let secs = 12.0;
         let mut t = BeatTracker::new();
         let mut last = None;
+        let mut count = 0;
         for chunk in click_track(bpm, secs, first_beat).chunks(2048) {
+            count += chunk.len();
             if let Some(b) = t.push(chunk) {
-                last = Some(b);
+                last = Some((b, count));
             }
         }
-        last.expect("an estimate")
+        let (mut beat, at) = last.expect("an estimate");
+        beat.last_beat_ago += secs - at as f64 / RATE as f64;
+        beat
+    }
+
+    #[test]
+    fn clear_percussion_is_available_in_three_seconds_with_a_real_beat_phase() {
+        for bpm in [100.0, 120.0, 128.0, 146.0] {
+            let mut tracker = BeatTracker::new();
+            let mut heard = 0;
+            let mut first = None;
+            for chunk in click_track(bpm, 4.0, 0.2).chunks(2048) {
+                heard += chunk.len();
+                if let Some(beat) = tracker.push(chunk) { first = Some(beat); break; }
+            }
+            assert!(heard <= RATE * 31 / 10, "{bpm}: first report took {} seconds", heard as f64 / RATE as f64);
+            assert_on_the_beat(first.expect("early estimate"), bpm, 0.2, heard as f64 / RATE as f64);
+            assert!(tracker.history.len() <= RATE * 12);
+        }
     }
 
     fn assert_on_the_beat(beat: Beat, bpm: f64, first_beat: f64, at_secs: f64) {
@@ -434,11 +424,55 @@ mod tests {
     }
 
     #[test]
+    fn callback_size_does_not_shift_the_beat_timestamp() {
+        for chunk_size in [333, 2048, 8191] {
+            let mut tracker = BeatTracker::new();
+            let mut count = 0;
+            for chunk in click_track(128.0, 12.0, 0.27).chunks(chunk_size) {
+                count += chunk.len();
+                if let Some(beat) = tracker.push(chunk) {
+                    if count > RATE * 8 {
+                        assert_on_the_beat(beat, 128.0, 0.27, count as f64 / RATE as f64);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn phase_relocks_to_recent_beats_after_a_seek() {
+        let mut tracker = BeatTracker::new();
+        tracker.push(&click_track(120.0, 8.0, 0.3));
+        let beat = tracker.push(&click_track(120.0, 4.0, 0.1)).unwrap();
+        assert_on_the_beat(beat, 120.0, 8.1, 12.0);
+    }
+
+    #[test]
+    fn windows_loopback_resampling_preserves_tempo_and_phase() {
+        let input: Vec<f32> = click_track(128.0, 12.0, 0.25).iter().map(|v| *v as f32 / 32768.0).collect();
+        let mut upsampled = Vec::new();
+        crate::speech::audio::Resampler::new(RATE as u32).process(&input, &mut upsampled);
+        let mut converter = crate::speech::audio::Resampler::with_output_rate(16_000, RATE as u32);
+        let mut tracker = BeatTracker::new();
+        let mut last = None;
+        let mut converted = Vec::new();
+        let mut count = 0;
+        for frame in upsampled.chunks(480) {
+            converted.clear();
+            converter.process(frame, &mut converted);
+            let mono: Vec<i16> = converted.iter().map(|v| (*v * 32767.0) as i16).collect();
+            count += mono.len();
+            if let Some(beat) = tracker.push(&mono) { last = Some((beat, count)); }
+        }
+        let (beat, at) = last.expect("loopback must produce a tempo estimate");
+        assert_on_the_beat(beat, 128.0, 0.25, at as f64 / RATE as f64);
+    }
+
+    #[test]
     fn finds_120_bpm_and_where_the_beats_fall() {
         let beat = run(120.0, 0.3);
-        // The estimate is made on whole seconds of 100 frames: 12 s of audio is
-        // 1090 frames of 110 samples, so the last estimate is at 10.9 s…
-        assert_on_the_beat(beat, 120.0, 0.3, 11.0);
+        // `run` advances the last estimate to the end of the test audio.
+        assert_on_the_beat(beat, 120.0, 0.3, 12.0);
     }
 
     #[test]
@@ -450,11 +484,21 @@ mod tests {
     }
 
     #[test]
-    fn a_double_or_half_tempo_is_danced_in_the_natural_range() {
-        for (real, danced) in [(70.0, 140.0), (175.0, 87.5), (200.0, 100.0)] {
+    fn metrical_ambiguity_stays_on_a_related_pulse() {
+        // Kick + offbeat hat deliberately permits half/double-time readings.
+        // Audio alone cannot uniquely identify the composer's notated meter.
+        for real in [70.0, 175.0, 200.0] {
             let b = run(real, 0.2);
-            assert!((b.bpm - danced).abs() / danced < 0.03, "{real} -> {}", b.bpm);
+            assert!([0.5, 1.0, 2.0].iter().any(|ratio|
+                (b.bpm - real * ratio).abs() / (real * ratio) < 0.03), "{real} -> {}", b.bpm);
         }
+    }
+
+    #[test]
+    fn silence_never_republishes_beats_from_old_audio() {
+        let mut tracker = BeatTracker::new();
+        assert!(tracker.push(&click_track(120.0, 8.0, 0.3)).is_some());
+        assert!(tracker.push(&vec![0; RATE * 2]).is_none());
     }
 
     #[test]
@@ -490,6 +534,52 @@ mod tests {
             }
         }
         assert_eq!(last_a.map(|b| (b.bpm * 100.0).round()), last_b.map(|b| (b.bpm * 100.0).round()));
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::{TempoReview, RATE};
+    #[test]
+    fn reviews_at_thirty_and_sixty_seconds_even_between_regular_checks() {
+        let mut review = TempoReview::default();
+        review.last = RATE * 27;
+        assert!(!review.due(RATE * 29));
+        assert!(review.due(RATE * 30));
+        review.check_milestones(RATE * 30);
+        assert!(!review.due(RATE * 31));
+        review.last = RATE * 57;
+        assert!(!review.due(RATE * 59));
+        assert!(review.due(RATE * 60));
+        review.check_milestones(RATE * 60);
+        assert!(!review.due(RATE * 61));
+    }
+    #[test]
+    fn a_better_tempo_must_remain_stable_for_two_seconds() {
+        let mut review = TempoReview::default();
+        assert!(!review.due(RATE * 7));
+        assert!(review.due(RATE * 8));
+        assert!(!review.consider(RATE * 30, 112.0, 0.6, 128.0, 0.8));
+        assert!(review.due(RATE * 31));
+        assert!(!review.consider(RATE * 31, 112.0, 0.6, 128.2, 0.8));
+        assert!(review.consider(RATE * 38, 112.0, 0.6, 128.0, 0.8));
+        assert!(!review.due(RATE * 39));
+    }
+    #[test]
+    fn weaker_or_brief_alternatives_never_replace_the_current_tempo() {
+        let mut review = TempoReview::default();
+        assert!(!review.consider(RATE * 30, 112.0, 0.8, 128.0, 0.6));
+        assert!(!review.consider(RATE * 60, 112.0, 0.6, 128.0, 0.8));
+        assert!(!review.consider(RATE * 61, 112.0, 0.6, 112.0, 0.8));
+        assert!(!review.consider(RATE * 68, 112.0, 0.6, 128.0, 0.8));
+    }
+    #[test]
+    fn changing_candidates_restart_the_confirmation_period() {
+        let mut review = TempoReview::default();
+        assert!(!review.consider(RATE * 30, 112.0, 0.6, 128.0, 0.8));
+        assert!(!review.consider(RATE * 34, 112.0, 0.6, 150.0, 0.8));
+        assert!(!review.consider(RATE * 35, 112.0, 0.6, 150.0, 0.8));
+        assert!(review.consider(RATE * 42, 112.0, 0.6, 150.0, 0.8));
     }
 }
 

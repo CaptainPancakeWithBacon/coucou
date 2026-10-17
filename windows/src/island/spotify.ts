@@ -6,8 +6,10 @@
 
 import { Bridge, onEvent } from "../core/bridge";
 import { pillDefinition } from "../core/pills";
-import { SPOTIFY_ID, Spotify, isAd, type SpotifyState } from "../core/spotify";
+import { SPOTIFY_ID, Spotify, isAd, spotifyPosition, reconcileSpotify, type SpotifyState } from "../core/spotify";
 import { State } from "../core/state";
+import { reacquireBeat } from "../mochi/beat";
+
 import { t } from "../i18n/i18n";
 
 export interface SpotifyHost {
@@ -21,6 +23,9 @@ export function registerSpotifyHandlers(island: SpotifyHost) {
     Spotify.artwork = art;
     State.notify();
   });
+  // Check song timeline rather than elapsed capture time: starting halfway
+  // through a track must not schedule a false 30-second check.
+  window.setInterval(checkTempoMilestones, 500);
   State.subscribe(() => {
     syncPillName();
     refreshWhenShown();
@@ -30,6 +35,12 @@ export function registerSpotifyHandlers(island: SpotifyHost) {
 /** A report from Rust (or the answer to a refresh). */
 export function applySpotify(island: SpotifyHost, next: SpotifyState) {
   const wasPlaying = State.spotifyPlaying;
+  const previous = Spotify.state;
+  next = reconcileSpotify(previous, next);
+  if (previous.track?.id && previous.track.id === next.track?.id && previous.playing && next.playing &&
+      Math.abs(next.position - spotifyPosition(previous, next.positionAt)) > 1.25) {
+    Spotify.beatRevision++;
+  }
   Spotify.state = next;
   syncPillName();
   // Only on not playing → playing (SpotifyController.setPlaying).
@@ -45,8 +56,36 @@ export function syncPillName() {
   if (!task) return;
   const track = Spotify.state.track;
   const title = isAd(track) ? t("Advertisement") : (track?.title ?? "");
-  const name = title || (pillDefinition(SPOTIFY_ID)?.name ?? "Media");
+  const name = title || (pillDefinition(SPOTIFY_ID)?.name ?? "Spotify");
   if (task.name !== name) task.name = name;
+}
+
+let checkedTrack = "";
+let previousPosition: number | null = null;
+const checkedMilestones = new Set<number>();
+function checkTempoMilestones() {
+  const state = Spotify.state;
+  const track = state.track;
+  if (!track || track.id !== checkedTrack) {
+    checkedTrack = track?.id ?? "";
+    checkedMilestones.clear();
+    previousPosition = track ? spotifyPosition(state, Date.now()) : null;
+    return;
+  }
+  const now = spotifyPosition(state, Date.now());
+  if (state.playing && State.settings.beatSync && previousPosition !== null &&
+      now >= previousPosition && now - previousPosition <= 3) {
+    for (const mark of [30, 60]) {
+      if (!checkedMilestones.has(mark) && previousPosition < mark && now >= mark) {
+        checkedMilestones.add(mark);
+        // Require six fresh consistent reports before adopting a new tempo.
+        // The current dance BPM stays intact during this review.
+        reacquireBeat();
+        void Bridge.beatReview();
+      }
+    }
+  }
+  previousPosition = now;
 }
 
 let shown = false;
