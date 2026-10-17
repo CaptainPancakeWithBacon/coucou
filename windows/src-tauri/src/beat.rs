@@ -517,6 +517,20 @@ mod tests {
 mod review_tests {
     use super::{TempoReview, RATE};
     #[test]
+    fn reviews_at_thirty_and_sixty_seconds_even_between_regular_checks() {
+        let mut review = TempoReview::default();
+        review.last = RATE * 27;
+        assert!(!review.due(RATE * 29));
+        assert!(review.due(RATE * 30));
+        review.check_milestones(RATE * 30);
+        assert!(!review.due(RATE * 31));
+        review.last = RATE * 57;
+        assert!(!review.due(RATE * 59));
+        assert!(review.due(RATE * 60));
+        review.check_milestones(RATE * 60);
+        assert!(!review.due(RATE * 61));
+    }
+    #[test]
     fn a_better_tempo_must_remain_stable_for_two_seconds() {
         let mut review = TempoReview::default();
         assert!(!review.due(RATE * 7));
