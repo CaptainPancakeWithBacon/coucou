@@ -1013,6 +1013,7 @@ pub fn run() {
             sounds::reveal_sounds_folder,
             sounds::reload_sounds,
             beat::beat_enable,
+            beat::beat_review,
             spotify::spotify_refresh,
             spotify::spotify_control,
             spotify::spotify_open,
