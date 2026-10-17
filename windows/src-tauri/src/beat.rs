@@ -44,10 +44,18 @@ pub struct Beat {
 struct TempoReview {
     last: usize,
     candidate: Option<(f64, usize)>,
+    milestone_checked: [bool; 2],
 }
 impl TempoReview {
     fn due(&self, heard: usize) -> bool {
-        self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 8
+        self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 8 ||
+            [RATE * 30, RATE * 60].iter().enumerate()
+                .any(|(i, &threshold)| !self.milestone_checked[i] && heard >= threshold)
+    }
+    fn check_milestones(&mut self, heard: usize) {
+        for (i, threshold) in [RATE * 30, RATE * 60].iter().enumerate() {
+            if heard >= *threshold { self.milestone_checked[i] = true; }
+        }
     }
     fn consider(&mut self, heard: usize, current: f64, confidence: f32, next: f64, quality: f32) -> bool {
         if !next.is_finite() || !quality.is_finite() || !(50.0..=220.0).contains(&next) ||
@@ -111,6 +119,7 @@ impl BeatTracker {
         let mut grid = timestretch::analysis::beat::detect_beats_with_options(&audio, RATE as u32, &options);
         if let Some(tempo) = self.tempo {
             if self.review.due(self.heard) {
+                self.review.check_milestones(self.heard);
                 let alternative = timestretch::analysis::beat::detect_beats(&audio, RATE as u32);
                 let timely = alternative.beats.last().is_some_and(|&last|
                     (0.0..=2.0 * RATE as f64).contains(&(audio.len() as f64 - last)));
