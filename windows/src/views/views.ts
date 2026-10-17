@@ -728,7 +728,9 @@ function buildFinished(actions: ViewActions): ViewHost {
     el,
     sync() {
       clear(who);
-      who.append(agentWho(State.focusTask, t("finished")));
+      // Desktop notifications are not completed coding sessions.
+      who.append(agentWho(State.focusTask,
+        State.focusTask?.id === "agent_notifications" ? t("Notification") : t("finished")));
       // The final message, else the last step that is not a diff (FinishedView).
       const task = State.focusTask;
       title.textContent = task?.finalLine || (task && lastTextStep(task.steps)) || t("Session finished");
