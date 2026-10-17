@@ -114,8 +114,7 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
     "section",
     {},
     h("h2", {}, h("span", { text: t("Android phone") })),
-    h("div", { class: "hint", text: t("Send your agents' sessions to Coucou for Android and answer permission requests from the phone. Off by default; it only listens on your local network.") }),
-    h("div", { class: "hint", text: t("Allow on the phone asks for the fingerprint or the screen lock. Deny does not.") }),
+    h("div", { class: "hint", text: t("Connect over local Wi-Fi to follow sessions and respond to approvals.") }),
     phoneSetting("Phone link", "Connect over local Wi-Fi. Allow requires your phone fingerprint or screen lock.", switchEl),
     note,
     detail,
@@ -315,7 +314,7 @@ function servicesBlock(): HTMLElement {
     "div",
     {},
     h("div", { class: "row" }, h("label", { text: t("Show these services on the phone") })),
-    h("div", { class: "hint", text: t("Each tick lets your paired phone see that service's card: a headline and up to three short lines, read-only. Nothing is shown until you tick it. No addresses, subjects, links or keys are ever sent.") }),
+    phoneHelp("Each enabled service shares only a read-only headline and three short lines. No links, addresses or keys are sent."),
     ...boxes.map((b) => b.row),
     note,
   );
