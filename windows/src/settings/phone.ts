@@ -240,8 +240,7 @@ function detailsBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Show session details on the phone") }), switchEl),
-    h("div", { class: "hint", text: t("Sends the last steps (as shown on the island, so they can include commands), the final line, the project's folder name and the colour. Never a path.") }),
+    phoneSetting("Show session details on the phone", "Shows session steps, last line and project folder. Steps may include commands.", switchEl),
     note,
   );
 }
@@ -272,8 +271,7 @@ function answersBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Let the phone answer Claude Code's questions") }), switchEl),
-    h("div", { class: "hint", text: t("The phone shows each question with its options. Every answer is confirmed with the phone's fingerprint or screen lock.") }),
+    phoneSetting("Let the phone answer Claude Code's questions", "Every answer needs fingerprint or screen lock confirmation.", switchEl),
     note,
   );
 }
@@ -349,8 +347,7 @@ function usageBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Show my plan usage on the phone") }), switchEl),
-    h("div", { class: "hint", text: t("The phone shows how much of your Claude and Codex plans is used and when they reset: the same percentages as the pills here, nothing else.") }),
+    phoneSetting("Show my plan usage on the phone", "Only plan usage percentages and reset times are shared.", switchEl),
     note,
   );
 }
@@ -381,8 +378,7 @@ function diffsBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Show the files an agent changed on the phone") }), switchEl),
-    h("div", { class: "hint", text: t("The phone lists the files each agent changed and, when you tap one, shows what changed in it (200 lines at most, long lines cut). File names and lines go only to your paired phone, over the pinned encrypted link, and only when it asks.") }),
+    phoneSetting("Show the files an agent changed on the phone", "Changes are transferred over the encrypted link only on request, up to 200 lines.", switchEl),
     note,
   );
 }
@@ -470,8 +466,7 @@ function chatBlock(makeToggle: Toggle, settings: Settings): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Let the phone chat with my AI providers") }), switchEl),
-    h("div", { class: "hint", text: t("Chat uses the API keys saved on this computer. The phone never sees them, and each message may cost money.") }),
+    phoneSetting("Let the phone chat with my AI providers", "API keys stay on this computer. Messages may have a cost.", switchEl),
     note,
     body,
   );
