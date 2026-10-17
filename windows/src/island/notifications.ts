@@ -50,7 +50,9 @@ export function isRepeatedNotice(n: DesktopNotification, now = Date.now()): bool
 /** "Discord: Anna — hey!" on one line. */
 export function noticeLine(n: DesktopNotification): string {
   const head = n.app ? `${n.app}: ` : "";
-  const text = n.summary && n.body ? `${n.summary} — ${n.body}` : n.summary || n.body;
+  const opaque = n.summary.length >= 24 && /^[a-zA-Z0-9_-]+$/.test(n.summary);
+  const summary = opaque && n.body ? "" : n.summary;
+  const text = summary && n.body ? `${summary} — ${n.body}` : summary || n.body;
   return toOneLine(`${head}${text}`);
 }
 

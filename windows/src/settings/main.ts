@@ -79,7 +79,7 @@ function sendLogRow(): HTMLElement {
 
 /** One switch per app that has notified: on = shown in the island. */
 function notificationAppsRow(): HTMLElement {
-  const box = h("div");
+  const box = h("div", { class: "notification-app-list" });
   let shown = "";
   const fill = () => void Bridge.notificationApps().then((apps) => {
     const key = `${settings.showNotifications}|${(apps ?? []).join("|")}`;
@@ -90,8 +90,8 @@ function notificationAppsRow(): HTMLElement {
     box.append(h("div", { class: "hint", text: t("Show notifications from:") }));
     for (const app of apps) {
       const muted = settings.mutedNotificationApps.some((m) => m.toLowerCase() === app.toLowerCase());
-      box.append(h("div", { class: "row" },
-        h("label", { text: app }),
+      box.append(h("div", { class: "row notification-app-row" },
+        h("label", { text: app, title: app }),
         toggle(!muted, (on) => {
           const rest = settings.mutedNotificationApps.filter((m) => m.toLowerCase() !== app.toLowerCase());
           settings.mutedNotificationApps = on ? rest : [...rest, app];
@@ -1050,71 +1050,51 @@ function generalSection(): HTMLElement {
     void save();
   });
 
-  const opacity = h("input", { type: "range", min: "20", max: "100", step: "1", value: String(settings.islandOpacity ?? 100) }) as HTMLInputElement;
-  const opacityValue = h("span", { class: "hint", text: `${settings.islandOpacity ?? 100}%` });
+  const opacity = h("input", { type: "range", min: "50", max: "100", step: "1", value: String(Math.max(50, settings.islandOpacity ?? 100)) }) as HTMLInputElement;
+  const opacityValue = h("span", { class: "hint", text: `${Math.max(50, settings.islandOpacity ?? 100)}%` });
   opacity.addEventListener("input", () => {
-    settings.islandOpacity = Number(opacity.value);
+    settings.islandOpacity = Math.max(50, Number(opacity.value));
     opacityValue.textContent = `${settings.islandOpacity}%`;
     void save();
   });
 
-  return h(
-    "section",
-    {},
-    h("h2", {}, h("span", { text: t("General") })),
-    h("div", { class: "row" },
-      h("label", { text: t("Sound") }),
-      toggle(settings.soundEnabled, (v) => { settings.soundEnabled = v; void save(); }),
-      volume,
-    ),
-    h("div", { class: "row" }, soundsFolder, reloadSounds, customCount),
-    h("div", { class: "hint", text: t("Drop a file named like one of Mochi's sounds (finish.wav, approval.mp3, greet.m4a…) in the sounds folder to replace it, then Reload.") }),
-    h("div", { class: "row" },
-      h("label", { text: t("Open on hover") }),
-      toggle(settings.openOnHover, (v) => { settings.openOnHover = v; void save(); }),
-    ),
-    h("div", { class: "hint", text: t("Hovering the island opens it; it folds again shortly after the pointer leaves. Click inside to keep it open.") }),
-    h("div", { class: "hint", text: t("Desktop notifications from every app also show in the island, as the Notifications pill. Coucou only reads them as they arrive, and stores nothing. Turn off your desktop's own banners to avoid seeing them twice.") }),
-    notificationAppsRow(),
-    h("div", { class: "row" },
-      h("label", { text: t("Keep Mochi on screen") }),
-      toggle(settings.keepVisible, (v) => { settings.keepVisible = v; void save(); }),
-    ),
-    h("div", { class: "hint", text: t("Off: when nothing happens for a minute the island hides, and moving the pointer to the top edge brings it back.") }),
-    updateRow(),
-    sendLogRow(),
-      h("div", { class: "row" },
-        h("label", { text: t("Dance to the beat") }),
-        toggle(settings.beatSync, (v) => { settings.beatSync = v; void save(); }),
-      ),
-
-    ...(HOST_OS === "linux" ? [
-      h("div", { class: "row" },
-        h("label", { text: t("Chat memory") }),
-        toggle(settings.chatMemory, (v) => { settings.chatMemory = v; void save(); }),
-      ),
-      h("div", { class: "hint", text: t("The Claude Code chat shares your memory notes (the Obsidian vault's .agent/memory folder, or COUCOU_MEMORY_DIR): it reads them and can save new ones there, nowhere else.") }),
-      h("div", { class: "hint", text: t("While Spotify plays, Coucou listens to your speakers' output (not the microphone) to find the beat, so Mochi dances in time. Nothing is recorded or sent anywhere. Needs PipeWire.") }),
-    ] : []),
-    h("div", { class: "row" },
-      h("label", { text: t("Auto-close") }),
-      autoClose,
-      h("span", { class: "hint", text: t("seconds after you leave the island") }),
-    ),
-    h("div", { class: "row" },
-      h("label", { text: t("Island lives on") }),
-      screen,
-    ),
-    h("div", { class: "row" },
-      h("label", { text: t("Island position") }),
-      align,
-    ),
-    h("div", { class: "row" },
-      h("label", { text: t("Launch at startup") }),
-      toggle(settings.autostart, (v) => { settings.autostart = v; void save(); }),
-    ),
-    ...recapRows(),
-    languageRow(),
+  const group = (name: string, ...children: HTMLElement[]) =>
+    h("section", { class: "general-group" }, h("h2", { text: t(name) }), ...children);
+  const info = (description: string) => h("span", {
+    class: "setting-help", tabindex: "0", role: "note",
+    "aria-label": t(description), "data-help": t(description), text: "?",
+  });
+  const setting = (name: string, explanation: string, ...controls: HTMLElement[]) =>
+    h("div", { class: "row setting-row" },
+      h("div", { class: "setting-name" }, h("label", { text: t(name) }), info(explanation)),
+      h("div", { class: "setting-controls" }, ...controls));
+  return h("div", { class: "general-groups" },
+    group("Sound",
+      setting("Sound", "Enable Mochi's sound effects and adjust their volume.",
+        toggle(settings.soundEnabled, v => { settings.soundEnabled = v; void save(); }), volume),
+      h("div", { class: "row setting-actions" }, soundsFolder, reloadSounds, customCount,
+        info("Replace a sound by placing a file with its sound name in the sounds folder, then reload."))),
+    group("Island behavior",
+      setting("Open on hover", "Hovering opens the island. It closes after your pointer leaves; click inside to keep it open.",
+        toggle(settings.openOnHover, v => { settings.openOnHover = v; void save(); })),
+      setting("Keep Mochi on screen", "When disabled, the island hides after one minute of inactivity.",
+        toggle(settings.keepVisible, v => { settings.keepVisible = v; void save(); })),
+      setting("Auto-close", "Seconds before the island closes after your pointer leaves.", autoClose, h("span", { class: "hint", text: t("seconds") })),
+      setting("Island lives on", "Choose the display where the island appears.", screen),
+      setting("Island position", "Choose where the island sits on the selected display.", align),
+      setting("Island opacity", "Adjust transparency between 50% and 100%.", opacity, opacityValue),
+      setting("Launch at startup", "Launch Coucou automatically when signing in.",
+        toggle(settings.autostart, v => { settings.autostart = v; void save(); }))),
+    group("Mochi & music",
+      setting("Dance to the beat", "Mochi follows Spotify's detected beat. Audio is analysed locally, without a microphone.",
+        toggle(settings.beatSync, v => { settings.beatSync = v; void save(); })),
+      ...(HOST_OS === "linux" ? [
+        setting("Chat memory", "Claude Code reads and saves notes in your configured local memory directory.",
+          toggle(settings.chatMemory, v => { settings.chatMemory = v; void save(); })),
+      ] : [])),
+    group("Updates", updateRow()),
+    group("Privacy & history", ...recapRows().slice(0, 2), sendLogRow()),
+    group("Language", languageRow()),
   );
 }
 

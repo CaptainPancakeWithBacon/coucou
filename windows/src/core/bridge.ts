@@ -421,6 +421,7 @@ export const Bridge = {
   // ── Beat (src-tauri/src/beat.rs, Linux) ───────────────────────────────────
   /** Listens to the speakers' output for the beat, or stops. False when it cannot (or the setting is off). */
   beatEnable: (on: boolean) => call<boolean>("beat_enable", { on }),
+  beatReview: () => call<void>("beat_review"),
   // ── Spotify (src-tauri/src/spotify.rs) ─────────────────────────────
   /** Reads the player again (the card came on screen) and reports it. */
   spotifyRefresh: () => call<SpotifyState | null>("spotify_refresh"),
