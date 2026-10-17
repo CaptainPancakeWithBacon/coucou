@@ -8,6 +8,7 @@ import { Bridge, onEvent } from "../core/bridge";
 import { pillDefinition } from "../core/pills";
 import { SPOTIFY_ID, Spotify, isAd, spotifyPosition, reconcileSpotify, type SpotifyState } from "../core/spotify";
 import { State } from "../core/state";
+import { reacquireBeat } from "../mochi/beat";
 
 import { t } from "../i18n/i18n";
 
@@ -77,6 +78,9 @@ function checkTempoMilestones() {
     for (const mark of [30, 60]) {
       if (!checkedMilestones.has(mark) && previousPosition < mark && now >= mark) {
         checkedMilestones.add(mark);
+        // Require six fresh consistent reports before adopting a new tempo.
+        // The current dance BPM stays intact during this review.
+        reacquireBeat();
         void Bridge.beatReview();
       }
     }
