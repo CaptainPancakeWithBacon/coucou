@@ -60,6 +60,8 @@ export function registerNotificationHandlers(island: Island) {
 
 function handle(island: Island, n: DesktopNotification) {
   // Coucou's own notices (a new version) show even with the mirroring off.
+  // Song changes belong to the Spotify pill, not desktop notifications.
+  if (n.app.trim().toLowerCase() === "spotify") return;
   if (State.paused || (!State.settings.showNotifications && n.app !== "Coucou")) return;
   const line = noticeLine(n);
   if (!line || isRepeatedNotice(n)) return;
