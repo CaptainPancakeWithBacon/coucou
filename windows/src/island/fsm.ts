@@ -215,6 +215,10 @@ export class IslandStateMachine {
     if (next === this.state) return;
     const from = this.state;
     this.state = next;
+    // An automatic home -> petit fold (or explicit close) used to leave
+    // the compact pill without a hide deadline. Start that countdown whenever
+    // we enter petit; keepVisible and pinned are respected by the scheduler.
+    if (next === "petit" && from !== "hidden") this.schedulePetitHide();
     this.onTransition?.(from, next);
   }
 }

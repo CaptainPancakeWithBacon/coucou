@@ -44,10 +44,19 @@ pub struct Beat {
 struct TempoReview {
     last: usize,
     candidate: Option<(f64, usize)>,
+    milestone_checked: [bool; 2],
+    forced: bool,
 }
 impl TempoReview {
     fn due(&self, heard: usize) -> bool {
-        self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 8
+        self.forced || self.candidate.is_some() || heard.saturating_sub(self.last) >= RATE * 8 ||
+            [RATE * 30, RATE * 60].iter().enumerate()
+                .any(|(i, &threshold)| !self.milestone_checked[i] && heard >= threshold)
+    }
+    fn check_milestones(&mut self, heard: usize) {
+        for (i, threshold) in [RATE * 30, RATE * 60].iter().enumerate() {
+            if heard >= *threshold { self.milestone_checked[i] = true; }
+        }
     }
     fn consider(&mut self, heard: usize, current: f64, confidence: f32, next: f64, quality: f32) -> bool {
         if !next.is_finite() || !quality.is_finite() || !(50.0..=220.0).contains(&next) ||
@@ -80,6 +89,7 @@ pub struct BeatTracker {
 impl Default for BeatTracker { fn default() -> Self { Self::new() } }
 impl BeatTracker {
     pub fn new() -> Self { Self { history: VecDeque::new(), since_estimate: 0, tempo: None, heard: 0, review: TempoReview::default() } }
+    pub fn request_review(&mut self) { self.review.forced = true; }
     pub fn push(&mut self, samples: &[i16]) -> Option<Beat> {
         self.history.extend(samples.iter().map(|v| *v as f32 / 32768.0));
         self.since_estimate += samples.len();
@@ -111,6 +121,8 @@ impl BeatTracker {
         let mut grid = timestretch::analysis::beat::detect_beats_with_options(&audio, RATE as u32, &options);
         if let Some(tempo) = self.tempo {
             if self.review.due(self.heard) {
+                self.review.forced = false;
+                self.review.check_milestones(self.heard);
                 let alternative = timestretch::analysis::beat::detect_beats(&audio, RATE as u32);
                 let timely = alternative.beats.last().is_some_and(|&last|
                     (0.0..=2.0 * RATE as f64).contains(&(audio.len() as f64 - last)));
@@ -150,6 +162,7 @@ struct Running {
     capture: Option<capture::Capture>,
     active: std::sync::Arc<std::sync::atomic::AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
+    review_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 #[cfg(windows)]
 impl Drop for Running {
@@ -299,11 +312,16 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
         Ok(capture) => {
             let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
             let running = active.clone();
+            let review_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let worker_review = review_requested.clone();
             let worker = std::thread::spawn(move || {
                 let mut tracker = BeatTracker::new();
                 while running.load(std::sync::atomic::Ordering::Relaxed) {
                     let Ok((samples, end_ms, discontinuity)) = rx.recv() else { break };
                     if discontinuity { tracker = BeatTracker::new(); }
+                    if worker_review.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                        tracker.request_review();
+                    }
                     if let Some(beat) = tracker.push(&samples) {
                         if running.load(std::sync::atomic::Ordering::Relaxed) {
                             let _ = app.emit("beat", BeatEvent { bpm: beat.bpm, beat_at_ms: end_ms - beat.last_beat_ago * 1000.0, confidence: beat.confidence });
@@ -311,12 +329,27 @@ pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: S
                     }
                 }
             });
-            *slot = Some(Running { capture: Some(capture), active, worker: Some(worker) });
+            *slot = Some(Running { capture: Some(capture), active, worker: Some(worker), review_requested });
             true
         }
         Err(err) => { crate::log::line(format!("beat: {err}")); false }
     }
 }
+
+/// Ask for an unbiased check at a Spotify song-position milestone.
+#[cfg(windows)]
+#[tauri::command]
+pub fn beat_review(listener: State<'_, Listener>) {
+    if let Ok(slot) = listener.run.lock() {
+        if let Some(running) = slot.as_ref() {
+            running.review_requested.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn beat_review() {}
 
 #[cfg(test)]
 mod tests {
@@ -507,6 +540,20 @@ mod tests {
 #[cfg(test)]
 mod review_tests {
     use super::{TempoReview, RATE};
+    #[test]
+    fn reviews_at_thirty_and_sixty_seconds_even_between_regular_checks() {
+        let mut review = TempoReview::default();
+        review.last = RATE * 27;
+        assert!(!review.due(RATE * 29));
+        assert!(review.due(RATE * 30));
+        review.check_milestones(RATE * 30);
+        assert!(!review.due(RATE * 31));
+        review.last = RATE * 57;
+        assert!(!review.due(RATE * 59));
+        assert!(review.due(RATE * 60));
+        review.check_milestones(RATE * 60);
+        assert!(!review.due(RATE * 61));
+    }
     #[test]
     fn a_better_tempo_must_remain_stable_for_two_seconds() {
         let mut review = TempoReview::default();

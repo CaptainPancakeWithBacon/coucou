@@ -1,6 +1,6 @@
 /** A handful of solid, shaded surfaces per accessory; never a tessellated mesh. */
 export type Point3 = readonly [number, number, number];
-export interface AccessoryPart { points: Point3[]; color: string; depth: number; glass?: boolean; face?: boolean; hole?: Point3[]; soft?: boolean; round?: boolean; panel?: boolean; axis?: Point3 }
+export interface AccessoryPart { points: Point3[]; color: string; depth: number; glass?: boolean; face?: boolean; hole?: Point3[]; soft?: boolean; round?: boolean; panel?: boolean; continuousBand?: boolean; axis?: Point3 }
 export interface PartBuilder {
   parts: AccessoryPart[];
   plate(points: readonly (readonly [number, number])[], color: string, z?: number, depth?: number, face?: boolean): void;
@@ -29,7 +29,7 @@ export function accessoryParts(outfit: string): readonly AccessoryPart[] {
         // A coarse band needs clearance for its straight chords, not only its corners.
         const r=headSurface(0,height)*1.10,shape=(n:number)=>Math.sign(n)*Math.abs(n)**(2/2.7);
         return [shape(Math.sin(angle))*r,height,shape(Math.cos(angle))*r] as Point3;
-      }),color,depth:.035,panel:true});
+      }),color,depth:.035,panel:true,continuousBand:true});
     }
   };
   const ear = (side: number, outer: string, inner: string, tall = 0.78) => {
@@ -50,7 +50,7 @@ export function accessoryParts(outfit: string): readonly AccessoryPart[] {
     };
     for(let i=0;i<6;i++) {
       const a=(i-.5)*Math.PI/3,b=(i+.5)*Math.PI/3;
-      parts.push({points:[ring(a,.63),ring(b,.63),ring(b,.93),[0,1.075,0],ring(a,.93)],color,depth:.08,panel:true});
+      parts.push({points:[ring(a,.63),ring(b,.63),ring(b,.93),[0,1.075,0],ring(a,.93)],color,depth:.08,panel:true,continuousBand:true});
     }
   };
   const goggles = (y: number, color: string, lens: string) => {

@@ -12,18 +12,41 @@ export function projectAccessory(p: Point3, h: Head): Projected {
 
 /** Clip the few surface edges against the body, instead of thousands of triangles. */
 export function visibleAccessory(points: readonly Projected[], h: Head): Projected[] {
-  const clearance=(p:Projected)=>p.z-headSurface(p.x/h.rx,-p.y/h.ry);
+  const clearance=(p:Projected)=>{
+    const x=p.x/h.rx,y=-p.y/h.ry;
+    // There is no head in front of points outside its silhouette. The old
+    // test returned a zero surface there and accidentally culled back-facing
+    // wings, horns and headwear while Mochi turned.
+    if(Math.abs(x)**2.7+Math.abs(y)**2.7>=1) return Number.POSITIVE_INFINITY;
+    return p.z-headSurface(x,y);
+  };
   const out:Projected[]=[];
+  // An edge can cross the head silhouette even when *both endpoints* are
+  // occluded. Testing only the original polygon vertices makes a whole layer
+  // suddenly pop in or out as the character rotates. Sample the projected
+  // edges before clipping, so those intermediate visible arcs survive.
+  const sample=(a:Projected,b:Projected,t:number):Projected=>({
+    x:a.x+(b.x-a.x)*t,
+    y:a.y+(b.y-a.y)*t,
+    z:a.z+(b.z-a.z)*t,
+  });
+  const edgeSteps=16;
   for(let i=0;i<points.length;i++) {
-    const a=points[i],b=points[(i+1)%points.length],fa=clearance(a),fb=clearance(b);
-    if(fa>=0)out.push(a);
-    if((fa>=0)!==(fb>=0)) {
-      let lo=0,hi=1;
-      for(let k=0;k<7;k++) {
-        const t=(lo+hi)/2,q={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};
-        if((clearance(q)>=0)===(fa>=0))lo=t;else hi=t;
+    const a=points[i],b=points[(i+1)%points.length];
+    for(let step=0;step<edgeSteps;step++) {
+      const p=sample(a,b,step/edgeSteps);
+      const q=sample(a,b,(step+1)/edgeSteps);
+      const fp=clearance(p),fq=clearance(q);
+      if(fp>=0)out.push(p);
+      if((fp>=0)!==(fq>=0)) {
+        let lo=0,hi=1;
+        for(let k=0;k<9;k++) {
+          const mid=(lo+hi)/2;
+          if((clearance(sample(p,q,mid))>=0)===(fp>=0))lo=mid;
+          else hi=mid;
+        }
+        out.push(sample(p,q,(lo+hi)/2));
       }
-      const t=fa>=0?lo:hi;out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t});
     }
   }
   return out;
@@ -85,20 +108,30 @@ export function drawSimpleAccessory(ctx:CanvasRenderingContext2D,outfit:string,h
         if(visible.length<3)continue;
         visible.forEach((p,j)=>j?walls.lineTo(p.x,p.y):walls.moveTo(p.x,p.y));walls.closePath();
       }
-      ctx.fillStyle=shade(color,.66);ctx.fill(walls);
+      ctx.fillStyle=shade(color,part.continuousBand?.88:.66);ctx.fill(walls);
     }
     const xs=contour.map(p=>p.x),ys=contour.map(p=>p.y);
     const left=Math.min(...xs),top=Math.min(...ys),right=Math.max(...xs),bottom=Math.max(...ys);
-    const g=part.round&&!part.glass
+    const g=part.continuousBand
+      ?ctx.createLinearGradient(-h.rx,-h.ry,h.rx,h.ry)
+      :part.round&&!part.glass
       ?ctx.createRadialGradient(left+(right-left)*.3,top+(bottom-top)*.25,0,(left+right)/2,(top+bottom)/2,Math.max(right-left,bottom-top)*.66+.01)
       :ctx.createLinearGradient(left,top,right+.01,bottom+.01);
     let light=1;
-    if(part.panel) {
+    if(part.panel && !part.continuousBand) {
       const [a,b,c]=part.points,u=b.map((p,i)=>p-a[i]),v=c.map((p,i)=>p-a[i]);
       const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],length=Math.hypot(...n)||1,sign=n[2]<0?-1:1;
       light=.82+.22*Math.max(0,(-n[0]*.4+n[1]*.65+n[2]*.65)*sign/length);
     }
-    g.addColorStop(0,shade(color,1.20*light));g.addColorStop(.38,shade(color,light));g.addColorStop(1,shade(color,.71*light));
+    if(part.continuousBand) {
+      // One fixed light field for the whole band, not a new highlight on each
+      // polygon; adjoining panels therefore retain the same material value.
+      g.addColorStop(0,shade(color,.89));
+      g.addColorStop(.48,shade(color,1.07));
+      g.addColorStop(1,shade(color,.92));
+    } else {
+      g.addColorStop(0,shade(color,1.20*light));g.addColorStop(.38,shade(color,light));g.addColorStop(1,shade(color,.71*light));
+    }
     ctx.save();
     if(part.glass)ctx.globalAlpha*=.38;
     ctx.fillStyle=g;ctx.fill(outline,'evenodd');

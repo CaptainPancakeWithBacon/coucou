@@ -16,8 +16,21 @@ type Toggle = (on: boolean, onChange: (v: boolean) => void) => HTMLElement;
  */
 const SHOW_RELAY_SETTINGS = false;
 
+function phoneHelp(message: string): HTMLElement {
+  return h("span", { class: "setting-help", tabindex: "0", role: "note",
+    "aria-label": t(message), "data-help": t(message), text: "?" });
+}
+function phoneGroup(name: string, ...children: HTMLElement[]): HTMLElement {
+  return h("div", { class: "phone-group" }, h("h3", { text: t(name) }), ...children);
+}
+function phoneSetting(name: string, explanation: string, control: HTMLElement): HTMLElement {
+  return h("div", { class: "row phone-setting" },
+    h("div", { class: "setting-name" }, h("label", { text: t(name) }), phoneHelp(explanation)),
+    h("div", { class: "setting-controls" }, control));
+}
+
 export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings): HTMLElement {
-  const detail = h("div", {});
+  const detail = h("div", { class: "phone-groups" });
   const note = h("div", { class: "hint" });
   /** Where the pairing code is drawn, so showing it never hides the switches below. */
   const pairingBox = h("div", {});
@@ -58,19 +71,16 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
     const address = status.host ? `${status.host}:${status.port}` : `:${status.port}`;
     clients.textContent = t("Phones connected: {count}", { count: status.clients });
     detail.append(
-      h("div", { class: "row" }, show),
-      pairingBox,
-      clients,
-      h("div", { class: "hint", text: t("The phone connects to {address}", { address }) }),
-      h("div", { class: "hint", text: t("If Windows asks about the firewall, allow Coucou on private networks. The phone and this computer must be on the same Wi-Fi.") }),
-      h("div", { class: "hint", text: t("Your phone finds this computer again by itself when the network changes. It is announced on your local network only while this switch is on. Some hotspots and guest networks block this.") }),
-      ...(SHOW_RELAY_SETTINGS ? [relayBlock(makeToggle, () => void refreshPairing())] : []),
-      detailsBlock(makeToggle),
-      answersBlock(makeToggle),
-      diffsBlock(makeToggle),
-      usageBlock(makeToggle),
-      servicesBlock(),
-      chatBlock(makeToggle, settings),
+      phoneGroup("Connection",
+        h("div", { class: "phone-connection-status" }, clients,
+          h("span", { class: "hint", text: t("The phone connects to {address}", { address }) }),
+          phoneHelp("Both devices must be on the same Wi-Fi. Allow Coucou through the private network firewall. Guest networks may block discovery.")),
+        h("div", { class: "row" }, show),
+        pairingBox,
+        ...(SHOW_RELAY_SETTINGS ? [relayBlock(makeToggle, () => void refreshPairing())] : [])),
+      phoneGroup("Sessions & approvals", detailsBlock(makeToggle), answersBlock(makeToggle), diffsBlock(makeToggle)),
+      phoneGroup("Usage & services", usageBlock(makeToggle), servicesBlock()),
+      phoneGroup("AI chat", chatBlock(makeToggle, settings)),
     );
   };
 
@@ -104,9 +114,8 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
     "section",
     {},
     h("h2", {}, h("span", { text: t("Android phone") })),
-    h("div", { class: "hint", text: t("Send your agents' sessions to Coucou for Android and answer permission requests from the phone. Off by default; it only listens on your local network.") }),
-    h("div", { class: "hint", text: t("Allow on the phone asks for the fingerprint or the screen lock. Deny does not.") }),
-    h("div", { class: "row" }, h("label", { text: t("Phone link") }), switchEl),
+    h("div", { class: "hint", text: t("Connect over local Wi-Fi to follow sessions and respond to approvals.") }),
+    phoneSetting("Phone link", "Connect over local Wi-Fi. Allow requires your phone fingerprint or screen lock.", switchEl),
     note,
     detail,
   );
@@ -230,8 +239,7 @@ function detailsBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Show session details on the phone") }), switchEl),
-    h("div", { class: "hint", text: t("Sends the last steps (as shown on the island, so they can include commands), the final line, the project's folder name and the colour. Never a path.") }),
+    phoneSetting("Show session details on the phone", "Shows session steps, last line and project folder. Steps may include commands.", switchEl),
     note,
   );
 }
@@ -262,8 +270,7 @@ function answersBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Let the phone answer Claude Code's questions") }), switchEl),
-    h("div", { class: "hint", text: t("The phone shows each question with its options. Every answer is confirmed with the phone's fingerprint or screen lock.") }),
+    phoneSetting("Let the phone answer Claude Code's questions", "Every answer needs fingerprint or screen lock confirmation.", switchEl),
     note,
   );
 }
@@ -307,7 +314,7 @@ function servicesBlock(): HTMLElement {
     "div",
     {},
     h("div", { class: "row" }, h("label", { text: t("Show these services on the phone") })),
-    h("div", { class: "hint", text: t("Each tick lets your paired phone see that service's card: a headline and up to three short lines, read-only. Nothing is shown until you tick it. No addresses, subjects, links or keys are ever sent.") }),
+    phoneHelp("Each enabled service shares only a read-only headline and three short lines. No links, addresses or keys are sent."),
     ...boxes.map((b) => b.row),
     note,
   );
@@ -339,8 +346,7 @@ function usageBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Show my plan usage on the phone") }), switchEl),
-    h("div", { class: "hint", text: t("The phone shows how much of your Claude and Codex plans is used and when they reset: the same percentages as the pills here, nothing else.") }),
+    phoneSetting("Show my plan usage on the phone", "Only plan usage percentages and reset times are shared.", switchEl),
     note,
   );
 }
@@ -371,8 +377,7 @@ function diffsBlock(makeToggle: Toggle): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Show the files an agent changed on the phone") }), switchEl),
-    h("div", { class: "hint", text: t("The phone lists the files each agent changed and, when you tap one, shows what changed in it (200 lines at most, long lines cut). File names and lines go only to your paired phone, over the pinned encrypted link, and only when it asks.") }),
+    phoneSetting("Show the files an agent changed on the phone", "Changes are transferred over the encrypted link only on request, up to 200 lines.", switchEl),
     note,
   );
 }
@@ -460,8 +465,7 @@ function chatBlock(makeToggle: Toggle, settings: Settings): HTMLElement {
   return h(
     "div",
     {},
-    h("div", { class: "row" }, h("label", { text: t("Let the phone chat with my AI providers") }), switchEl),
-    h("div", { class: "hint", text: t("Chat uses the API keys saved on this computer. The phone never sees them, and each message may cost money.") }),
+    phoneSetting("Let the phone chat with my AI providers", "API keys stay on this computer. Messages may have a cost.", switchEl),
     note,
     body,
   );

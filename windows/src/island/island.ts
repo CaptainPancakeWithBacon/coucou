@@ -250,8 +250,8 @@ export class Island {
         State.notify();
       },
       setIslandOpacity: (percent) => {
-        State.settings.islandOpacity = Math.max(20, Math.min(100, percent));
-        this.islandEl.style.opacity = String(State.settings.islandOpacity / 100);
+        State.settings.islandOpacity = Math.max(50, Math.min(100, percent));
+        this.islandEl.style.opacity = String(Math.max(50, Math.min(100, State.settings.islandOpacity ?? 100)) / 100);
         void Bridge.saveSettings(State.settings);
         State.notify();
       },
@@ -1057,7 +1057,7 @@ export class Island {
   private frameBody = (nowMs: number) => {
     // Apply opacity to the complete island (content, Mochi, borders, shadows).
     // Never dim the transparent window container or its hit-testing region.
-    const opacity = Math.max(20, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
+    const opacity = Math.max(50, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
     this.islandEl.style.opacity = String(opacity);
     // One chain only: a frame forced by the watchdog replaces the pending one.
     this.cancelFrame();
