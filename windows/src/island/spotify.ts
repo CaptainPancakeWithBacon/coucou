@@ -22,6 +22,9 @@ export function registerSpotifyHandlers(island: SpotifyHost) {
     Spotify.artwork = art;
     State.notify();
   });
+  // Check song timeline rather than elapsed capture time: starting halfway
+  // through a track must not schedule a false 30-second check.
+  window.setInterval(checkTempoMilestones, 500);
   State.subscribe(() => {
     syncPillName();
     refreshWhenShown();
@@ -54,6 +57,31 @@ export function syncPillName() {
   const title = isAd(track) ? t("Advertisement") : (track?.title ?? "");
   const name = title || (pillDefinition(SPOTIFY_ID)?.name ?? "Spotify");
   if (task.name !== name) task.name = name;
+}
+
+let checkedTrack = "";
+let previousPosition: number | null = null;
+const checkedMilestones = new Set<number>();
+function checkTempoMilestones() {
+  const state = Spotify.state;
+  const track = state.track;
+  if (!track || track.id !== checkedTrack) {
+    checkedTrack = track?.id ?? "";
+    checkedMilestones.clear();
+    previousPosition = track ? spotifyPosition(state, Date.now()) : null;
+    return;
+  }
+  const now = spotifyPosition(state, Date.now());
+  if (state.playing && State.settings.beatSync && previousPosition !== null &&
+      now >= previousPosition && now - previousPosition <= 3) {
+    for (const mark of [30, 60]) {
+      if (!checkedMilestones.has(mark) && previousPosition < mark && now >= mark) {
+        checkedMilestones.add(mark);
+        void Bridge.beatReview();
+      }
+    }
+  }
+  previousPosition = now;
 }
 
 let shown = false;
