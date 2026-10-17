@@ -32,6 +32,20 @@ export function openNoticeTarget(task: AgentTask | null | undefined): boolean {
 
 let restoreTimer: number | null = null;
 let before: string | null = null;
+// Windows may republish the same toast with a new arrival timestamp.
+const recentNotices = new Map<string, number>();
+const DEDUPE_MS = 20_000;
+
+export function isRepeatedNotice(n: DesktopNotification, now = Date.now()): boolean {
+  const key = JSON.stringify([n.app, n.summary, n.body, n.target ?? ""]);
+  for (const [oldKey, time] of recentNotices) {
+    if (now - time >= DEDUPE_MS) recentNotices.delete(oldKey);
+  }
+  const last = recentNotices.get(key);
+  if (last !== undefined && now - last < DEDUPE_MS) return true;
+  recentNotices.set(key, now);
+  return false;
+}
 
 /** "Discord: Anna — hey!" on one line. */
 export function noticeLine(n: DesktopNotification): string {
@@ -48,7 +62,7 @@ function handle(island: Island, n: DesktopNotification) {
   // Coucou's own notices (a new version) show even with the mirroring off.
   if (State.paused || (!State.settings.showNotifications && n.app !== "Coucou")) return;
   const line = noticeLine(n);
-  if (!line) return;
+  if (!line || isRepeatedNotice(n)) return;
   const update = n.app === "Coucou" && !!n.target;
   State.upsertExternalAgent(NOTIFICATIONS_ID, t("Notifications"), COLOR);
   State.appendStep(NOTIFICATIONS_ID, line);
