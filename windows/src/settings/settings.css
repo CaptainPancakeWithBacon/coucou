@@ -448,3 +448,8 @@ html[dir="rtl"] :is(.diff, .path, .keycap, input[type="password"], input[type="t
 .setting-help:hover,.setting-help:focus-visible { color:var(--ink); border-color:rgba(255,255,255,.5); outline:none; }
 .setting-help:is(:hover,:focus-visible)::after { content:attr(data-help); position:absolute; z-index:50; bottom:calc(100% + 9px); left:0; width:max-content; max-width:min(300px, 75vw); white-space:normal; font:12px/1.5 var(--font); color:var(--ink); background:#22252b; padding:9px 11px; border:1px solid rgba(255,255,255,.16); border-radius:9px; box-shadow:0 10px 25px rgba(0,0,0,.45); pointer-events:none; }
 @media(max-width:620px) { .setting-row { grid-template-columns:minmax(0,1fr); row-gap:9px; } .setting-controls { padding-left:0; } .general-group { padding:15px; } }
+
+/* Notification app switches live only on the dedicated Notifications page. */
+.notification-app-list { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.notification-app-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:16px; min-height:32px; padding:4px 10px; border-radius:8px; background:rgba(255,255,255,.025); }
+.notification-app-row label { min-width:0; max-width:100%; overflow-wrap:anywhere; font-size:12px; }
