@@ -12,6 +12,7 @@ import type { Settings } from "../core/state";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { resolveLanguage, setLanguage, systemLanguages, t } from "../i18n/i18n";
 import { HUB_ICONS, keyLabel } from "../hub/ui";
+import { syncPillVisibility } from "./visibility";
 
 const RESTING_LENGTH = 44;
 const RESTING_THICKNESS = 8;
@@ -240,6 +241,15 @@ let capsule: HTMLElement | null = null;
 let lastKey = "";
 
 function render() {
+  if (!visible) {
+    root.hidden = true;
+    root.replaceChildren();
+    hovered = false;
+    tooltip = null;
+    void FlowBridge.pillHot([]);
+    return;
+  }
+  root.hidden = false;
   const l = look();
   const open = l !== "resting";
   const length = open ? openLength(l) : RESTING_LENGTH;
@@ -277,6 +287,10 @@ function render() {
 }
 
 function reportHot() {
+  if (!visible) {
+    void FlowBridge.pillHot([]);
+    return;
+  }
   const rects: [number, number, number, number][] = [];
   const W = window.innerWidth;
   const H = window.innerHeight;
@@ -302,6 +316,7 @@ function reportHot() {
 // ── Hover ─────────────────────────────────────────────────────────────────────
 
 function setHovered(inside: boolean) {
+  if (!visible) return;
   if (inside) {
     if (unhover !== null) {
       clearTimeout(unhover);
@@ -493,10 +508,11 @@ async function main() {
   const status = await FlowBridge.status();
   if (status) platform = status.platform;
   state = (await FlowBridge.pillState()) ?? state;
-  visible = state.enabled || state.noteStartedAt !== null || state.announcement !== null || state.voice !== null;
+  visible = syncPillVisibility(root, state);
   render();
   void onEvent<PillState>("pill-state", (s) => {
     state = s;
+    visible = syncPillVisibility(root, s);
     if (s.phase === "listening") target.fill(0);
     render();
   });
@@ -505,7 +521,7 @@ async function main() {
     wake();
   });
   void onEvent<boolean>("pill-visible", (v) => {
-    visible = v;
+    visible = v && syncPillVisibility(root, state);
     if (!v) {
       hovered = false;
       tooltip = null;

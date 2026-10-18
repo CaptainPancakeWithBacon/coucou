@@ -34,6 +34,8 @@ export interface SpotifyState {
   repeat: boolean;
   /** 0…100. */
   volume: number;
+  /** False when the player cannot expose its real volume control. */
+  volumeAvailable?: boolean;
   /** The player's own name ("Spotify", "Firefox"…); empty when none runs. */
   player: string;
 }
@@ -45,8 +47,11 @@ export const IDLE_SPOTIFY: SpotifyState = {
 
 /** The page's copy of the player, and the cover of the track that has one. */
 export const Spotify = {
+  /** Invalidates captured beat history after a seek within the same song. */
+  beatRevision: 0,
   state: { ...IDLE_SPOTIFY } as SpotifyState,
   artwork: null as { artUrl: string; dataUrl: string } | null,
+  /** Trusted tempo for the current track, if a provider found an exact match. */
 };
 
 /** The cover to show for the current track, if it has arrived. */
@@ -61,6 +66,16 @@ export function spotifyPosition(s: SpotifyState, nowMs: number): number {
   const p = s.position + elapsed;
   const d = s.track?.duration ?? 0;
   return d > 0 ? Math.min(p, d) : p;
+}
+
+/** Smooth sub-second transport jitter while retaining real seeks and track changes. */
+export function reconcileSpotify(previous: SpotifyState, next: SpotifyState): SpotifyState {
+  if (!previous.track?.id || previous.track.id !== next.track?.id || !previous.playing || !next.playing) return next;
+  if (next.positionAt < previous.positionAt) return { ...next, position: previous.position, positionAt: previous.positionAt };
+  const expected = spotifyPosition(previous, next.positionAt);
+  const delta = next.position - expected;
+  if (Math.abs(delta) > 1.25) return next;
+  return { ...next, position: expected + Math.max(0, delta) * 0.15 };
 }
 
 /**

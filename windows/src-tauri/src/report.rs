@@ -14,7 +14,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use tauri::AppHandle;
 
 const WEBHOOK: Option<&str> = option_env!("COUCOU_LOG_WEBHOOK");
-const WEBHOOK_PREFIX: &str = "https://discord.com/api/webhooks/";
+/// The hosts Discord has handed out webhook addresses on.
+const WEBHOOK_HOSTS: [&str; 4] = ["discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com"];
 /// The commit this build was made from (see updates.rs).
 const BUILD_SHA: Option<&str> = option_env!("COUCOU_BUILD_SHA");
 /// How much of the log goes along.
@@ -44,8 +45,30 @@ pub fn install_panic_hook() {
     }));
 }
 
+/// A Discord webhook address: https, one of Discord's hosts, /api/webhooks/<id>/<token>.
+fn webhook_ok(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else { return false };
+    let Some((host, path)) = rest.split_once('/') else { return false };
+    WEBHOOK_HOSTS.contains(&host) && path.starts_with("api/webhooks/") && path.len() > "api/webhooks/".len() + 3
+}
+
 fn webhook() -> Option<&'static str> {
-    WEBHOOK.map(str::trim).filter(|w| w.starts_with(WEBHOOK_PREFIX))
+    WEBHOOK.map(str::trim).filter(|w| webhook_ok(w))
+}
+
+/// One line for the log saying whether this build can send a log, and if not
+/// why: never the address itself (only its host, which is not a secret).
+pub fn describe() -> String {
+    match WEBHOOK.map(str::trim) {
+        None => "off: this build was made without COUCOU_LOG_WEBHOOK".into(),
+        Some("") => "off: COUCOU_LOG_WEBHOOK was empty when this build was made".into(),
+        Some(w) if webhook_ok(w) => "on".into(),
+        Some(w) => format!(
+            "off: the webhook address is not a Discord one (starts with {:?}, {} characters)",
+            w.chars().take(24).collect::<String>().split("/api").next().unwrap_or(""),
+            w.len()
+        ),
+    }
 }
 
 /// Whether this build can send a log at all.
@@ -214,16 +237,24 @@ pub fn trouble(app: &AppHandle, kind: &'static str, what: &str) {
         }
         told.push(kind);
     }
+    // The page may not be listening yet (this can happen during start-up): wait.
     #[cfg(any(target_os = "linux", windows))]
-    crate::notifications::announce(
-        app,
-        crate::notifications::Notice {
-            app: "Coucou".into(),
-            summary: "Something isn't working".into(),
-            body: what.chars().take(120).collect(),
-            target: Some(SEND_TARGET.into()),
-        },
-    );
+    {
+        let app = app.clone();
+        let body: String = what.chars().take(120).collect();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+            crate::notifications::announce(
+                &app,
+                crate::notifications::Notice {
+                    app: "Coucou".into(),
+                    summary: "Something isn't working".into(),
+                    body,
+                    target: Some(SEND_TARGET.into()),
+                },
+            );
+        });
+    }
     #[cfg(not(any(target_os = "linux", windows)))]
     let _ = (app, what);
 }
@@ -272,6 +303,18 @@ C:/Users/Jan de Vries/.claude/settings.json read by jan";
         let r = report_text("Coucou 1, build abc1234", "x C:\\Users\\Anna\\f", "Anna", "C:\\Users\\Anna");
         assert!(r.starts_with("Coucou 1, build abc1234"));
         assert!(!r.contains("Anna"));
+    }
+
+    #[test]
+    fn only_discord_webhook_addresses_count() {
+        assert!(webhook_ok("https://discord.com/api/webhooks/123456/abcDEF_-xyz"));
+        assert!(webhook_ok("https://discordapp.com/api/webhooks/123456/abcDEF"));
+        assert!(webhook_ok("https://canary.discord.com/api/webhooks/1/abcd"));
+        assert!(!webhook_ok("http://discord.com/api/webhooks/123/abc"));
+        assert!(!webhook_ok("https://evil.example/api/webhooks/123/abc"));
+        assert!(!webhook_ok("https://discord.com/api/webhooks/"));
+        assert!(!webhook_ok("https://discord.com.evil.example/api/webhooks/123/abc"));
+        assert!(!webhook_ok(""));
     }
 
     #[test]

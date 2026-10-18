@@ -120,11 +120,12 @@ fn notification_apps(shared: State<Shared>) -> Vec<String> {
 fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     let (screen_changed, autostart_changed, shortcuts_changed) = {
         let mut current = shared.settings.lock().unwrap();
-        let screen_changed = current.screen != settings.screen || current.island_align != settings.island_align;
+        let screen_changed = current.screen != settings.screen || current.island_align != settings.island_align || current.island_custom_position != settings.island_custom_position;
         let autostart_changed = current.autostart != settings.autostart;
         let shortcuts_changed = current.shortcuts != settings.shortcuts;
         // Where Mochi sits on the desktop is desktop.rs's to say, not a webview's.
         let mut settings = settings.clone();
+        settings.show_notifications = settings.active_integrations.iter().any(|id| id == "agent_notifications");
         settings.desktop_mochi = current.desktop_mochi.clone();
         // Same for the phone link: only its own commands turn it on or off.
         settings.phone_link = current.phone_link;
@@ -513,14 +514,14 @@ fn codex_setup(app: &AppHandle) {
     if marker.exists() || !codex_is_here {
         return;
     }
-    let _ = std::fs::write(&marker, b"");
     match agents::preview("codex", true).and_then(|plan| agents::apply("codex", true, &plan.fingerprint)) {
         Ok(_) => {
+            let _ = std::fs::write(&marker, b"");
             log::line("codex: hooks installed (a backup was made)".to_string());
             let shared = app.state::<Shared>();
             let mut current = shared.settings.lock().unwrap();
             let pill = "agent_codex".to_string();
-            if current.active_integrations.len() < 4 && !current.active_integrations.contains(&pill) {
+            if current.active_integrations.len() < 8 && !current.active_integrations.contains(&pill) {
                 current.active_integrations.push(pill);
             }
             let _ = settings::save(&current);
@@ -785,7 +786,7 @@ fn shortcuts_suspend(app: AppHandle, shared: State<Shared>, suspended: bool) {
 /// for the *same* arguments as the island (see `additionalBrowserArgs` in
 /// tauri.conf.json) — a mismatch makes the second window come up blank, with no
 /// error anywhere.
-pub(crate) const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+pub(crate) const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required";
 
 /// In a dev build the pages are served by Vite, so the second window needs the
 /// absolute dev URL; a bundled build resolves it inside the app bundle.
@@ -916,6 +917,7 @@ pub fn run() {
             set_island_rect,
             focus_window,
             reposition,
+            island::island_drag,
             fit_zoom,
             list_monitors,
             open_url,
@@ -1011,6 +1013,7 @@ pub fn run() {
             sounds::reveal_sounds_folder,
             sounds::reload_sounds,
             beat::beat_enable,
+            beat::beat_review,
             spotify::spotify_refresh,
             spotify::spotify_control,
             spotify::spotify_open,
@@ -1087,6 +1090,7 @@ pub fn run() {
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             report::remember(&handle);
+            log::line(format!("send log: {}", report::describe()));
             hooks::ensure_hook_exe(&handle);
             if first_run {
                 first_run_setup(&handle, &loaded);

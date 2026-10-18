@@ -1,97 +1,107 @@
-// Wardrobe view — port of WardrobeView (IslandViewContent.swift). Opened with a
-// right-click on Mochi or from the tray menu. Resting the pointer on a button
-// tries the outfit on Mochi; a click keeps it.
-
 import { h } from "./dom";
 import { State } from "../core/state";
 import { drawWardrobeIcon } from "../mochi/outfits";
+import { buildCollectionPages } from "./collection-pages";
 import {
-  OUTFIT_KEYS, OUTFIT_SELECTIONS, WARDROBE_STRINGS, parseOutfit, resolveOutfit, seasonalOutfit,
-  wardrobeHeader, type Outfit, type OutfitSelection,
+  WARDROBE_COLLECTIONS, OUTFIT_STYLES, WARDROBE_STRINGS, parseOutfit, resolveOutfit, seasonalOutfit,
+  outfitFamily, outfitVariants, outfitAppearance, outfitLabel, wardrobeHeader, type OutfitSelection,
 } from "../mochi/wardrobe";
 import type { ViewActions, ViewHost } from "./views";
-import { language, tl } from "../i18n/i18n";
-
-const ICON = 28;
+import { language, t, tl } from "../i18n/i18n";
 
 export function buildWardrobe(actions: ViewActions): ViewHost {
-  const note = h("span", { class: "wardrobe-note" });
-  const grid = h("div", { class: "wardrobe-grid" });
-  const el = h(
-    "div",
-    { class: "view wardrobe" },
-    h(
-      "div",
-      { class: "card" },
-      h(
-        "div",
-        { class: "stack wardrobe-stack" },
-        h("div", { class: "wardrobe-head" }, h("span", { class: "wardrobe-title", text: tl("Wardrobe") }), note),
-        grid,
-      ),
-    ),
-  );
-
+  const initial = parseOutfit(State.settings.mochiOutfit);
   let hovered: OutfitSelection | null = null;
-  let drawnSeason: Outfit | null = null;
-  let drawnLanguage = language();
-  const items = new Map<OutfitSelection, { button: HTMLButtonElement; canvas: HTMLCanvasElement }>();
+  let items: { selection: OutfitSelection; button: HTMLButtonElement; canvas: HTMLCanvasElement; page: number }[] = [];
+  const drawn = new WeakSet<HTMLCanvasElement>();
+  let season = seasonalOutfit(new Date()), lang = language(), activePage = 0;
+  const notes: HTMLElement[] = [];
+  const families = WARDROBE_COLLECTIONS.map(c => c.items.includes(outfitFamily(initial) as never) ? outfitFamily(initial) : c.items[0]);
+  const variantRows: HTMLElement[] = [];
+  const panels: HTMLElement[] = [];
+  const stylePanels: HTMLElement[] = [];
 
-  const updateNote = () => {
-    note.textContent = wardrobeHeader(hovered, parseOutfit(State.settings.mochiOutfit), new Date());
-  };
-
-  for (const sel of OUTFIT_SELECTIONS) {
-    const canvas = h("canvas");
-    const button = h(
-      "button",
-      { class: "wardrobe-item", title: tl(OUTFIT_KEYS[sel]), "aria-label": tl(OUTFIT_KEYS[sel]) },
-      canvas,
-    );
+  function makeItem(selection: OutfitSelection, page: number, variant = false) {
+    const canvas = h("canvas"), a = outfitAppearance(selection);
+    const label = a.style ? t(OUTFIT_STYLES[a.style].name) : a.base === "blueWitchHat" ? t("Midnight witch hat") : t("Default");
+    const button = h("button", { class: variant ? "wardrobe-variant" : "wardrobe-item",
+      title: outfitLabel(selection), "aria-label": outfitLabel(selection) }, canvas,
+      variant ? h("span", { text: label }) : null);
     button.addEventListener("mouseenter", () => {
-      hovered = sel;
-      actions.previewOutfit(resolveOutfit(sel, new Date()));
-      updateNote();
+      hovered = selection; actions.previewOutfit(resolveOutfit(selection, new Date())); update();
     });
     button.addEventListener("mouseleave", () => {
-      if (hovered !== sel) return;
-      hovered = null;
-      actions.previewOutfit(null);
-      updateNote();
+      if (hovered !== selection) return;
+      hovered = null; actions.previewOutfit(null); update();
     });
-    button.addEventListener("click", () => actions.chooseOutfit(sel));
-    items.set(sel, { button, canvas });
-    grid.append(button);
+    button.addEventListener("click", () => {
+      if (!variant) {
+        families[page] = outfitFamily(selection); renderVariants(page);
+        const open = selection !== "auto" && selection !== "none";
+        panels[page].classList.toggle("styles-open", open);
+        stylePanels[page].setAttribute("aria-hidden", String(!open));
+        stylePanels[page].inert = !open;
+      }
+      hovered = null; actions.chooseOutfit(selection); actions.previewOutfit(null); update(); drawIcons();
+    });
+    items.push({ selection, button, canvas, page });
+    return button;
   }
-
-  /** Icons are drawn once; only "auto" changes, with the season and its badge's language. */
-  const drawIcons = () => {
-    const season = seasonalOutfit(new Date());
-    if (season === drawnSeason && drawnLanguage === language()) return;
-    const first = drawnSeason == null;
-    drawnSeason = season;
-    drawnLanguage = language();
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    for (const [sel, { canvas }] of items) {
-      if (!first && sel !== "auto") continue;
-      canvas.width = Math.round(ICON * dpr);
-      canvas.height = Math.round(ICON * dpr);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) continue;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawWardrobeIcon(ctx, ICON, sel, season, WARDROBE_STRINGS.autoBadge);
+  function renderVariants(page: number) {
+    const row = variantRows[page];
+    items = items.filter(item => item.page !== page || !item.button.classList.contains("wardrobe-variant"));
+    row.replaceChildren(...outfitVariants(families[page]).map(sel => makeItem(sel, page, true)));
+    row.style.visibility = families[page] === "auto" || families[page] === "none" ? "hidden" : "";
+  }
+  const pages = WARDROBE_COLLECTIONS.map((collection, page) => {
+    const note = h("span", { class: "wardrobe-note" }); notes.push(note);
+    const variants = h("div", { class: "wardrobe-variants" }); variantRows.push(variants);
+    const styles = h("div", { class: "wardrobe-styles", "aria-hidden": "true" },
+      h("div", { class: "wardrobe-styles-label", text: tl("Styles") }), variants);
+    styles.inert = true; stylePanels.push(styles);
+    const panel = h("div", { class: "wardrobe-collection" },
+      h("div", { class: "wardrobe-choice" },
+        h("div", { class: "wardrobe-head" }, h("span", { class: "wardrobe-title", text: tl(collection.name) }),
+          page > 0 ? h("span", { class: "wardrobe-beta", text: "Beta", title: "Experimental wardrobe collection" }) : null, note),
+        h("div", { class: "wardrobe-grid" }, ...collection.items.map(sel => makeItem(sel, page)))), styles);
+    panels.push(panel);
+    return { name: t(collection.name), el: panel };
+  });
+  const pager = buildCollectionPages(pages, page => {
+    activePage = page; hovered = null;
+    panels.forEach(panel => panel.classList.remove("styles-open"));
+    stylePanels.forEach(panel => { panel.setAttribute("aria-hidden", "true"); panel.inert = true; });
+    variantRows.forEach(row => row.replaceChildren());
+    items = items.filter(item => !item.button.classList.contains("wardrobe-variant"));
+    actions.previewOutfit(null); update(); drawIcons();
+  });
+  const el = h("div", { class: "view wardrobe" }, h("div", { class: "card" }, pager.el));
+  function update() {
+    const current = parseOutfit(State.settings.mochiOutfit);
+    for (const note of notes) note.textContent = wardrobeHeader(hovered, current, new Date());
+    for (const item of items) {
+      const selected = item.button.classList.contains("wardrobe-variant") ? item.selection === current :
+        outfitFamily(item.selection) === outfitFamily(current);
+      item.button.classList.toggle("on", selected); item.button.setAttribute("aria-pressed", String(selected));
     }
-  };
-
-  return {
-    el,
-    sync() {
-      drawIcons();
-      // The island drops the preview when the view closes: so does the hover.
-      if (State.wardrobePreview == null) hovered = null;
-      const current = parseOutfit(State.settings.mochiOutfit);
-      for (const [sel, { button }] of items) button.classList.toggle("on", sel === current);
-      updateNote();
-    },
-  };
+  }
+  function drawIcons() {
+    const nextSeason = seasonalOutfit(new Date()), nextLanguage = language();
+    const changed = nextSeason !== season || nextLanguage !== lang;
+    season = nextSeason; lang = nextLanguage;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const item of items) {
+      if (item.page !== activePage || (drawn.has(item.canvas) && !(changed && item.selection === "auto"))) continue;
+      item.canvas.width = item.canvas.height = Math.round(28*dpr);
+      const ctx = item.canvas.getContext?.("2d");
+      if (ctx) { ctx.setTransform(dpr,0,0,dpr,0,0); drawWardrobeIcon(ctx,28,item.selection,season,WARDROBE_STRINGS.autoBadge); }
+      drawn.add(item.canvas);
+    }
+  }
+  const initialPage = WARDROBE_COLLECTIONS.findIndex(c => c.items.includes(outfitFamily(initial) as never));
+  pager.go(Math.max(0, initialPage));
+  return { el, sync() {
+    if (State.wardrobePreview == null) hovered = null;
+    update(); drawIcons();
+  } };
 }

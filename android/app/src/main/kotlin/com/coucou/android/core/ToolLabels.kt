@@ -7,6 +7,9 @@ package com.coucou.android.core
  * as "Running npm test" is left alone. Used by the Home card and the island, so both say the same.
  */
 object ToolLabels {
+    /** Full step only on the session screen, opened deliberately by the user. */
+    fun detail(raw: String): String = raw.trim()
+
     private val KNOWN = mapOf(
         "askuserquestion" to "Asking a question",
         "askquestion" to "Asking a question",

@@ -18,11 +18,11 @@ class SessionScreenTest {
         assertTrue("the Details pill exists only when there is something to open", hero.contains("if (onDetails != null)") && hero.contains("R.string.session_details), onDetails"))
     }
 
-    @Test fun stepsAreShownInPlainWordsAndTheProjectIsOnlyAName() {
+    @Test fun openedSessionShowsExactStepsAndReadsNoLocalFiles() {
         val ui = src("ui/SessionScreen.kt")
-        assertTrue(ui.contains("ToolLabels.label(step)"))
+        assertTrue(ui.contains("ToolLabels.detail(step)"))
         assertTrue(ui.contains("R.string.session_project"))
-        // the screen never draws a path or the raw step text
+        // Details come from the offered session, never from the phone's filesystem.
         assertFalse(ui.contains("Environment") || ui.contains("filesDir") || ui.contains("File("))
     }
 

@@ -58,24 +58,30 @@ function setFlag(which: "shuffle" | "repeat", on: boolean) {
 let pendingVolume: number | null = null;
 let volumeTimer: number | null = null;
 
+/** For tests: forget a throttle timer that a reset test clock will never fire. */
+export function resetVolumeThrottle() {
+  volumeTimer = null;
+  pendingVolume = null;
+}
+
 function setVolume(value: number) {
-  if (!Spotify.state.running) return;
+  if (!Spotify.state.running || Spotify.state.volumeAvailable === false) return;
   const v = Math.min(100, Math.max(0, Math.round(value)));
   Spotify.state = { ...Spotify.state, volume: v };
   State.notify();
   pendingVolume = v;
   if (volumeTimer != null) return;
-  const send = () => {
+  const send = async () => {
     const next = pendingVolume;
     pendingVolume = null;
     if (next == null) {
       volumeTimer = null;
       return;
     }
-    void Bridge.spotifyControl("volume", next);
+    await Bridge.spotifyControl("volume", next);
     volumeTimer = window.setTimeout(send, 120);
   };
-  send();
+  volumeTimer = window.setTimeout(send, 0);
 }
 
 // ── Pill (overview right column) ──────────────────────────────────────────────
@@ -201,11 +207,16 @@ class NowPlayingBar {
       } catch {
         /* capture is a nicety */
       }
-      this.onChange(this.at(e.clientX));
+      this.fraction = this.at(e.clientX);
+      this.onChange(this.fraction);
       this.paint();
     });
     this.el.addEventListener("pointermove", (e) => {
-      if (this.dragging) this.onChange(this.at(e.clientX));
+      if (this.dragging) {
+        this.fraction = this.at(e.clientX);
+        this.onChange(this.fraction);
+        this.paint();
+      }
     });
     const end = (e: PointerEvent) => {
       if (!this.dragging) return;
@@ -227,6 +238,7 @@ class NowPlayingBar {
   }
 
   set(fraction: number) {
+    if (this.dragging) return;
     this.fraction = Math.min(1, Math.max(0, fraction));
     this.paint();
   }
@@ -313,7 +325,7 @@ export function buildSpotifyCard(): SpotifyCardHost {
   const idleAction = h("button", { class: "link-btn", style: `color:${green}d9` });
   idleAction.addEventListener("click", () => void Bridge.spotifyOpen());
   const idleSub = h("span");
-  const idleName = h("b", { text: "Media" });
+  const idleName = h("b", { text: "Spotify" });
   const idleEl = h("div", { class: "int-card" },
     h("div", { class: "int-head" }, dot(green, 7), idleName, idleSub),
     h("div", { class: "int-status" }, idleDot, idleText),
@@ -401,7 +413,9 @@ export function buildSpotifyCard(): SpotifyCardHost {
       clear(volIcon);
       volIcon.append(svg([ICONS.volume0, ICONS.volume1, ICONS.volume2, ICONS.volume3][level], 10, { stroke: 2.2 }));
     }
+    volume.enabled = s.volumeAvailable !== false;
     volume.set(s.volume / 100);
+    volumeBox.style.opacity = volume.enabled ? "1" : "0.4";
     volumeBox.title = t("Volume {0}%", { 0: s.volume });
   }
 
@@ -410,7 +424,7 @@ export function buildSpotifyCard(): SpotifyCardHost {
     idleDot.style.background = installed ? "#22C55E" : "#F4505E";
     idleText.textContent = installed ? t("Not playing") : t("Spotify not installed");
     idleAction.textContent = installed ? t("Open Spotify") : t("Get Spotify");
-    idleName.textContent = Spotify.state.player || "Media";
+    idleName.textContent = Spotify.state.player || "Spotify";
     idleSub.textContent = t(pillDefinition(SPOTIFY_ID)?.subtitle ?? N_("Integration"));
   }
 

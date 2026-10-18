@@ -57,6 +57,19 @@ jobs:
           key: windows-cargo-${{ hashFiles('windows/Cargo.lock') }}
           restore-keys: windows-cargo-
 
+      - name: Check the log webhook secret (facts only, never the value)
+        shell: pwsh
+        run: |
+          $w = $env:COUCOU_LOG_WEBHOOK
+          if ([string]::IsNullOrWhiteSpace($w)) {
+            "log webhook: EMPTY - the secret is missing, empty, or not visible to this workflow"
+          } else {
+            $w = $w.Trim()
+            "log webhook: present, $($w.Length) characters"
+            "log webhook: starts with https://discord.com/api/webhooks/ = $($w.StartsWith('https://discord.com/api/webhooks/'))"
+            "log webhook: starts with https:// = $($w.StartsWith('https://')); contains whitespace inside = $($w -match '\s'); has quotes = $($w -match '[`"'']')"
+          }
+
       - name: Install dependencies
         run: npm ci
 

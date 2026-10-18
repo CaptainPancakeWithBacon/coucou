@@ -136,15 +136,17 @@ export const PILL_CATALOG: readonly PillDefinition[] = [
   // Any media player's MPRIS interface on the session bus (src-tauri/src/spotify.rs):
   // Spotify, a browser, VLC… The id stays the one it always had.
   // On Windows it is read from the system media controls (the same file).
-  { id: "integration_spotify", name: "Media", color: "#1DB954", category: "service",
+  { id: "integration_spotify", name: "Spotify", color: "#1DB954", category: "service",
     subtitle: N_("Integration"), source: "n8n", support: "yes", connect: none },
+  { id: "agent_notifications", name: "Notification", color: "#5AC8FA", category: "service",
+    subtitle: N_("Integration"), source: "agent", support: "yes", connect: none },
 ];
 
 /** The always-on pill unless the user picks another workspace tool. */
 export const DEFAULT_MAIN_PILL = "integration_claude";
 
 /** How many declared pills may sit next to the main one. */
-export const MAX_DECLARED = 4;
+export const MAX_DECLARED = 8;
 
 /** The OS this page runs on. Only the Windows webview says "Windows". */
 export const HOST_OS: HostOs =
@@ -222,7 +224,7 @@ export function sanitizeDeclared(d: Declared, os: HostOs = HOST_OS): Declared {
 /**
  * Declares or undeclares a pill. Returns the new list, or null when the click
  * changes nothing: the main pill is never toggled, an unknown pill never
- * declared, and a fifth pill never added.
+ * declared, and a ninth pill never added.
  */
 export function toggleDeclared(d: Declared, id: string, os: HostOs = HOST_OS): string[] | null {
   if (id === d.mainPill) return null;

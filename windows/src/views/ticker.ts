@@ -79,6 +79,7 @@ function setText(row: Row, text: string) {
   const diff = parseDiffStep(text);
   row.diff = diff;
   const shown = diff ? diff.filename : text;
+  row.el.title = shown;
   row.shimmer.textContent = shown;
   row.dim.textContent = shown;
   if (diff) {
