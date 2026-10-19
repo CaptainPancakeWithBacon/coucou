@@ -10,6 +10,15 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    title: "Mini-update",
+    date: "19 oktober 2026",
+    items: [
+      "Updaten kan nu met één klik: bij een nieuwe versie drukt Coucou zelf de installatie door en start daarna opnieuw op. Na een update zie je deze pagina vanzelf.",
+      "Een melding verdwijnt niet meer in een vreemde Sessie-klaar-kaart: na de melding gaat het eiland gewoon terug naar het normale scherm.",
+      "In de instellingen staat naast Controleren op updates nu een knop Nu bijwerken, grijs tot er een nieuwe versie is.",
+    ],
+  },
+  {
     title: "De Merijn-special",
     date: "19 oktober 2026",
     items: [
