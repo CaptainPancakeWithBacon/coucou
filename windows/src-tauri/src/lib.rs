@@ -364,6 +364,22 @@ fn open_notification_target(app: AppHandle, target: String) -> bool {
     }
     #[cfg(any(target_os = "linux", windows))]
     {
+        // The update card: Windows installs the new setup by itself.
+        if target == updates::INSTALL_TARGET {
+            #[cfg(windows)]
+            tauri::async_runtime::spawn(updates::install(app));
+            #[cfg(not(windows))]
+            platform::open_url(updates::RELEASE_PAGE);
+            return true;
+        }
+        // After an update: the "What's changed?" page.
+        if target == updates::WHATS_NEW_TARGET {
+            show_hub(&app, Some("whatsnew"));
+            return true;
+        }
+    }
+    #[cfg(any(target_os = "linux", windows))]
+    {
         let _ = app;
         notifications::open_target(&target)
     }
@@ -885,6 +901,12 @@ pub fn run() {
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // `coucou.exe --install-update`: what the update card's button does (Windows).
+            #[cfg(windows)]
+            if argv.iter().any(|a| a == "--install-update") {
+                tauri::async_runtime::spawn(updates::install(app.clone()));
+                return;
+            }
             // `coucou --shortcut <action>`: what a desktop's own keyboard
             // settings run where we can't listen for keys ourselves (Wayland).
             match shortcuts::from_args(&argv) {

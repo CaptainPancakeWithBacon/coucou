@@ -3,6 +3,7 @@
 // disk is confirmed. The window's frame and the Flow pages live in ../hub; the
 // island's settings are drawn here, one Notch page at a time.
 
+import { WHATS_NEW } from "../core/whatsnew";
 import "./settings.css";
 import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport } from "../core/bridge";
 import { CUSTOM_SERVER_KEY, providerDef, urlExposure } from "../core/providers";
@@ -984,6 +985,18 @@ function notificationsSection(): HTMLElement {
   );
 }
 
+/** The "What's changed?" page: each release as a heading and a few lines. */
+function whatsNewSection(): HTMLElement {
+  return h(
+    "section",
+    {},
+    ...WHATS_NEW.flatMap((entry) => [
+      h("h2", {}, h("span", { text: entry.title }), h("span", { class: "hint", text: ` · ${entry.date}` })),
+      h("ul", { class: "whats-new" }, ...entry.items.map((item) => h("li", { text: item }))),
+    ]),
+  );
+}
+
 function generalSection(): HTMLElement {
   const volume = h("input", {
     type: "range", min: "0", max: "0.2", step: "0.005",
@@ -1488,6 +1501,7 @@ async function render() {
     general: () => [generalSection()],
     pills: () => [activePillsSection(connected)],
     notifications: () => [notificationsSection()],
+    whatsnew: () => [whatsNewSection()],
     agents: () => [claudeSection(status), agentsSection(agents), planSection(status)],
     chat: () => [apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     integrations: () => [integrationsSection(present)],
