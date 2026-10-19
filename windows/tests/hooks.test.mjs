@@ -771,9 +771,11 @@ test("a desktop notification opens the Notifications card and the old pill retur
   assert.equal(task("agent_notifications").state, "finished");
   assert.deepEqual(task("agent_notifications").steps, ["Discord: Anna — hey!"]);
   assert.deepEqual(asked, ["alert:finished"]);
+  State.view = "finished"; // the card the notice opened
   seconds(9);
   assert.equal(State.focusId, CLAUDE);
   assert.equal(task("agent_notifications").state, "idle");
+  assert.ok(asked.some((a) => a.startsWith("setView:")), "the notice's card leaves with it");
 });
 
 test("notifications are ignored while the setting is off or Coucou is paused", () => {

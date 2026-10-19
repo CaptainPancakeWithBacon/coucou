@@ -101,8 +101,11 @@ function handle(island: Island, n: DesktopNotification) {
     restoreTimer = null;
     if (update) island.dropPin();
     State.updateTask(NOTIFICATIONS_ID, "idle");
-    if (State.focusId === NOTIFICATIONS_ID && before && State.tasks.some((t) => t.id === before)) {
-      State.setFocus(before);
+    if (State.focusId === NOTIFICATIONS_ID) {
+      if (before && State.tasks.some((t) => t.id === before)) State.setFocus(before);
+      // The notice's card must go with it, or the pill that comes back would
+      // wear a "Session finished" card it never earned.
+      if (State.view === "finished") island.setView(State.defaultView());
     }
   }, update ? UPDATE_MS : SHOWN_MS);
 }
