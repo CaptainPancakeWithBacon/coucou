@@ -110,22 +110,20 @@ function notificationAppsRow(): HTMLElement {
 function updateRow(): HTMLElement {
   const status = h("span", { class: "hint" });
   const button = h("button", { text: t("Check for updates") });
-  // Once a new version is found: Windows installs it by itself, elsewhere the release page opens.
-  const install = h("button", { text: HOST_OS === "windows" ? t("Update now") : t("Download"), style: "display:none" });
+  // Greyed out until a new version is found: Windows then installs it by itself, elsewhere the release page opens.
+  const install = h("button", { text: HOST_OS === "windows" ? t("Update now") : t("Download") });
+  install.setAttribute("disabled", "true");
   install.addEventListener("click", () => {
     install.setAttribute("disabled", "true");
     void Bridge.openNotificationTarget("coucou:install-update");
   });
   button.addEventListener("click", () => {
     button.setAttribute("disabled", "true");
-    install.style.display = "none";
+    install.setAttribute("disabled", "true");
     status.textContent = "";
     void Bridge.checkForUpdates()
       .then((r) => {
-        if (r === "available") {
-          install.removeAttribute("disabled");
-          install.style.display = "";
-        }
+        if (r === "available") install.removeAttribute("disabled");
         status.textContent =
           r === "available" ? t("A new version is out. See the card in the island.")
           : r === "current" ? t("Coucou is up to date.")
