@@ -458,6 +458,16 @@ export class Island {
     this.fsm.forcePetit(this.wasInIsland);
   }
 
+  /**
+   * A notice's card has run its time: fold the island, unless the pointer is on it
+   * (someone is reading) or it shows something else by now. Returns whether it folded.
+   */
+  foldNotice(): boolean {
+    if (State.mode !== "expanded" || State.view !== "finished" || this.wasInIsland) return false;
+    this.collapse();
+    return true;
+  }
+
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
   alert(view: IslandViewName) {
     this.fsm.pinned = State.isPinned;

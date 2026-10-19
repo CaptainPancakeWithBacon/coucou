@@ -19,6 +19,7 @@ const island = {
   reveal: () => asked.push("reveal"),
   dropPin: () => asked.push("dropPin"),
   stay: () => asked.push("stay"),
+  foldNotice: () => { asked.push("foldNotice"); return true; },
 };
 registerHookHandlers(island);
 
@@ -772,10 +773,25 @@ test("a desktop notification opens the Notifications card and the old pill retur
   assert.deepEqual(task("agent_notifications").steps, ["Discord: Anna — hey!"]);
   assert.deepEqual(asked, ["alert:finished"]);
   State.view = "finished"; // the card the notice opened
+  State.mode = "expanded";
   seconds(9);
   assert.equal(State.focusId, CLAUDE);
   assert.equal(task("agent_notifications").state, "idle");
-  assert.ok(asked.some((a) => a.startsWith("setView:")), "the notice's card leaves with it");
+  // The notice opened the island, so it folds again instead of showing the pills.
+  assert.ok(asked.includes("foldNotice"));
+  assert.ok(!asked.some((a) => a.startsWith("setView:")));
+});
+
+test("a notice that ends after OK folded the island never opens it again", () => {
+  State.settings.showNotifications = true;
+  State.setFocus(CLAUDE);
+  notice({ app: "Discord", summary: "Anna", body: "hello again" });
+  State.view = "finished";
+  State.mode = "compact"; // OK was pressed: the island is folded
+  seconds(9);
+  assert.equal(State.focusId, CLAUDE);
+  assert.ok(!asked.some((a) => a.startsWith("setView:") || a === "foldNotice"), "nothing opens or folds");
+  assert.notEqual(State.view, "finished");
 });
 
 test("notifications are ignored while the setting is off or Coucou is paused", () => {
