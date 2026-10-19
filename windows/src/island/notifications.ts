@@ -15,6 +15,8 @@ const COLOR = "#5AC8FA";
 const SHOWN_MS = 8000;
 /** A new version waits for a look: the card stays open this long (the island stays pinned). */
 const UPDATE_MS = 120_000;
+/** How long the island takes to fold (its spring), before the focus moves on. */
+const FOLD_MS = 900;
 
 interface DesktopNotification {
   app: string;
@@ -32,6 +34,8 @@ export function openNoticeTarget(task: AgentTask | null | undefined): boolean {
 
 let restoreTimer: number | null = null;
 let before: string | null = null;
+/** The notice's card is what opened the island (so folding it is the way back). */
+let openedByNotice = false;
 // Windows may republish the same toast with a new arrival timestamp.
 const recentNotices = new Map<string, number>();
 const DEDUPE_MS = 20_000;
@@ -93,7 +97,10 @@ function handle(island: Island, n: DesktopNotification) {
   Sound.play("peek");
   // The compact island has no text: the card with the message opens, as it does
   // when Claude Code finishes.
-  if (State.mode !== "expanded") island.alert("finished");
+  if (State.mode !== "expanded") {
+    openedByNotice = true;
+    island.alert("finished");
+  }
   if (update) island.stay();
 
   if (restoreTimer != null) window.clearTimeout(restoreTimer);
@@ -102,10 +109,29 @@ function handle(island: Island, n: DesktopNotification) {
     if (update) island.dropPin();
     State.updateTask(NOTIFICATIONS_ID, "idle");
     if (State.focusId === NOTIFICATIONS_ID) {
-      if (before && State.tasks.some((t) => t.id === before)) State.setFocus(before);
-      // The notice's card must go with it, or the pill that comes back would
-      // wear a "Session finished" card it never earned.
-      if (State.view === "finished") island.setView(State.defaultView());
+      const showing = State.view === "finished";
+      const target = before;
+      const giveBack = () => {
+        if (State.focusId === NOTIFICATIONS_ID && target && State.tasks.some((t) => t.id === target)) State.setFocus(target);
+      };
+      if (showing && State.mode === "expanded" && openedByNotice && island.foldNotice()) {
+        // The notice opened the island, so it folds again. The card stays on screen
+        // while it shrinks; the pill that comes back takes the focus afterwards, or it
+        // would wear a "Session finished" card it never earned.
+        window.setTimeout(() => {
+          giveBack();
+          if (State.mode !== "expanded" && State.view === "finished") State.view = State.defaultView();
+        }, FOLD_MS);
+      } else {
+        giveBack();
+        // A compact island is never opened (setView would); one that was open anyway
+        // goes back to its normal view.
+        if (showing) {
+          if (State.mode !== "expanded") State.view = State.defaultView();
+          else island.setView(State.defaultView());
+        }
+      }
     }
+    openedByNotice = false;
   }, update ? UPDATE_MS : SHOWN_MS);
 }
