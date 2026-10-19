@@ -15,6 +15,8 @@ const COLOR = "#5AC8FA";
 const SHOWN_MS = 8000;
 /** A new version waits for a look: the card stays open this long (the island stays pinned). */
 const UPDATE_MS = 120_000;
+/** How long the island takes to fold (its spring), before the focus moves on. */
+const FOLD_MS = 900;
 
 interface DesktopNotification {
   app: string;
@@ -108,14 +110,26 @@ function handle(island: Island, n: DesktopNotification) {
     State.updateTask(NOTIFICATIONS_ID, "idle");
     if (State.focusId === NOTIFICATIONS_ID) {
       const showing = State.view === "finished";
-      if (before && State.tasks.some((t) => t.id === before)) State.setFocus(before);
-      // The notice's card must go with it, or the pill that comes back would wear a
-      // "Session finished" card it never earned. If the notice opened the island it
-      // folds again; a compact island is never opened (setView would), and one that
-      // was open anyway goes back to its normal view.
-      if (showing) {
-        if (State.mode !== "expanded") State.view = State.defaultView();
-        else if (!(openedByNotice && island.foldNotice())) island.setView(State.defaultView());
+      const target = before;
+      const giveBack = () => {
+        if (State.focusId === NOTIFICATIONS_ID && target && State.tasks.some((t) => t.id === target)) State.setFocus(target);
+      };
+      if (showing && State.mode === "expanded" && openedByNotice && island.foldNotice()) {
+        // The notice opened the island, so it folds again. The card stays on screen
+        // while it shrinks; the pill that comes back takes the focus afterwards, or it
+        // would wear a "Session finished" card it never earned.
+        window.setTimeout(() => {
+          giveBack();
+          if (State.mode !== "expanded" && State.view === "finished") State.view = State.defaultView();
+        }, FOLD_MS);
+      } else {
+        giveBack();
+        // A compact island is never opened (setView would); one that was open anyway
+        // goes back to its normal view.
+        if (showing) {
+          if (State.mode !== "expanded") State.view = State.defaultView();
+          else island.setView(State.defaultView());
+        }
       }
     }
     openedByNotice = false;

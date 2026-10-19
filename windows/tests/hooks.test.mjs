@@ -775,10 +775,13 @@ test("a desktop notification opens the Notifications card and the old pill retur
   State.view = "finished"; // the card the notice opened
   State.mode = "expanded";
   seconds(9);
-  assert.equal(State.focusId, CLAUDE);
   assert.equal(task("agent_notifications").state, "idle");
-  // The notice opened the island, so it folds again instead of showing the pills.
+  // The notice opened the island, so it folds again instead of showing the pills,
+  // and the old pill only gets the focus once the fold is over.
   assert.ok(asked.includes("foldNotice"));
+  assert.equal(State.focusId, "agent_notifications");
+  seconds(1);
+  assert.equal(State.focusId, CLAUDE);
   assert.ok(!asked.some((a) => a.startsWith("setView:")));
 });
 
