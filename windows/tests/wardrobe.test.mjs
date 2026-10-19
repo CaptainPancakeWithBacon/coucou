@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  OUTFIT_SELECTIONS, OUTFIT_LABELS, SeasonCache, easterDate, parseOutfit, resolveOutfit,
+  OUTFIT_SELECTIONS, CLASSIC_OUTFITS, EXTRA_OUTFITS, OUTFIT_LABELS, SeasonCache, easterDate, parseOutfit, resolveOutfit,
   seasonalOutfit, wardrobeHeader,
 } from "../src/mochi/wardrobe.ts";
 import { DEFAULT_SETTINGS } from "../src/core/state.ts";
@@ -85,11 +85,22 @@ test("auto dresses for the season, any other choice is worn as is", () => {
 });
 
 test("the stored values are the Mac's, in the wardrobe's order", () => {
-  assert.deepEqual([...OUTFIT_SELECTIONS], [
+  assert.deepEqual([...CLASSIC_OUTFITS], [
     "auto", "none", "partyHat", "beanie", "crown", "sunglasses", "roundGlasses",
     "bow", "scarf", "witchHat", "pumpkin", "santaHat", "bunnyEars",
   ]);
   for (const sel of OUTFIT_SELECTIONS) assert.ok(OUTFIT_LABELS[sel], `${sel} has a label`);
+});
+
+test("extra outfits form their own row and persist as selectable outfits", () => {
+  assert.equal(EXTRA_OUTFITS.length, 10);
+  assert.equal(new Set(OUTFIT_SELECTIONS).size, OUTFIT_SELECTIONS.length);
+  for (const sel of EXTRA_OUTFITS) {
+    assert.equal(parseOutfit(sel), sel);
+    assert.equal(resolveOutfit(sel, day(2026, 10, 15)), sel);
+    assert.ok(OUTFIT_LABELS[sel]);
+    assert.ok(!CLASSIC_OUTFITS.includes(sel));
+  }
 });
 
 test("a stored preference is read back as it was saved", () => {

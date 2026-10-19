@@ -35,7 +35,7 @@
         "minimizable": false,
         "closable": false,
         "dragDropEnabled": false,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required"
       }
     ]
   },
@@ -48,7 +48,10 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "resources": { "../target/release/coucou-hook.exe": "coucou-hook.exe" },
+    "resources": {
+      "../target/release/coucou-hook.exe": "coucou-hook.exe",
+      "../BEAT-LICENSES.txt": "BEAT-LICENSES.txt"
+    },
     "copyright": "© Louis Raille",
     "category": "DeveloperTool",
     "shortDescription": "Mochi lives at the top of your screen",

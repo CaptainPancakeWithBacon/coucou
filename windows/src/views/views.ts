@@ -17,12 +17,14 @@ import {
   PlanCard, buildPlanPill, claudePillVisible, codexPillVisible, planCardOpen, refreshCodexPlanUsage,
 } from "./usage";
 import { buildDiffCard } from "./diff";
+import { buildSessionDetail } from "./session-detail";
 import { lastTextStep } from "../core/diff";
 import { Bridge } from "../core/bridge";
 import { buildRecap } from "./recap";
 import { buildWardrobe } from "./wardrobe";
 import { buildSpotifyCard, buildSpotifyPill, type SpotifyPillHost } from "./spotify";
 import { SPOTIFY_ID } from "../core/spotify";
+import { buildPillPages } from "./pill-pages";
 import type { Outfit, OutfitSelection } from "../mochi/wardrobe";
 import { language, t, tl, type Msg } from "../i18n/i18n";
 import type { ViewCommand } from "../island/shortcuts";
@@ -45,8 +47,11 @@ export interface ViewActions {
   /** Hands the pending request back to the terminal. */
   answerInTerminal(): void;
   toggleSound(): void;
+  toggleDnd(): void;
   setVolume(v: number): void;
+  setIslandOpacity(percent: number): void;
   setAutoClose(seconds: number): void;
+  setIslandAlign(align: "left" | "center" | "right" | "custom"): void;
   openSettingsWindow(): void;
   blip(): void;
   /** Wardrobe click: keeps the outfit ("auto" and "none" included). */
@@ -112,6 +117,16 @@ export function buildHeader(actions: ViewActions): ViewHost {
   const tabDrop = h("button", { class: "tab", title: tl("Drop"), onclick: () => go("upload") }, svg(ICONS.plus, 13));
 
   const gearBtn = h("button", { title: tl("Settings"), onclick: () => go("settings") }, svg(ICONS.gear, 14));
+  const wardrobeBtn = h("button", { title: tl("Wardrobe"), "aria-label": tl("Wardrobe"),
+    onclick: () => go(State.view === "wardrobe" ? "overview" : "wardrobe") }, svg(ICONS.wardrobe, 14, { stroke: 1.7 }));
+  const dragBtn = h("button", { class: "island-drag", title: tl("Island position") }, svg(ICONS.move, 12, { stroke: 1.7 }));
+  dragBtn.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void Bridge.dragIsland();
+  });
+  const dndBtn = h("button", { title: tl("Do not disturb"), onclick: () => actions.toggleDnd() }, svg(ICONS.bell, 14, { stroke: 1.7 }));
   const soundBtn = h("button", { title: tl("Mute"), onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
   // Plan usage pills (off by default): before the gear, Claude first, as on the Mac.
   const claudePill = buildPlanPill(false);
@@ -128,20 +143,26 @@ export function buildHeader(actions: ViewActions): ViewHost {
     "div",
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
-    h("div", { class: "header-actions" }, planPills, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, planPills, dragBtn, wardrobeBtn, gearBtn, dndBtn, soundBtn),
   );
   const headerActions = el.lastElementChild as HTMLElement;
 
   return {
     el,
     sync() {
+      dragBtn.style.display = State.os === "windows" ? "" : "none";
       const v = State.view;
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
       gearBtn.classList.toggle("on", v === "settings");
+      wardrobeBtn.classList.toggle("on", v === "wardrobe");
+      wardrobeBtn.setAttribute("aria-pressed", String(v === "wardrobe"));
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
+      clear(dndBtn);
+      dndBtn.append(svg(State.settings.doNotDisturb ? ICONS.bellOff : ICONS.bell, 14, { stroke: 1.7 }));
+      dndBtn.classList.toggle("on", State.settings.doNotDisturb);
       clear(soundBtn);
       soundBtn.append(svg(State.settings.soundEnabled ? ICONS.speakerOn : ICONS.speakerOff, 14));
       syncPlanPills();
@@ -190,8 +211,8 @@ function buildOverview(actions: ViewActions): ViewHost {
     svg(ICONS.arrowUpRight, 8),
   );
   const left = card(null, leftBody, jump);
-  const pills = h("div", { class: "pills" });
-  const right = card(null, pills);
+  const pillPages = buildPillPages();
+  const right = card(null, pillPages.el);
   // Opened from a plan pill in the header: stands in for the left card.
   const plan = new PlanCard();
   let planTimer: number | null = null;
@@ -207,14 +228,16 @@ function buildOverview(actions: ViewActions): ViewHost {
 
   let pillIds = "";
   let detailOpen = false;
+  let sessionDetailOpen = false;
   let lastFocus: string | null = null;
-  let mode: "ticker" | "card" | "plan" | "diff" | "spotify" | null = null;
+  let mode: "ticker" | "history" | "card" | "plan" | "diff" | "spotify" | null = null;
   let cardKey = "";
   /** The list row highlighted at the last sync, to scroll only when it moves. */
   let shownSelection: number | null = null;
 
   // Leaving the overview or folding the island closes the diff, as on macOS.
   State.subscribe(() => {
+    if (State.view !== "overview" || State.mode !== "expanded") sessionDetailOpen = false;
     if (activeDiffId != null && (State.view !== "overview" || State.mode !== "expanded")) {
       activeDiffId = null;
     }
@@ -223,7 +246,14 @@ function buildOverview(actions: ViewActions): ViewHost {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (e.key !== "Escape" || activeDiffId == null || State.view !== "overview") return;
+      if (e.key !== "Escape" || State.view !== "overview") return;
+      if (activeDiffId == null && sessionDetailOpen) {
+        e.stopImmediatePropagation();
+        sessionDetailOpen = false;
+        State.notify();
+        return;
+      }
+      if (activeDiffId == null) return;
       e.stopImmediatePropagation();
       closeDiff();
     },
@@ -293,6 +323,7 @@ function buildOverview(actions: ViewActions): ViewHost {
       if (task?.id !== lastFocus) {
         lastFocus = task?.id ?? null;
         detailOpen = false;
+        sessionDetailOpen = false;
         activeDiffId = null;
         cardKey = "";
         mode = null;
@@ -334,6 +365,19 @@ function buildOverview(actions: ViewActions): ViewHost {
             open: (path) => void Bridge.openFileInEditor(path, editorOf(State.focusTask?.id)),
           }));
         }
+      } else if (task && sessionActive && sessionDetailOpen) {
+        const files = State.sessionDiffs.get(task.id) ?? [];
+        const key = `history~${language()}~${task.id}~${task.stepSeq}~${task.steps.join("|")}~${files.map(f => f.id).join(",")}`;
+        if (mode !== "history" || cardKey !== key) {
+          const scroll = leftBody.querySelector(".session-history-rows")?.scrollTop ?? 0;
+          clear(leftBody);
+          const history = buildSessionDetail(task, files, () => { sessionDetailOpen = false; State.notify(); },
+            id => { activeDiffId = id; State.notify(); });
+          leftBody.append(history);
+          history.querySelector(".session-history-rows")!.scrollTop = scroll;
+          cardKey = key;
+          mode = "history";
+        }
       } else if (task && sessionActive) {
         if (mode !== "ticker") {
           clear(leftBody);
@@ -355,6 +399,8 @@ function buildOverview(actions: ViewActions): ViewHost {
             text: `${Math.min(task.stepIndex + 1, task.steps.length)}/${task.steps.length}`,
           }));
         }
+        who.append(h("button", { class: "session-details-btn", text: tl("Details"),
+          onclick: () => { sessionDetailOpen = true; State.notify(); } }));
         ticker.sync(task);
       } else if (task && task.id === SPOTIFY_ID) {
         // Its own card for every state: playing, idle, not installed.
@@ -380,7 +426,7 @@ function buildOverview(actions: ViewActions): ViewHost {
         }
       }
 
-      jump.style.display = detailOpen || mode === "plan" || mode === "diff" ? "none" : "";
+      jump.style.display = detailOpen || sessionDetailOpen || mode === "plan" || mode === "diff" ? "none" : "";
 
       // Ctrl+↓ Ctrl+↑ walk the open GitHub list (cardItemCount / cardSelection).
       const rows = mode === "card" ? listRows(leftBody) : [];
@@ -389,20 +435,21 @@ function buildOverview(actions: ViewActions): ViewHost {
       highlightRow(rows, State.cardSelection, State.cardSelection !== shownSelection);
       shownSelection = State.cardSelection;
 
-      const others = State.otherTasks.slice(0, 4);
+      const others = State.otherTasks.slice(0, 8);
       const pillKey = others.map((t) => `${t.id}:${t.color}:${t.pillBadge ?? ""}`).join("|");
       if (pillKey !== pillIds) {
         pillIds = pillKey;
-        clear(pills);
+        const pillNodes: HTMLElement[] = [];
         spotifyPill = null;
         for (const t of others) {
           if (t.id === SPOTIFY_ID) {
             spotifyPill = buildSpotifyPill(t, () => actions.setFocus(t.id));
-            pills.append(spotifyPill.el);
+            pillNodes.push(spotifyPill.el);
           } else {
-            pills.append(buildPill(t, actions));
+            pillNodes.push(buildPill(t, actions));
           }
         }
+        pillPages.setPills(pillNodes);
         pruneMiniBots();
       }
       spotifyPill?.sync();
@@ -417,6 +464,7 @@ function buildOverview(actions: ViewActions): ViewHost {
 export function hasSessionTicker(task: AgentTask): boolean {
   // A pill made for an agent's session (Gemini CLI, Codex… not declared) only
   // exists while that session does: it keeps the ticker from the first event.
+  if (task.id === "agent_notifications") return task.steps.length > 0;
   if (task.source === "agent" && !task.isIntegration) return true;
   const category = pillDefinition(task.id)?.category;
   const isSession = category === "workspace" || category === "agent" ||
@@ -662,7 +710,7 @@ function buildError(actions: ViewActions): ViewHost {
       const task = State.focusTask;
       clear(who);
       // agentWho already shows an agent's name: its label is just the kind.
-      const whoLabel = task?.source === "n8n" ? "n8n" : task?.source === "agent" ? t("Agent") : "Claude Code";
+      const whoLabel = task?.source === "n8n" ? "n8n" : t("Agent");
       who.append(agentWho(task, whoLabel));
       title.textContent = task?.source === "n8n" ? t("Workflow stopped.") : t("Session stopped on an error.");
       detail.textContent = (task && lastTextStep(task.steps)) ?? t("No detail available.");
@@ -685,8 +733,9 @@ function buildFinished(actions: ViewActions): ViewHost {
     el,
     sync() {
       clear(who);
-      const agent = State.focusTask?.source === "agent";
-      who.append(agentWho(State.focusTask, agent ? t("finished") : t("Claude Code finished")));
+      // Desktop notifications are not completed coding sessions.
+      who.append(agentWho(State.focusTask,
+        State.focusTask?.id === "agent_notifications" ? t("Notification") : t("finished")));
       // The final message, else the last step that is not a diff (FinishedView).
       const task = State.focusTask;
       title.textContent = task?.finalLine || (task && lastTextStep(task.steps)) || t("Session finished");
@@ -746,17 +795,35 @@ function buildSettings(actions: ViewActions): ViewHost {
     type: "range", min: "0", max: "0.2", step: "0.005",
     oninput: (e: Event) => actions.setVolume(Number((e.target as HTMLInputElement).value)),
   }) as HTMLInputElement;
+  const opacitySlider = h("input", {
+    type: "range", min: "20", max: "100", step: "1",
+    oninput: (e: Event) => actions.setIslandOpacity(Number((e.target as HTMLInputElement).value)),
+  }) as HTMLInputElement;
+  const opacityLabel = h("span", { class: "hint", style: "min-width:34px;text-align:right" });
+  const positions = ["left", "center", "right", "custom"] as const;
+  const positionLabels = [tl("Left"), tl("Centre"), tl("Right"), tl("Custom")];
+  const positionButtons = positions.map((align, i) => h("button", {
+    text: positionLabels[i],
+    onclick: () => actions.setIslandAlign(align),
+  }));
   const autoLabel = h("span", {});
   const segButtons = [10, 15, 30].map((s) =>
     h("button", { onclick: () => actions.setAutoClose(s) }, `${s}s`),
   );
-  const claudeBadge = h("span", { class: "status-badge" });
-  const apiBadge = h("span", { class: "status-badge" });
+  const aiBadge = h("span", { class: "status-badge" });
 
   const rows = h(
     "div",
     { class: "settings-rows" },
     h("div", { class: "settings-row" }, soundSwitch, h("span", { text: tl("Sound") }), volume),
+    h("div", { class: "settings-row" },
+      svg(ICONS.opacity, 12, { evenOdd: true }), h("span", { text: tl("Island opacity") }), opacitySlider, opacityLabel,
+    ),
+    h("div", { class: "settings-row" },
+      svg(ICONS.move, 12, { stroke: 1.7 }),
+      h("span", { text: tl("Island position") }),
+      h("div", { class: "seg" }, ...positionButtons),
+    ),
     h(
       "div",
       { class: "settings-row" },
@@ -767,8 +834,7 @@ function buildSettings(actions: ViewActions): ViewHost {
     h(
       "div",
       { class: "settings-row", style: "gap:14px" },
-      claudeBadge,
-      apiBadge,
+      aiBadge,
       h("div", { class: "grow" }),
       h("button", {
         class: "link-btn",
@@ -786,18 +852,30 @@ function buildSettings(actions: ViewActions): ViewHost {
     el,
     sync() {
       const s = State.settings;
+      const dutchSystem = !s.language && navigator.language.toLowerCase().startsWith("nl");
+      positionButtons.forEach((b, i) => {
+        b.hidden = i === 3 && s.islandCustomPosition == null;
+        b.textContent = dutchSystem ? ["Links", "Midden", "Rechts", "Aangepast"][i] : t(positionLabels[i].key);
+        b.classList.toggle("on", s.islandAlign === positions[i]);
+      });
       soundSwitch.classList.toggle("on", s.soundEnabled);
       volume.value = String(s.soundVolume);
+      opacitySlider.value = String(Math.max(20, Math.min(100, s.islandOpacity ?? 100)));
+      opacityLabel.textContent = `${opacitySlider.value}%`;
       volume.style.opacity = s.soundEnabled ? "1" : "0.4";
       autoLabel.textContent = t("Auto-close · {seconds}s", { seconds: Math.round(s.autoCloseInterval) });
       segButtons.forEach((b, i) => b.classList.toggle("on", s.autoCloseInterval === [10, 15, 30][i]));
-      clear(claudeBadge);
-      claudeBadge.append(
-        dot(s.hooksInstalled ? "#22C55E" : "#F4505E", 6),
-        h("span", { text: "Claude Code" }),
+      // Follow the user's main AI, rather than advertising Claude and a
+      // permanently disconnected API regardless of which integration is used.
+      const ai = pillDefinition(s.mainPill);
+      const configured = State.integrations[s.mainPill]?.configured ??
+        (s.mainPill === "integration_claude" && s.hooksInstalled);
+      clear(aiBadge);
+      aiBadge.hidden = !ai;
+      if (ai) aiBadge.append(
+        dot(configured ? "#22C55E" : "#F4505E", 6),
+        h("span", { text: ai.name }),
       );
-      clear(apiBadge);
-      apiBadge.append(dot("#F4505E", 6), h("span", { text: "API" }));
     },
   };
 }

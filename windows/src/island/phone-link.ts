@@ -11,6 +11,7 @@ import { fileName, parseDiffStep, type FileDiff } from "../core/diff";
 import type { PlanUsage, CodexPlanUsage } from "../core/plan";
 import { State } from "../core/state";
 import { parseOutfit } from "../mochi/wardrobe";
+import { t } from "../i18n/i18n";
 import { dropPendingCard } from "./hooks";
 import { serviceCards } from "./phone-services";
 import type { Island } from "./island";
@@ -78,6 +79,7 @@ export function linkDiff(pillId: string, fileId: number): PhoneLinkDiff {
   const empty = { pillId, fileId, name: "", added: 0, removed: 0, tooLarge: false, lines: [] as [string, string][] };
   if (!d) return { ...empty, gone: true };
   const lines: [string, string][] = [];
+  if (d.unavailable) lines.push(["@", t("No detail available.")]);
   for (const h of d.hunks) {
     lines.push(["@", `@@ ${h.newStart}`]);
     for (const l of h.lines) lines.push([l.kind === "added" ? "+" : l.kind === "removed" ? "-" : " ", l.text]);
