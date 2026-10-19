@@ -382,6 +382,7 @@ fn x_for(align: &str, left: i32, width: i32, pw: i32, margin: i32) -> i32 {
 
 /// Places and sizes the window. `collapsed` picks the wake strip instead of the panel.
 pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
+    if DRAGGING.load(Ordering::Relaxed) { return; }
     let Some(win) = window(app) else { return };
     let Some(m) = target_monitor(app, pref) else { return };
 
@@ -397,12 +398,17 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     let (lw, lh) = if collapsed { (STRIP_W, strip_h) } else { (PANEL_W, PANEL_H) };
     let pw = (lw * scale).round().max(1.0) as u32;
     let ph = (lh * scale).round().max(1.0) as u32;
-    let align = app
+    let (align, custom) = app
         .try_state::<crate::Shared>()
-        .and_then(|s| s.settings.lock().ok().map(|g| g.island_align.clone()))
-        .unwrap_or_default();
-    let x = x_for(&align, mp.x, ms.width as i32, pw as i32, (16.0 * scale) as i32);
-    let y = mp.y + (inset as f64 * scale).round() as i32;
+        .map(|s| {
+            let settings = s.settings.lock().unwrap();
+            (settings.island_align.clone(), settings.island_custom_position)
+        }).unwrap_or_default();
+    let (x, y) = if align == "custom" && custom.is_some_and(|p| p.iter().all(|n| n.is_finite())) {
+        custom_origin(custom.unwrap(), mp.x, mp.y + (inset as f64 * scale).round() as i32, ms.width, pw)
+    } else {
+        (x_for(&align, mp.x, ms.width as i32, pw as i32, (16.0 * scale) as i32), mp.y + (inset as f64 * scale).round() as i32)
+    };
 
     // GTK never sizes a non-resizable window below its natural size (200 px
     // here), so on Linux the 6 px wake strip would stay a 200 px block. tao
@@ -576,5 +582,87 @@ pub fn refresh_click_through(app: &AppHandle, gate: &PollGate) {
 pub fn set_ignore_cursor(app: &AppHandle, ignore: bool) {
     if let Some(win) = window(app) {
         let _ = win.set_ignore_cursor_events(ignore);
+    }
+}
+
+
+static DRAGGING: AtomicBool = AtomicBool::new(false);
+
+/// Only the horizontal anchor is used; legacy vertical positions stay at the top.
+fn custom_origin(pos: [f64; 2], left: i32, top: i32, width: u32, panel_width: u32) -> (i32, i32) {
+    let x = left as f64 + pos[0].clamp(0.0, 1.0) * width as f64 - panel_width as f64 / 2.0;
+    (x.round().clamp(left as f64, (left as f64 + width as f64 - panel_width as f64).max(left as f64)) as i32,
+     top)
+}
+
+#[tauri::command]
+pub async fn island_drag(app: AppHandle) -> bool {
+    #[cfg(windows)]
+    { tauri::async_runtime::spawn_blocking(move || drag(&app)).await.unwrap_or(false) }
+    #[cfg(not(windows))]
+    { let _ = app; false }
+}
+
+#[cfg(windows)]
+fn drag(app: &AppHandle) -> bool {
+    if DRAGGING.swap(true, Ordering::Relaxed) { return false; }
+    struct Reset;
+    impl Drop for Reset { fn drop(&mut self) { DRAGGING.store(false, Ordering::Relaxed); } }
+    let reset = Reset;
+    let Some(win) = window(app) else { return false };
+    let Ok(origin) = win.outer_position() else { return false };
+    let Some((start_x, _)) = cursor_physical() else { return false };
+    let Ok(Some(monitor)) = win.current_monitor() else { return false };
+    let mp = monitor.position();
+    let ms = monitor.size();
+    let (lx, ly) = logical_origin(&monitor);
+    let top = mp.y + (platform::top_inset(&win, lx, ly) as f64 * monitor.scale_factor()).round() as i32;
+    let size = win.inner_size().unwrap_or(PhysicalSize::new(720, 320));
+    let start = std::time::Instant::now();
+    let mut moved = false;
+    while left_button_down() && start.elapsed() < Duration::from_secs(60) {
+        if let Some((x, _)) = cursor_physical() {
+            if moved || (x - start_x).abs() > 3.0 {
+                moved = true;
+                let anchor = [(origin.x as f64 + x - start_x + size.width as f64 / 2.0 - mp.x as f64) / ms.width.max(1) as f64, 0.0];
+                let (px, py) = custom_origin(anchor, mp.x, top, ms.width, size.width);
+                let _ = win.set_position(PhysicalPosition::new(px, py));
+            }
+        }
+        std::thread::sleep(Duration::from_millis(12));
+    }
+    if !moved { return false; }
+    let Ok(origin) = win.outer_position() else { return false };
+    let anchor = [(origin.x as f64 + size.width as f64 / 2.0 - mp.x as f64) / ms.width.max(1) as f64,
+        0.0];
+    let shared = app.state::<crate::Shared>();
+    let settings = {
+        let mut settings = shared.settings.lock().unwrap();
+        settings.island_align = "custom".into();
+        settings.island_custom_position = Some(anchor);
+        settings.screen = describe(&monitor).key();
+        settings.clone()
+    };
+    drop(reset);
+    apply_geometry(app, &settings.screen, shared.gate.collapsed.load(Ordering::Relaxed));
+    if let Err(err) = crate::settings::save(&settings) { crate::log::line(format!("island position: {err}")); }
+    let _ = app.emit("settings-changed", settings);
+    true
+}
+
+#[cfg(test)]
+mod custom_position_tests {
+    use super::*;
+    #[test]
+    fn custom_anchor_keeps_its_centre_when_the_window_collapses() {
+        let (expanded, y) = custom_origin([0.5, 0.25], -1920, 24, 1920, 720);
+        let (collapsed, cy) = custom_origin([0.5, 0.25], -1920, 24, 1920, 240);
+        assert_eq!(expanded + 360, collapsed + 120);
+        assert_eq!((y, cy), (24, 24));
+    }
+    #[test]
+    fn dragging_near_an_edge_never_loses_the_visible_island() {
+        assert_eq!(custom_origin([0.0, 1.0], 0, 0, 1920, 720), (0, 0));
+        assert_eq!(custom_origin([1.0, -0.5], 0, 0, 1920, 720), (1200, 0));
     }
 }

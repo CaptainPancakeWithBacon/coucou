@@ -35,7 +35,11 @@ const HALF_TAPS: isize = 16;
 
 impl Resampler {
     pub fn new(input_rate: u32) -> Self {
-        let step = input_rate as f64 / SAMPLE_RATE as f64;
+        Self::with_output_rate(input_rate, SAMPLE_RATE)
+    }
+
+    pub fn with_output_rate(input_rate: u32, output_rate: u32) -> Self {
+        let step = input_rate as f64 / output_rate as f64;
         Self { step, pos: HALF_TAPS as f64, buf: vec![0.0; HALF_TAPS as usize], cutoff: (1.0 / step).min(1.0) * 0.92 }
     }
 
@@ -195,6 +199,7 @@ fn device_id(d: &cpal::Device) -> String {
     d.id().map(|id| id.to_string()).unwrap_or_default()
 }
 
+
 /// The microphones, the default first. Monitors of outputs are left out.
 pub fn input_devices() -> Vec<InputDevice> {
     let host = cpal::default_host();
@@ -238,9 +243,17 @@ fn system_device(host: &cpal::Host) -> Option<cpal::Device> {
     host.default_output_device()
 }
 
+#[cfg(windows)]
+fn output_monitor(_host: &cpal::Host, device: cpal::Device) -> Option<cpal::Device> { Some(device) }
+
 #[cfg(not(windows))]
 fn system_device(host: &cpal::Host) -> Option<cpal::Device> {
     let sink = host.default_output_device()?;
+    output_monitor(host, sink)
+}
+
+#[cfg(not(windows))]
+fn output_monitor(host: &cpal::Host, sink: cpal::Device) -> Option<cpal::Device> {
     let sink_id = device_id(&sink);
     let wanted = format!("{}.monitor", sink_id.rsplit(':').next().unwrap_or(&sink_id));
     let mut monitors: Vec<cpal::Device> = host.input_devices().ok()?.filter(is_monitor).collect();

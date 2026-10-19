@@ -87,13 +87,17 @@ test("a click opens the compact island, and only the compact island", () => {
   assert.deepEqual(transitions, ["hidden>petit", "petit>home"]);
 });
 
-test("the open island collapses 15 s after the mouse leaves", () => {
+test("the open island collapses after 15 s, then the compact pill hides after 60 s", () => {
   fsm.forceHome();
   fsm.mouseLeft();
   seconds(14);
   assert.equal(fsm.state, "home");
   seconds(1);
   assert.equal(fsm.state, "petit");
+  seconds(59);
+  assert.equal(fsm.state, "petit");
+  seconds(1);
+  assert.equal(fsm.state, "hidden");
 });
 
 test("coming back to the open island cancels the collapse", () => {
@@ -150,13 +154,15 @@ test("forcing the island open cancels a pending hide", () => {
   assert.equal(fsm.state, "home");
 });
 
-test("an explicit close goes to the compact island and cancels the collapse", () => {
+test("an explicit close goes to compact and then hides unless kept visible", () => {
   fsm.forceHome();
   fsm.mouseLeft();
   fsm.forcePetit();
   assert.equal(fsm.state, "petit");
-  seconds(600);
+  seconds(59);
   assert.equal(fsm.state, "petit");
+  seconds(1);
+  assert.equal(fsm.state, "hidden");
 });
 
 test("forceHidden hides from any state", () => {
@@ -384,4 +390,37 @@ test("open on hover: an island opened by an alert keeps the normal delay", () =>
   assert.equal(fsm.state, "home");
   seconds(2);
   assert.equal(fsm.state, "petit");
+});
+
+
+test("manual collapse with open-on-hover waits for pointer exit before reopening", () => {
+  fsm.openOnHover = true;
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "home");
+  fsm.forcePetit(true);
+  assert.equal(fsm.state, "petit");
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit", "hover cannot undo the manual close");
+  fsm.mouseLeft();
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "home", "a new hover after leaving opens again");
+});
+
+test("manual collapse keeps clicking to reopen available", () => {
+  fsm.openOnHover = true;
+  fsm.mouseEntered();
+  fsm.forcePetit(true);
+  fsm.click();
+  assert.equal(fsm.state, "home");
+});
+
+test("without hover-to-open, manual collapse keeps normal behavior", () => {
+  fsm.mouseEntered();
+  fsm.click();
+  fsm.forcePetit(true);
+  fsm.mouseLeft();
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit");
+  fsm.click();
+  assert.equal(fsm.state, "home");
 });

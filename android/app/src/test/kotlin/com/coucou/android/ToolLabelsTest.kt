@@ -6,6 +6,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ToolLabelsTest {
+    @Test fun sessionDetailsKeepTheExactStepWhileHomeKeepsItsSafeLabel() {
+        val raw = "Bash · npm test -- --run src/core/spotify.test.ts"
+        assertEquals(raw, ToolLabels.detail(raw))
+        assertEquals("Running a command · npm", ToolLabels.label(raw))
+        assertEquals("Edits · src/mochi/beat.ts", ToolLabels.detail("Edits · src/mochi/beat.ts"))
+    }
     @Test fun knownToolsBecomePlainSentences() {
         assertEquals("Asking a question", ToolLabels.label("ask_question"))
         assertEquals("Asking a question", ToolLabels.label("AskUserQuestion"))

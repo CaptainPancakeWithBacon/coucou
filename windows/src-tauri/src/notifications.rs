@@ -229,9 +229,9 @@ fn deliver(app: &AppHandle, notice: Notice) {
     if notice.app != "Coucou" && !notice.app.is_empty() {
         let key = mute_key(&notice.app, &notice.summary);
         remember(key.clone());
-        let muted = app
-            .try_state::<crate::Shared>()
-            .and_then(|s| s.settings.lock().ok().map(|g| is_muted(&g.muted_notification_apps, &key)));
+        let muted = app.try_state::<crate::Shared>().and_then(|s| {
+            s.settings.lock().ok().map(|g| g.do_not_disturb || is_muted(&g.muted_notification_apps, &key))
+        });
         if muted == Some(true) {
             crate::log::line(format!("notification from {key} muted"));
             return;

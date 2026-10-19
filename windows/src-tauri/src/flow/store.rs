@@ -109,6 +109,10 @@ pub struct Prefs {
     pub voice_gender: String,
 }
 
+impl Prefs {
+    pub fn opens_window_at_launch(&self) -> bool { self.enabled && self.open_at_launch }
+}
+
 impl Default for Prefs {
     fn default() -> Self {
         Self {
@@ -120,7 +124,7 @@ impl Default for Prefs {
             cleanup: false,
             default_style: Style::Natural,
             summary_engine: SummaryEngine::Claude,
-            open_at_launch: true,
+            open_at_launch: false,
             voice: false,
             voice_output: "system".into(),
             voice_gender: "female".into(),
@@ -345,6 +349,17 @@ mod tests {
     }
 
     #[test]
+    fn disabled_dictation_never_opens_its_window_on_launch() {
+        let mut prefs = Prefs::default();
+        prefs.open_at_launch = true;
+        assert!(!prefs.opens_window_at_launch());
+        prefs.enabled = true;
+        assert!(prefs.opens_window_at_launch());
+        prefs.open_at_launch = false;
+        assert!(!prefs.opens_window_at_launch());
+    }
+
+    #[test]
     fn a_dictation_counts_and_is_kept_for_the_chosen_days() {
         let (mut s, dir) = temp_store();
         let day = Day { year: 2026, month: 10, day: 14 };
@@ -387,6 +402,7 @@ mod tests {
         assert!(p.enabled);
         assert_eq!(p.key, FlowKey::RightAlt);
         assert_eq!(p.keep_days, 30);
-        assert!(p.open_at_launch);
+        assert!(!p.open_at_launch);
+        assert!(!Prefs::default().enabled);
     }
 }

@@ -69,8 +69,10 @@ To switch it on for the release builds:
 
 1. In Discord: a private channel → Edit channel → Integrations → Webhooks → New
    Webhook → Copy Webhook URL.
-2. Put it in a repository secret yourself (the value never goes through anyone
-   else): `gh secret set COUCOU_LOG_WEBHOOK -R CaptainPancakeWithBacon/coucou`
+2. Put it in the secret of the `friends-release` environment yourself (the value
+   never goes through anyone else; only `main` may use that environment, so a
+   collaborator's branch cannot read it):
+   `gh secret set COUCOU_LOG_WEBHOOK --env friends-release -R CaptainPancakeWithBacon/coucou`
    and paste the URL when asked.
 3. Merge into `main` (or run *Friends release* by hand). Builds made without the
    secret have no button and no card.

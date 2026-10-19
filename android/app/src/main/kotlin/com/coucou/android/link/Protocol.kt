@@ -47,7 +47,7 @@ object Protocol {
     const val MAX_QUESTIONS = 4
     const val MAX_OPTIONS = 8
     const val MAX_STEPS = 20
-    const val MAX_STEP_CHARS = 200
+    const val MAX_STEP_CHARS = 1000
     const val MAX_PROJECT_CHARS = 64
     /** What the desktop accepts for one chat message; longer is refused there, so it is refused here first. */
     const val CHAT_MAX_TEXT = 4000

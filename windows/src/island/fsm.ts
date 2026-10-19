@@ -52,6 +52,8 @@ export class IslandStateMachine {
 
   private homeDelay = 15;
   private byHover = false;
+  /** Manual collapse cannot immediately reopen from the same pointer hover. */
+  private hoverNeedsExit = false;
   private petitHide: number | null = null;
   private homeCollapse: number | null = null;
   private greetCollapse: number | null = null;
@@ -64,6 +66,7 @@ export class IslandStateMachine {
   }
 
   mouseEntered() {
+    if (this.hoverNeedsExit) return;
     if (this.openOnHover && (this.state === "hidden" || this.state === "petit") && !this.pinned) {
       this.cancelTimers();
       this.byHover = true;
@@ -88,6 +91,7 @@ export class IslandStateMachine {
   }
 
   mouseLeft() {
+    this.hoverNeedsExit = false;
     switch (this.state) {
       case "hidden":
         break;
@@ -144,7 +148,8 @@ export class IslandStateMachine {
   }
 
   /// Explicit close (OK button, Escape, an alert being answered).
-  forcePetit() {
+  forcePetit(waitForMouseExit = false) {
+    this.hoverNeedsExit = waitForMouseExit && this.openOnHover;
     this.byHover = false;
     this.cancelTimers();
     this.transition("petit");
@@ -210,6 +215,10 @@ export class IslandStateMachine {
     if (next === this.state) return;
     const from = this.state;
     this.state = next;
+    // An automatic home -> petit fold (or explicit close) used to leave
+    // the compact pill without a hide deadline. Start that countdown whenever
+    // we enter petit; keepVisible and pinned are respected by the scheduler.
+    if (next === "petit" && from !== "hidden") this.schedulePetitHide();
     this.onTransition?.(from, next);
   }
 }

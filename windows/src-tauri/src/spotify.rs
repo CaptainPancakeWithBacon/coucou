@@ -118,6 +118,9 @@ pub struct PlayerState {
     pub repeat: bool,
     /// 0…100.
     pub volume: i32,
+    /// Windows can drive the actual Spotify slider only while it is exposed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_available: Option<bool>,
     /// Who is playing: the player's own name ("Spotify", "Firefox"…).
     pub player: String,
 }
@@ -134,6 +137,7 @@ impl Default for PlayerState {
             shuffle: false,
             repeat: false,
             volume: 50,
+            volume_available: None,
             player: String::new(),
         }
     }
@@ -405,6 +409,26 @@ struct Artwork {
     data_url: String,
 }
 
+/// WinRT DateTime is 100 ns since 1601; the page uses Unix milliseconds.
+#[cfg(any(windows, test))]
+fn timeline_timestamp(ticks: i64, now: f64) -> f64 {
+    let timestamp = ticks as f64 / 10_000.0 - 11_644_473_600_000.0;
+    if timestamp.is_finite() && timestamp > 0.0 && timestamp <= now + 1000.0 { timestamp.min(now) } else { now }
+}
+
+#[cfg(test)]
+mod timeline_tests {
+    use super::timeline_timestamp;
+    #[test]
+    fn timeline_keeps_its_sample_time_instead_of_the_poll_time() {
+        let time = 1_790_000_000_000i64;
+        let ticks = (time + 11_644_473_600_000) * 10_000;
+        assert_eq!(timeline_timestamp(ticks, time as f64 + 5000.0), time as f64);
+        assert_eq!(timeline_timestamp(0, time as f64), time as f64);
+        assert_eq!(timeline_timestamp(ticks + 100_000_000, time as f64), time as f64);
+    }
+}
+
 fn now_ms() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -429,8 +453,9 @@ pub async fn spotify_refresh(app: AppHandle) -> Option<PlayerState> {
     }
     #[cfg(windows)]
     {
-        let _ = app;
-        tauri::async_runtime::spawn_blocking(win::refresh).await.ok().flatten()
+        let state = tauri::async_runtime::spawn_blocking(win::refresh).await.ok().flatten();
+        if let Some(state) = &state { emit_state(&app, state); }
+        state
     }
     #[cfg(not(any(target_os = "linux", windows)))]
     {
@@ -449,8 +474,14 @@ pub async fn spotify_control(app: AppHandle, action: String, value: Option<f64>)
     }
     #[cfg(windows)]
     {
-        let _ = app;
-        tauri::async_runtime::spawn_blocking(move || win::control(&action, value)).await.unwrap_or(false)
+        let volume = action == "volume";
+        let done = tauri::async_runtime::spawn_blocking(move || win::control(&action, value)).await.unwrap_or(false);
+        if volume {
+            if let Some(state) = tauri::async_runtime::spawn_blocking(win::refresh).await.ok().flatten() {
+                emit_state(&app, &state);
+            }
+        }
+        done
     }
     #[cfg(not(any(target_os = "linux", windows)))]
     {
@@ -512,7 +543,7 @@ pub fn sync(app: &AppHandle, active_integrations: &[String]) {
 // volume keys): Spotify, a browser, VLC… whichever Windows calls the current
 // session. There is no signal to wait on that is worth the code, so while the
 // pill is declared one thread asks every 1.5 s and tells the island only when
-// something changed. Volume is not part of it: the slider does nothing here.
+// something changed. Volume reads and writes Spotify's own accessible slider.
 
 #[cfg(windows)]
 mod win {
@@ -531,9 +562,10 @@ mod win {
     use windows::Storage::Streams::DataReader;
     use windows::core::Interface;
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Media::Audio::{
-        eMultimedia, eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator, ISimpleAudioVolume,
-        MMDeviceEnumerator,
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation8, IUIAutomation, IUIAutomation2, IUIAutomationRangeValuePattern,
+        TreeScope_Children, TreeScope_Descendants, UIA_ControlTypePropertyId,
+        UIA_RangeValuePatternId, UIA_SliderControlTypeId,
     };
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
     use windows::Win32::System::Threading::{
@@ -574,36 +606,53 @@ mod win {
         Some(bytes)
     }
 
-    // ── Volume: the playing app's own volume in the Windows mixer ─────────────
+    // Spotify's own slider, never its independent Windows mixer session.
+    thread_local! {
+        static VOLUME_SLIDER: std::cell::RefCell<Option<IUIAutomationRangeValuePattern>> = const { std::cell::RefCell::new(None) };
+    }
 
-    /// The audio sessions on the default output of the app called `player`
-    /// ("Spotify", "Chrome"…), found by its program's file name.
-    fn audio_of(player: &str) -> Vec<ISimpleAudioVolume> {
-        com();
-        let mut out = Vec::new();
-        if player.is_empty() {
-            return out;
-        }
-        let wanted = player.to_lowercase();
+    fn find_volume_slider() -> Option<IUIAutomationRangeValuePattern> {
         unsafe {
-            let Ok(devices) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else {
-                return out;
-            };
-            let Ok(device) = devices.GetDefaultAudioEndpoint(eRender, eMultimedia) else { return out };
-            let Ok(manager) = device.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) else { return out };
-            let Ok(sessions) = manager.GetSessionEnumerator() else { return out };
-            for i in 0..sessions.GetCount().unwrap_or(0) {
-                let Ok(control) = sessions.GetSession(i) else { continue };
-                let Ok(control) = control.cast::<IAudioSessionControl2>() else { continue };
-                let pid = control.GetProcessId().unwrap_or(0);
-                if pid != 0 && program_of(pid).is_some_and(|name| name.contains(&wanted)) {
-                    if let Ok(volume) = control.cast::<ISimpleAudioVolume>() {
-                        out.push(volume);
+            let automation: IUIAutomation = CoCreateInstance(&CUIAutomation8, None, CLSCTX_ALL).ok()?;
+            if let Ok(timeouts) = automation.cast::<IUIAutomation2>() {
+                let _ = timeouts.SetConnectionTimeout(300);
+                let _ = timeouts.SetTransactionTimeout(300);
+            }
+            let desktop = automation.GetRootElement().ok()?;
+            let windows = desktop.FindAll(TreeScope_Children, &automation.CreateTrueCondition().ok()?).ok()?;
+            let condition = automation.CreatePropertyCondition(
+                UIA_ControlTypePropertyId, &UIA_SliderControlTypeId.0.into(),
+            ).ok()?;
+            for i in 0..windows.Length().ok()? {
+                let Ok(window) = windows.GetElement(i) else { continue };
+                let pid = window.CurrentProcessId().unwrap_or(0);
+                if pid <= 0 || program_of(pid as u32).as_deref() != Some("spotify") { continue; }
+                let Ok(sliders) = window.FindAll(TreeScope_Descendants, &condition) else { continue };
+                for j in 0..sliders.Length().unwrap_or(0) {
+                    let Ok(element) = sliders.GetElement(j) else { continue };
+                    if !element.CurrentIsEnabled().is_ok_and(|enabled| enabled.as_bool()) { continue; }
+                    let Ok(slider) = element.GetCurrentPatternAs::<IUIAutomationRangeValuePattern>(UIA_RangeValuePatternId) else { continue };
+                    // Spotify's volume is 0..1. Seek uses milliseconds and
+                    // sidebar resize uses pixels: neither must be touched.
+                    if slider.CurrentMinimum().ok() == Some(0.0)
+                        && slider.CurrentMaximum().ok() == Some(1.0)
+                        && slider.CurrentIsReadOnly().is_ok_and(|read_only| !read_only.as_bool()) {
+                        return Some(slider);
                     }
                 }
             }
         }
-        out
+        None
+    }
+
+    fn with_volume_slider<T>(action: impl Fn(&IUIAutomationRangeValuePattern) -> Option<T>) -> Option<T> {
+        VOLUME_SLIDER.with(|slot| {
+            let mut cached = slot.borrow_mut();
+            if let Some(value) = cached.as_ref().and_then(&action) { return Some(value); }
+            // A stale element after Spotify restarts is rediscovered once.
+            *cached = find_volume_slider();
+            cached.as_ref().and_then(action)
+        })
     }
 
     /// "spotify" for C:\...\Spotify.exe.
@@ -621,23 +670,29 @@ mod win {
         }
     }
 
-    /// 0…100, or None while the app has no audio session (nothing played yet).
-    fn volume_of(player: &str) -> Option<i32> {
-        let level = unsafe { audio_of(player).first()?.GetMasterVolume().ok()? };
-        Some((level * 100.0).round().clamp(0.0, 100.0) as i32)
+    /// The value shown by Spotify itself; None means it cannot be reached.
+    fn volume_of() -> Option<i32> {
+        let level = with_volume_slider(|slider| unsafe { slider.CurrentValue().ok() })?;
+        level.is_finite().then(|| (level * 100.0).round().clamp(0.0, 100.0) as i32)
     }
 
-    fn set_volume(player: &str, percent: f64) -> bool {
-        let level = (percent / 100.0).clamp(0.0, 1.0) as f32;
-        let mut done = false;
-        for volume in &audio_of(player) {
-            done |= unsafe { volume.SetMasterVolume(level, std::ptr::null()).is_ok() };
-        }
-        done
+    fn set_volume(percent: f64) -> bool {
+        if !percent.is_finite() { return false; }
+        with_volume_slider(|slider| unsafe {
+            slider.SetValue((percent / 100.0).clamp(0.0, 1.0)).ok()
+        }).is_some()
     }
 
     fn session() -> Option<Session> {
-        Manager::RequestAsync().ok()?.get().ok()?.GetCurrentSession().ok()
+        let sessions = Manager::RequestAsync().ok()?.get().ok()?.GetSessions().ok()?;
+        for i in 0..sessions.Size().ok()? {
+            let session = sessions.GetAt(i).ok()?;
+            let id = session.SourceAppUserModelId().ok()?.to_string();
+            if player_name(&id).eq_ignore_ascii_case("spotify") {
+                return Some(session);
+            }
+        }
+        None
     }
 
     /// The player as it is now; the cover only when `with_art` asks for it.
@@ -669,7 +724,9 @@ mod win {
             track: has_title.then(|| Track { id, title, artist, album, duration, art_url: Some(art_url), object_path: String::new() }),
             playing: info.PlaybackStatus().ok()? == Status::Playing,
             position: ticks(timeline.Position().ok()?).max(0.0),
-            position_at: now_ms(),
+            // Position is sampled at LastUpdatedTime, not when we poll SMTC.
+            position_at: timeline.LastUpdatedTime().ok()
+                .map(|t| timeline_timestamp(t.UniversalTime, now_ms())).unwrap_or_else(now_ms),
             shuffle: info.IsShuffleActive().ok().and_then(|r| r.Value().ok()).unwrap_or(false),
             repeat: info
                 .AutoRepeatMode()
@@ -677,9 +734,12 @@ mod win {
                 .and_then(|r| r.Value().ok())
                 .is_some_and(|m| m != MediaPlaybackAutoRepeatMode::None),
             volume: 50,
+            volume_available: Some(false),
             player,
         };
-        state.volume = volume_of(&state.player).unwrap_or(50);
+        let volume = volume_of();
+        state.volume_available = Some(volume.is_some());
+        state.volume = volume.unwrap_or_else(|| LAST.lock().unwrap().as_ref().map_or(50, |last| last.volume));
         Some((state, artwork))
     }
 
@@ -695,6 +755,7 @@ mod win {
             || old.shuffle != new.shuffle
             || old.repeat != new.repeat
             || old.volume != new.volume
+            || old.volume_available != new.volume_available
             || old.player != new.player
             || old.track.as_ref().map(|t| &t.id) != new.track.as_ref().map(|t| &t.id)
             || seeked
@@ -726,16 +787,19 @@ mod win {
                 let mode = if value.unwrap_or(0.0) >= 0.5 { MediaPlaybackAutoRepeatMode::List } else { MediaPlaybackAutoRepeatMode::None };
                 session.TryChangeAutoRepeatModeAsync(mode).ok().and_then(|op| op.get().ok()).unwrap_or(false)
             }
-            "volume" => {
-                let player = session.SourceAppUserModelId().map(|s| player_name(&s.to_string())).unwrap_or_default();
-                value.is_some_and(|v| set_volume(&player, v))
-            }
+            "volume" => value.is_some_and(set_volume),
             _ => false,
         }
     }
 
     /// "Open Spotify": the spotify: link starts it, or brings it forward.
     pub fn open() -> bool {
+        if let Some(exe) = std::env::var_os("APPDATA").map(|dir| std::path::PathBuf::from(dir).join("Spotify/Spotify.exe")).filter(|exe| exe.is_file()) {
+            return std::process::Command::new(exe)
+                .arg("--force-renderer-accessibility=complete")
+                .creation_flags_hidden()
+                .spawn().is_ok();
+        }
         std::process::Command::new("cmd")
             .args(["/C", "start", "", "spotify:"])
             .creation_flags_hidden()
