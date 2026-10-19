@@ -4361,6 +4361,39 @@
    "pt-BR": "Notificação",
    "ru": "Уведомление",
    "id": "Notifikasi"
+  },
+  "Update now": {
+   "zh-Hans": "立即更新",
+   "hi": "अभी अपडेट करें",
+   "es": "Actualizar ahora",
+   "ar": "حدّث الآن",
+   "fr": "Mettre à jour",
+   "bn": "এখনই আপডেট করুন",
+   "pt-BR": "Atualizar agora",
+   "ru": "Обновить сейчас",
+   "id": "Perbarui sekarang"
+  },
+  "What's changed?": {
+   "zh-Hans": "有什么新变化？",
+   "hi": "क्या बदला है?",
+   "es": "¿Qué ha cambiado?",
+   "ar": "ما الجديد؟",
+   "fr": "Quoi de neuf ?",
+   "bn": "কী বদলেছে?",
+   "pt-BR": "O que mudou?",
+   "ru": "Что нового?",
+   "id": "Apa yang berubah?"
+  },
+  "The latest versions, in a few lines each.": {
+   "zh-Hans": "最新版本，每个只用几行说明。",
+   "hi": "नवीनतम संस्करण, हर एक कुछ पंक्तियों में।",
+   "es": "Las últimas versiones, en pocas líneas cada una.",
+   "ar": "أحدث الإصدارات، في بضعة أسطر لكل منها.",
+   "fr": "Les dernières versions, en quelques lignes chacune.",
+   "bn": "সর্বশেষ সংস্করণ, প্রতিটি কয়েক লাইনে।",
+   "pt-BR": "As últimas versões, em poucas linhas cada.",
+   "ru": "Последние версии, по несколько строк на каждую.",
+   "id": "Versi terbaru, masing-masing dalam beberapa baris."
   }
  }
 }

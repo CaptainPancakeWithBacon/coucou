@@ -751,6 +751,10 @@ function buildFinished(actions: ViewActions): ViewHost {
         // A link (the update card) is something to download, not an app to open.
         const named = task.noticeTarget === "coucou:send-log"
           ? t("Send log")
+          : task.noticeTarget === "coucou:install-update"
+          ? t("Update now")
+          : task.noticeTarget === "coucou:whats-new"
+          ? t("What's changed?")
           : task.noticeTarget?.startsWith("https://")
           ? t("Download")
           : app ? t("Open {name}", { name: app }) : t("Open terminal");

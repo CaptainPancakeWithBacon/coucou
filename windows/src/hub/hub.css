@@ -921,3 +921,6 @@ button.hub-icon svg {
 .hub-note-detail > button {
   align-self: flex-start;
 }
+
+/* What's changed? */
+.whats-new { margin: 0 0 18px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }

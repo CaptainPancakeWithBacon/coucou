@@ -1,0 +1,35 @@
+// What changed in each release, newest first, for the "What's changed?" page.
+// Written for the friends who use this fork, so in Dutch. Add an entry at the top
+// with every release.
+
+export interface WhatsNewEntry {
+  title: string;
+  date: string;
+  items: string[];
+}
+
+export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    title: "De Merijn-special",
+    date: "19 oktober 2026",
+    items: [
+      "Merijn heeft een compleet nieuwe garderobe gemaakt: drie collecties erbij (Extra, League of Legends en Overwatch), met kleurvarianten en een garderobeknop bovenaan het eiland.",
+      "Mochi danst beter op Spotify. Op Windows luistert hij alleen naar Spotify zelf (niet naar je microfoon), onthoudt het tempo als je pauzeert en je kunt kiezen via welke uitgang hij luistert.",
+      "Het eiland is van jou: een knop om het langs de bovenkant te slepen (Windows), een transparantieschuif en netter inklappen en hoveren.",
+      "Acht pillen in plaats van vier, in twee pagina's. Codex en Copilot laten meer details zien.",
+      "Niet storen: een belletje bovenin het eiland en een schakelaar op de Meldingenpagina. Zolang die aan staat laat het eiland geen enkele melding zien.",
+      "Het volume van Spotify werkt als Coucou Spotify zelf start (Open Spotify). Is het balkje grijs, dan kan Coucou er niet bij.",
+    ],
+  },
+  {
+    title: "De opruimronde",
+    date: "16 oktober 2026",
+    items: [
+      "Meldingen hebben een eigen pagina: zet ze aan of uit, ook per app, en bij Phone Link per telefoon-app.",
+      "Het eiland staat links, in het midden of rechts, en Codex koppelt zichzelf.",
+      "Dictate is verwijderd, en het instellingenscherm springt niet meer open bij het opstarten.",
+      "Mochi blijft in beeld als er niks gebeurt, tenzij je dat zelf uitzet.",
+      "Er is een knop Controleren op updates, en het updatebericht blijft open en komt elke dag terug tot je bijgewerkt hebt.",
+    ],
+  },
+];
