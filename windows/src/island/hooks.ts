@@ -5,6 +5,7 @@
 // The relay has already mapped every agent's events and fields onto Claude
 // Code's (hook/src/normalize.rs), so one handler serves them all.
 
+import { showsAlert } from "./alertfocus";
 import { Bridge, onEvent } from "../core/bridge";
 import { buildFileDiffs, fileName, makeDiffStep, toOneLine } from "../core/diff";
 import { Sound } from "../core/sound";
@@ -452,7 +453,7 @@ function handleHook(island: Island, payload: HookPayload) {
       }
       Sound.play("finish");
       // A card waiting for an answer is never covered by another alert.
-      if (focused && !State.pendingApproval) surface("finished", true);
+      if (!State.pendingApproval && showsAlert(agentId, focused)) surface("finished", true);
       else State.setPillBadge(agentId, "finished");
       cancelStopTimer(agentId);
       stopTimers.set(
@@ -481,7 +482,7 @@ function handleHook(island: Island, payload: HookPayload) {
       supersedeStop();
       State.updateTask(agentId, "error");
       Sound.play("error");
-      if (focused && !State.pendingApproval) surface("error", true);
+      if (!State.pendingApproval && showsAlert(agentId, focused)) surface("error", true);
       else State.setPillBadge(agentId, "error");
       break;
 
