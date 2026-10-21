@@ -122,6 +122,8 @@ export interface Settings {
   mutedNotificationApps: string[];
   /** Do not disturb: notifications are not shown in the island. */
   doNotDisturb: boolean;
+  /** Date and time in the middle of the compact island. */
+  showClock: boolean;
   absenceInterval: number;
   /** Declared pills next to the main one (at most 8), in the order they were added. */
   activeIntegrations: string[];
@@ -199,6 +201,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showNotifications: false,
   mutedNotificationApps: [],
   doNotDisturb: false,
+  showClock: false,
   absenceInterval: 180,
   activeIntegrations: [
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
