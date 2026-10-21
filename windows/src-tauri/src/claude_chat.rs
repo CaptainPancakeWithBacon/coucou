@@ -78,6 +78,7 @@ mod win {
         }
         let mut phase = Phase::Idle;
         let mut was_front = false;
+        let mut announced = false;
         loop {
             let enabled = app
                 .try_state::<crate::Shared>()
@@ -88,6 +89,10 @@ mod win {
                 std::thread::sleep(Duration::from_secs(3));
                 continue;
             }
+            if !announced {
+                announced = true;
+                crate::log::line("claude desktop: watching for chat replies".to_string());
+            }
             std::thread::sleep(Duration::from_secs(1));
             let front = foreground_is_claude();
             match phase {
@@ -97,7 +102,9 @@ mod win {
                     } else if was_front {
                         // Just left Claude: is it still writing?
                         was_front = false;
-                        if claude_window().is_some_and(|hwnd| stop_button_present(hwnd)) {
+                        let writing = claude_window().is_some_and(|hwnd| stop_button_present(hwnd));
+                        crate::log::line(format!("claude desktop: left Claude, stop button on screen: {writing}"));
+                        if writing {
                             crate::log::line("claude desktop: a reply is in progress, watching".to_string());
                             phase = Phase::Watching(Instant::now());
                         }
