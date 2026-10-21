@@ -222,6 +222,10 @@ mod win {
             let Ok(buttons) = root.FindAll(TreeScope_Descendants, &condition) else { return false };
             for i in 0..buttons.Length().unwrap_or(0) {
                 let Ok(button) = buttons.GetElement(i) else { continue };
+                // A hidden button can stay in the tree: only one on screen counts.
+                if button.CurrentIsOffscreen().is_ok_and(|off| off.as_bool()) {
+                    continue;
+                }
                 let name = button.CurrentName().map(|b| b.to_string()).unwrap_or_default();
                 let help = button.CurrentHelpText().map(|b| b.to_string()).unwrap_or_default();
                 if is_stop_label(&[&name, &help]) {
