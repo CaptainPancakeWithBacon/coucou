@@ -52,8 +52,8 @@ mod win {
     use std::time::{Duration, Instant};
 
     use tauri::{Emitter, Manager};
-    use windows::core::Interface;
-    use windows::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM};
+    use windows::core::{Interface, BOOL};
+    use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
     use windows::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
