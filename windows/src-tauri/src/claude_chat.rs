@@ -156,11 +156,28 @@ mod win {
         unsafe {
             let hwnd = GetForegroundWindow();
             if hwnd.0.is_null() {
+                debug_foreground("(no window)");
                 return false;
             }
             let mut pid = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            pid != 0 && is_claude(pid)
+            let program = if pid == 0 { None } else { program_of(pid) };
+            debug_foreground(program.as_deref().unwrap_or("(unknown)"));
+            program.as_deref() == Some("claude")
+        }
+    }
+
+    /// COUCOU_DEBUG_CHAT=1: log the program in front whenever it changes (for tests).
+    fn debug_foreground(program: &str) {
+        use std::sync::Mutex;
+        static LAST: Mutex<String> = Mutex::new(String::new());
+        if std::env::var_os("COUCOU_DEBUG_CHAT").is_none() {
+            return;
+        }
+        let mut last = LAST.lock().unwrap();
+        if *last != program {
+            *last = program.to_string();
+            crate::log::line(format!("claude desktop: in front: {program}"));
         }
     }
 
