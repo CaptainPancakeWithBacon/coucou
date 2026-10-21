@@ -110,6 +110,8 @@ export interface Settings {
   keepVisible: boolean;
   /** A pill other than the one shown that finishes or fails opens the island on its card. */
   alertsFromAllPills: boolean;
+  /** Windows: tell when a regular Claude Desktop chat reply is ready (experimental). */
+  claudeDesktopChatWatch: boolean;
   /** Mochi dances on the beat of the music (Linux; listens to the speakers' output). */
   beatSync: boolean;
   /** Output used for Spotify beat analysis; empty follows the default device. */
@@ -197,6 +199,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openOnHover: false,
   keepVisible: true,
   alertsFromAllPills: false,
+  claudeDesktopChatWatch: false,
   beatSync: HOST_OS === "windows",
   beatOutput: "",
   islandOpacity: 100,
