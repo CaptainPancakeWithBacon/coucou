@@ -119,11 +119,13 @@ const TOOL_LABELS: Record<string, string> = {
   shell_command: N_("Runs"),
   exec: N_("Runs"),
   update_plan: N_("Tasks"),
+  ask_question: N_("Needs input"),
 };
 
 function stepLabel(tool: string, input: Record<string, unknown>): string {
   tool = tool.replace(/^functions\./, "");
-  const label = TOOL_LABELS[tool] ? t(TOOL_LABELS[tool]) : tool;
+  const labelTool = tool === "ask_question" || tool.endsWith(":ask_question") ? "ask_question" : tool;
+  const label = TOOL_LABELS[labelTool] ? t(TOOL_LABELS[labelTool]) : tool;
   const str = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : null);
   const cmd = str("command") ?? str("cmd");
   if (tool === "update_plan" && Array.isArray(input.plan)) {
@@ -147,6 +149,17 @@ function stepLabel(tool: string, input: Record<string, unknown>): string {
   if (file) return `${label} · ${file}`;
   const query = str("query");
   if (query) return `${label} · ${query}`;
+  if (
+    (tool === "ask_question" || tool.endsWith(":ask_question")) &&
+    Array.isArray(input.questions) &&
+    input.questions.length > 0
+  ) {
+    const firstQ = input.questions[0];
+    if (typeof firstQ === "object" && firstQ !== null && typeof (firstQ as Record<string, unknown>).question === "string") {
+      const q = ((firstQ as Record<string, unknown>).question as string).trim();
+      if (q) return `${label} · ${q.slice(0, 40)}`;
+    }
+  }
   const description = str("description") ?? str("explanation");
   if (description) return `${label} · ${description}`;
   return label;
@@ -370,10 +383,18 @@ function handleHook(island: Island, payload: HookPayload) {
       ensurePill();
       supersedeStop();
       clearFinalLine(agentId);
-      State.updateTask(agentId, "working");
       const tool = payload.tool_name ?? "Tool";
-      State.appendStep(agentId, stepLabel(tool, payload.tool_input ?? {}));
-      surface("overview", false);
+      const isQuestion = tool === "ask_question" || tool.endsWith(":ask_question");
+      if (isQuestion) {
+        State.updateTask(agentId, "question");
+        State.appendStep(agentId, stepLabel(tool, payload.tool_input ?? {}));
+        Sound.play("question");
+        surface("overview", true);
+      } else {
+        State.updateTask(agentId, "working");
+        State.appendStep(agentId, stepLabel(tool, payload.tool_input ?? {}));
+        surface("overview", false);
+      }
       break;
     }
 
