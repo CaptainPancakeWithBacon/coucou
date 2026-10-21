@@ -1007,6 +1007,20 @@ function notificationsSection(): HTMLElement {
   );
 }
 
+/** Claude Desktop chats (Windows): a switch for the experimental reply watcher. */
+function claudeDesktopChatSection(): HTMLElement {
+  return h(
+    "section",
+    {},
+    h("h2", {}, h("span", { text: t("Claude Desktop chats (experimental)") })),
+    h("div", { class: "row" },
+      h("label", { text: t("Mochi jumps when a chat reply is ready") }),
+      toggle(settings.claudeDesktopChatWatch, (v) => { settings.claudeDesktopChatWatch = v; void save(); }),
+    ),
+    h("div", { class: "hint", text: "When you leave the Claude app while it is still writing, Coucou looks once a second for its Stop response button to go away. Only the button is looked at, never the text of the chat." }),
+  );
+}
+
 /** The "What's changed?" page: each release as a heading and a few lines. */
 function whatsNewSection(): HTMLElement {
   return h(
@@ -1529,7 +1543,7 @@ async function render() {
     pills: () => [activePillsSection(connected)],
     notifications: () => [notificationsSection()],
     whatsnew: () => [whatsNewSection()],
-    agents: () => [claudeSection(status), agentsSection(agents), planSection(status)],
+    agents: () => [claudeSection(status), agentsSection(agents), planSection(status), ...(HOST_OS === "windows" ? [claudeDesktopChatSection()] : [])],
     chat: () => [apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     integrations: () => [integrationsSection(present)],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],

@@ -12,6 +12,7 @@ import { registerHookHandlers } from "./island/hooks";
 import { registerPhoneLink } from "./island/phone-link";
 import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
 import { registerNotificationHandlers } from "./island/notifications";
+import { registerClaudeChatHandlers } from "./island/claudechat";
 import { foldedFrom, repaintAfterFold } from "./island/repaint";
 import { registerShortcutHandlers } from "./island/shortcuts";
 import { registerVoiceHandlers } from "./island/voice";
@@ -161,6 +162,7 @@ async function main() {
   registerPhoneLink(island);
   registerIntegrationHandlers(island);
   registerNotificationHandlers(island);
+  registerClaudeChatHandlers(island);
   registerShortcutHandlers(island, () => setPaused(false));
   registerVoiceHandlers();
   registerSpotifyHandlers(island);

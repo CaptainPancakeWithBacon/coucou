@@ -24,6 +24,8 @@ pub struct Settings {
     pub keep_visible: bool,
     /// A pill other than the one shown that finishes or fails opens the island on its card.
     pub alerts_from_all_pills: bool,
+    /// Windows: tell when a regular Claude Desktop chat reply is ready (claude_chat.rs).
+    pub claude_desktop_chat_watch: bool,
     /// Mochi dances on the beat of the music, found by listening to the
     /// speakers' output (beat.rs, Linux). Off by default.
     pub beat_sync: bool,
@@ -156,6 +158,7 @@ impl Default for Settings {
             open_on_hover: false,
             keep_visible: true,
             alerts_from_all_pills: false,
+            claude_desktop_chat_watch: false,
             beat_sync: cfg!(windows),
             beat_output: String::new(),
             island_opacity: 100,
@@ -538,6 +541,7 @@ mod tests {
   "openOnHover": true,
   "keepVisible": false,
   "alertsFromAllPills": true,
+  "claudeDesktopChatWatch": true,
   "beatSync": true,
   "beatOutput": "",
   "islandOpacity": 100,
@@ -1057,6 +1061,7 @@ mod tests {
                 "openOnHover",
                 "keepVisible",
                 "alertsFromAllPills",
+                "claudeDesktopChatWatch",
                 "beatSync",
                 "beatOutput",
                 "islandOpacity",
