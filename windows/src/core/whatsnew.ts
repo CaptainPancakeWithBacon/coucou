@@ -10,14 +10,21 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    title: "Mini-update: meldingen van elke pil",
+    date: "21 oktober 2026",
+    items: [
+      "Nieuw, standaard uit: bij Instellingen, Algemeen, Eiland-gedrag kun je \"Openen voor de meldingen van elke pil\" aanzetten. Is een andere pil dan de getoonde klaar of loopt er iets mis, dan opent het eiland op zijn kaartje, en daarna komt de pil terug die je zag. Nooit over een goedkeuring of vraag heen.",
+      "Nieuw, experimenteel en standaard uit (Windows): bij Instellingen, Agents zet je \"Claude Desktop-chats\" aan. Verlaat je de Claude-app terwijl hij nog schrijft, dan springt Mochi zodra het antwoord klaar is. Coucou kijkt alleen of de stopknop in beeld is, nooit naar de tekst van je chat.",
+    ],
+  },
+  {
     title: "De grote upstream-update",
     date: "21 oktober 2026",
     items: [
       "Een klok in het midden van het eiland: datum en tijd, alleen zichtbaar als het eiland klein is. Standaard uit; zet hem aan bij Instellingen, Algemeen, Eiland-gedrag.",
       "Coucou praat nu ook Duits en Turks.",
-      "Elke pil mag het eiland openen als er iets af is of misgaat, niet alleen Claude Code. Claude Desktop laat Mochi springen als een antwoord klaar is.",
       "Op Linux zit Coucou minder aan je processor, en het instellingenscherm stopt met bewegen als het niet in beeld is.",
-      "Nieuw erbij: GitLab- en Gitea-overzichten, een WhatsApp-pil, Conductor-sessies op de Claude Code-pil en vragen van Antigravity als melding.",
+      "Nieuw erbij: GitLab- en Gitea-overzichten (je hebt een token nodig) en vragen van Antigravity als melding.",
       "Updaten blijft zoals je gewend bent: één klik op Nu bijwerken.",
     ],
   },

@@ -1007,6 +1007,20 @@ function notificationsSection(): HTMLElement {
   );
 }
 
+/** Claude Desktop chats (Windows): a switch for the experimental reply watcher. */
+function claudeDesktopChatSection(): HTMLElement {
+  return h(
+    "section",
+    {},
+    h("h2", {}, h("span", { text: t("Claude Desktop chats (experimental)") })),
+    h("div", { class: "row" },
+      h("label", { text: t("Mochi jumps when a chat reply is ready") }),
+      toggle(settings.claudeDesktopChatWatch, (v) => { settings.claudeDesktopChatWatch = v; void save(); }),
+    ),
+    h("div", { class: "hint", text: "When you leave the Claude app while it is still writing, Coucou looks once a second for its Stop response button to go away. Only the button is looked at, never the text of the chat." }),
+  );
+}
+
 /** The "What's changed?" page: each release as a heading and a few lines. */
 function whatsNewSection(): HTMLElement {
   return h(
@@ -1122,6 +1136,8 @@ function generalSection(): HTMLElement {
         toggle(settings.openOnHover, v => { settings.openOnHover = v; void save(); })),
       setting(N_("Show clock in the island"), "The date and the time in the middle of the island when it is compact.",
         toggle(settings.showClock, v => { settings.showClock = v; void save(); })),
+      setting(N_("Open for every pill\u2019s alerts"), "When a pill other than the one shown finishes or fails, the island opens on its card, and the shown pill comes back when it closes. Never over an approval or a question.",
+        toggle(settings.alertsFromAllPills, v => { settings.alertsFromAllPills = v; void save(); })),
       setting(N_("Keep Mochi on screen"), "When disabled, the island hides after one minute of inactivity.",
         toggle(settings.keepVisible, v => { settings.keepVisible = v; void save(); })),
       setting(N_("Auto-close"), "Seconds before the island closes after your pointer leaves.", autoClose, h("span", { class: "hint", text: t("seconds") })),
@@ -1527,7 +1543,7 @@ async function render() {
     pills: () => [activePillsSection(connected)],
     notifications: () => [notificationsSection()],
     whatsnew: () => [whatsNewSection()],
-    agents: () => [claudeSection(status), agentsSection(agents), planSection(status)],
+    agents: () => [claudeSection(status), agentsSection(agents), planSection(status), ...(HOST_OS === "windows" ? [claudeDesktopChatSection()] : [])],
     chat: () => [apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
     integrations: () => [integrationsSection(present)],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],

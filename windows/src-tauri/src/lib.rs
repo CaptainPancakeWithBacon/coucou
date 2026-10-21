@@ -23,6 +23,7 @@ mod net;
 mod notes;
 #[cfg(any(target_os = "linux", windows))]
 mod notifications;
+mod claude_chat;
 #[cfg(any(target_os = "linux", windows))]
 mod updates;
 mod openai_compat;
@@ -1220,6 +1221,8 @@ pub fn run() {
             integrations::start(handle.clone());
             spotify::sync(&handle, &loaded.active_integrations);
             shortcuts::apply(&handle, &loaded.shortcuts);
+            #[cfg(windows)]
+            claude_chat::start(handle.clone());
             // Upstream's updater (update.rs) follows Louis-CFM's releases, which would
             // replace this fork's build with his. The fork's own check is updates.rs.
             // update::start(handle.clone());
