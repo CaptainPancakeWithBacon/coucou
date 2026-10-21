@@ -908,3 +908,40 @@ test("Antigravity questions without usable text still alert with a translated la
   assert.equal(asked.length, 5);
   assert.ok(asked.every((request) => request === "alert:overview"));
 });
+
+// ── Open for every pill's alerts (Mac #683) ────────────────────────────────────
+
+import { restoreAlertFocus } from "../src/island/alertfocus.ts";
+
+test("with the setting on, a pill behind the shown one opens the island on its card, and the shown pill returns", () => {
+  State.settings.alertsFromAllPills = true;
+  State.setFocus("integration_n8n");
+  hook({ hook_event_name: "Stop" }); // Claude Code finishes while n8n is shown
+  assert.deepEqual(asked, ["alert:finished"]);
+  assert.equal(State.focusId, CLAUDE, "the finishing pill took the focus");
+  restoreAlertFocus(); // the island closed
+  assert.equal(State.focusId, "integration_n8n");
+});
+
+test("with the setting off, a pill behind the shown one only gets its badge", () => {
+  State.settings.alertsFromAllPills = false;
+  State.setFocus("integration_n8n");
+  hook({ hook_event_name: "Stop" });
+  assert.deepEqual(asked, []);
+  assert.equal(State.focusId, "integration_n8n");
+  assert.equal(task().pillBadge, "finished");
+});
+
+test("an alert from another pill never covers an approval or a card the user is busy in", () => {
+  State.settings.alertsFromAllPills = true;
+  State.setFocus("integration_n8n");
+  State.pendingApproval = { requestId: "r", sessionId: "", pillId: "integration_n8n", tool: "Bash", command: "ls" };
+  hook({ hook_event_name: "Stop" });
+  assert.deepEqual(asked, [], "an approval is waiting");
+  State.pendingApproval = null;
+  State.mode = "expanded";
+  State.view = "prompt"; // the chat
+  hook({ hook_event_name: "StopFailure" });
+  assert.deepEqual(asked, [], "the user is typing");
+  assert.equal(State.focusId, "integration_n8n");
+});

@@ -1122,6 +1122,8 @@ function generalSection(): HTMLElement {
         toggle(settings.openOnHover, v => { settings.openOnHover = v; void save(); })),
       setting(N_("Show clock in the island"), "The date and the time in the middle of the island when it is compact.",
         toggle(settings.showClock, v => { settings.showClock = v; void save(); })),
+      setting(N_("Open for every pill\u2019s alerts"), "When a pill other than the one shown finishes or fails, the island opens on its card, and the shown pill comes back when it closes. Never over an approval or a question.",
+        toggle(settings.alertsFromAllPills, v => { settings.alertsFromAllPills = v; void save(); })),
       setting(N_("Keep Mochi on screen"), "When disabled, the island hides after one minute of inactivity.",
         toggle(settings.keepVisible, v => { settings.keepVisible = v; void save(); })),
       setting(N_("Auto-close"), "Seconds before the island closes after your pointer leaves.", autoClose, h("span", { class: "hint", text: t("seconds") })),

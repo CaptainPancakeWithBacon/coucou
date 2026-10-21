@@ -1,3 +1,4 @@
+import { restoreAlertFocus } from "./alertfocus";
 import { responsiveFrame } from "../core/frame-clock";
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
@@ -397,6 +398,7 @@ export class Island {
       Sound.play("close");
       // A folded card is still waiting: it keeps the island pinned.
       if (!State.pendingApproval) State.isPinned = false;
+      restoreAlertFocus();
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") {
