@@ -8,6 +8,8 @@ import { calls, emit, sent } from "./tauri.mjs";
 import { registerHookHandlers } from "../src/island/hooks.ts";
 import { clearRecentNotices } from "../src/island/notifications.ts";
 import { DEFAULT_SETTINGS, State } from "../src/core/state.ts";
+import { Sound } from "../src/core/sound.ts";
+import { setLanguage } from "../src/i18n/i18n.ts";
 
 const CLAUDE = "integration_claude";
 
@@ -66,6 +68,7 @@ test("Codex patches, exact shell steps and plans reach both the pill and phone s
 });
 
 beforeEach(() => {
+  setLanguage("en");
   mock.timers.enable({ apis: ["setTimeout"] });
   clearRecentNotices();
   asked = [];
@@ -851,4 +854,57 @@ test("the 'Something isn't working' card sends the log through the same button",
   notice({ app: "Coucou", summary: "Something isn't working", body: "x", target: "coucou:send-log" });
   assert.equal(openNoticeTarget(task("agent_notifications")), true);
   assert.deepEqual(sent("open_notification_target"), [{ target: "coucou:send-log" }]);
+});
+
+for (const tool_name of ["ask_question", "default_api:ask_question"]) {
+  test(`Antigravity ${tool_name} alerts and plays a sound until the question is answered`, (context) => {
+    const sound = context.mock.method(Sound, "play", () => {});
+    hook({
+      hook_event_name: "PreToolUse",
+      coucou_agent: "antigravity",
+      tool_name,
+      tool_input: { questions: [{ question: "Which deployment strategy should we use?" }] },
+    });
+    const active = task("agent_antigravity");
+    assert.equal(active.state, "question");
+    assert.equal(active.steps.at(-1), "Needs input · Which deployment strategy should we use?");
+    assert.deepEqual(asked, ["alert:overview"]);
+    assert.deepEqual(sound.mock.calls.map((call) => call.arguments), [["question"]]);
+    assert.equal(State.pendingApproval, null, "the answer stays in Antigravity");
+    assert.deepEqual(sent("approval_ack"), []);
+
+    hook({ hook_event_name: "PostToolUse", coucou_agent: "antigravity", tool_name });
+    assert.equal(active.state, "working");
+    assert.equal(sound.mock.callCount(), 1);
+  });
+}
+
+test("Antigravity namespaced questions use the selected interface language", () => {
+  setLanguage("fr");
+  try {
+    hook({
+      hook_event_name: "PreToolUse",
+      coucou_agent: "antigravity",
+      tool_name: "default_api:ask_question",
+      tool_input: { questions: [{ question: "Quelle stratégie ?" }] },
+    });
+    assert.equal(task("agent_antigravity").steps.at(-1), "Réponse attendue · Quelle stratégie ?");
+  } finally {
+    setLanguage("en");
+  }
+});
+
+test("Antigravity questions without usable text still alert with a translated label", () => {
+  for (const questions of [undefined, [], [null], [{ question: 3 }], [{ question: "  " }]]) {
+    hook({
+      hook_event_name: "PreToolUse",
+      coucou_agent: "antigravity",
+      tool_name: "default_api:ask_question",
+      tool_input: { questions },
+    });
+    assert.equal(task("agent_antigravity").state, "question");
+    assert.equal(task("agent_antigravity").steps.at(-1), "Needs input");
+  }
+  assert.equal(asked.length, 5);
+  assert.ok(asked.every((request) => request === "alert:overview"));
 });
