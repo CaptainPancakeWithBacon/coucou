@@ -10,6 +10,14 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    title: "Mini-update: meldingen van elke pil",
+    date: "21 oktober 2026",
+    items: [
+      "Nieuw, standaard uit: bij Instellingen, Algemeen, Eiland-gedrag kun je \"Openen voor de meldingen van elke pil\" aanzetten. Is een andere pil dan de getoonde klaar of loopt er iets mis, dan opent het eiland op zijn kaartje, en daarna komt de pil terug die je zag. Nooit over een goedkeuring of vraag heen.",
+      "Nieuw, experimenteel en standaard uit (Windows): bij Instellingen, Agents zet je \"Claude Desktop-chats\" aan. Verlaat je de Claude-app terwijl hij nog schrijft, dan springt Mochi zodra het antwoord klaar is. Coucou kijkt alleen of de stopknop in beeld is, nooit naar de tekst van je chat.",
+    ],
+  },
+  {
     title: "De grote upstream-update",
     date: "21 oktober 2026",
     items: [
