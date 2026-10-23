@@ -10,6 +10,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    title: "Mini-update: Y en N",
+    date: "23 oktober 2026",
+    items: [
+      "Een toestemmingskaart beantwoord je nu met de toets Y (toestaan) of N (weigeren), zodra het eiland het toetsenbord heeft: klik op de kaart, of druk Ctrl+Alt+A om hem te openen. Zonder dat doet een losse Y of N niets, zodat er nooit per ongeluk iets wordt goedgekeurd.",
+    ],
+  },
+  {
     title: "Mini-update: eilandkleur",
     date: "23 oktober 2026",
     items: [

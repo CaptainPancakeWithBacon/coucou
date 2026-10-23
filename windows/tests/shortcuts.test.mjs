@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { calls, emit, sent } from "./tauri.mjs";
 import {
   ALTGR_CHARACTERS, ISLAND_SHORTCUTS, KEY_NAMES, SHORTCUTS, SHORTCUT_TEXT, activeKeys, altGrClashes,
-  cyclePill, displayKeys, duplicates, effective, formatKeys, islandKeyAction, navigate, normalizeKeys,
+  approvalKey, cyclePill, displayKeys, duplicates, effective, formatKeys, islandKeyAction, navigate, normalizeKeys,
   parseKeys, pillByNumber, recordPress,
 } from "../src/core/shortcuts.ts";
 import { registerShortcutHandlers, runGlobalShortcut, runIslandKey } from "../src/island/shortcuts.ts";
@@ -540,4 +540,19 @@ test("island keys: the highlight walks the list on screen, Ctrl+O opens it, Ctrl
   did = [];
   runIslandKey(host, { kind: "diff" });
   assert.deepEqual(did, ["view:toggleDiff"]);
+});
+
+test("plain Y and N answer a permission card, and nothing else does", () => {
+  const ctx = { view: "approval", inTextField: false, pending: true };
+  assert.equal(approvalKey(press({ key: "y", code: "KeyY" }), ctx), "allow");
+  assert.equal(approvalKey(press({ key: "N", code: "KeyN" }), ctx), "deny");
+  // Another layout: the letter comes from the physical key when the key is not a letter.
+  assert.equal(approvalKey(press({ key: "Unidentified", code: "KeyY" }), ctx), "allow");
+  // Not on another card, with nothing waiting, in a text field, or with a modifier held.
+  assert.equal(approvalKey(press({ key: "y", code: "KeyY" }), { ...ctx, view: "overview" }), null);
+  assert.equal(approvalKey(press({ key: "y", code: "KeyY" }), { ...ctx, pending: false }), null);
+  assert.equal(approvalKey(press({ key: "y", code: "KeyY" }), { ...ctx, inTextField: true }), null);
+  assert.equal(approvalKey(press({ key: "y", code: "KeyY", ctrlKey: true }), ctx), null);
+  assert.equal(approvalKey(press({ key: "Y", code: "KeyY", shiftKey: true }), ctx), null);
+  assert.equal(approvalKey(press({ key: "x", code: "KeyX" }), ctx), null);
 });

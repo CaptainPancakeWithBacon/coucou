@@ -159,6 +159,16 @@ export class Island {
     });
   }
 
+  /** Allow or deny the permission on screen (its buttons, or the Y and N keys). */
+  decide(d: "allow" | "deny") {
+    const req = State.pendingApproval;
+    void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
+    if (!req) return;
+    Sound.play(d === "deny" ? "blip" : "approve");
+    void Bridge.approvalDecision(req.requestId, d);
+    this.closeApproval();
+  }
+
   /** The request has its answer: the card goes and the session carries on. */
   private closeApproval() {
     State.endApproval();
@@ -224,14 +234,7 @@ export class Island {
       openUrl: (url) => {
         if (url) void Bridge.openUrl(url);
       },
-      decide: (d) => {
-        const req = State.pendingApproval;
-        void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
-        if (!req) return;
-        Sound.play(d === "deny" ? "blip" : "approve");
-        void Bridge.approvalDecision(req.requestId, d);
-        this.closeApproval();
-      },
+      decide: (d) => this.decide(d),
       answer: (answers) => {
         const req = State.pendingApproval;
         if (!req) return;
