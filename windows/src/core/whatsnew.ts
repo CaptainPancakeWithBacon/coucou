@@ -10,6 +10,14 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    title: "Mini-update: eilandkleur",
+    date: "23 oktober 2026",
+    items: [
+      "Nieuw: de kleur van het eiland. Bij Instellingen, Algemeen, Eilandkleur kies je zwart (zoals altijd), Systeemkleur (een donkere tint van de accentkleur van je systeem) of een eigen kleur. De kleur blijft altijd donker genoeg, zodat Mochi goed zichtbaar blijft.",
+      "Linux: meldingen van apps in een sandbox (zoals een Flatpak-WhatsApp) en van GSConnect komen nu ook in het eiland.",
+    ],
+  },
+  {
     title: "Mini-update: meldingen van elke pil",
     date: "21 oktober 2026",
     items: [
