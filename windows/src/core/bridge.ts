@@ -242,6 +242,8 @@ export const Bridge = {
   /** "current" | "available" | "unstamped" | "failed" (updates.rs). */
   checkForUpdates: () => call<string>("check_for_updates"),
   notificationApps: () => call<string[]>("notification_apps"),
+  /** The system accent colour as "#rrggbb", or null when the desktop does not say. */
+  systemAccent: () => call<string | null>("system_accent"),
 
   /** A notification's button: opens the app it came from (desktop entry / app id). */
   openNotificationTarget: (target: string) => call<boolean>("open_notification_target", { target }),

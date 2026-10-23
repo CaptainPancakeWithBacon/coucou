@@ -15,6 +15,7 @@ import {
 } from "../core/layout";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
+import { islandPalette } from "../core/islandcolor";
 import { editorOf } from "../core/pills";
 import { openNoticeTarget } from "./notifications";
 import { SPOTIFY_ID, Spotify, islandDances } from "../core/spotify";
@@ -96,6 +97,10 @@ export class Island {
 
   private running = false;
   private lastFrame = 0;
+  /** The system accent colour once asked for, and what was last painted from it. */
+  private accent: string | null = null;
+  private accentAsked = false;
+  private colorKey = "";
   private cancelFrame: () => void = () => {};
   private dirty = true;
   private canvasDpr = 0;
@@ -1077,7 +1082,28 @@ export class Island {
 
   private loggedErrors = new Set<string>();
 
+  /** Paints the island's background from the settings: black, a tint of the system accent, or the pick. */
+  private applyColor() {
+    const { islandColor: mode = "black", islandCustomColor: custom = "" } = State.settings;
+    if (mode !== "system") this.accentAsked = false;
+    else if (!this.accentAsked) {
+      this.accentAsked = true;
+      void Bridge.systemAccent().then((a) => { this.accent = a; this.colorKey = ""; }).catch(() => {});
+    }
+    const key = `${mode}|${custom}|${this.accent}`;
+    if (key === this.colorKey) return;
+    this.colorKey = key;
+    const p = islandPalette(mode, custom, this.accent);
+    const root = document.documentElement.style;
+    this.islandEl.style.background = p?.island ?? "";
+    for (const [name, value] of [["--card-flat", p?.cardFlat], ["--card", p?.card], ["--tab-on", p?.tabOn]] as const) {
+      if (value) root.setProperty(name, value);
+      else root.removeProperty(name);
+    }
+  }
+
   private frameBody = (nowMs: number) => {
+    this.applyColor();
     // Apply opacity to the complete island (content, Mochi, borders, shadows).
     // Never dim the transparent window container or its hit-testing region.
     const opacity = Math.max(50, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
