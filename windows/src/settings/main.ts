@@ -1115,6 +1115,24 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const colorMode = h("select", {},
+    h("option", { value: "black", text: t("Black") }),
+    h("option", { value: "system", text: t("Match system") }),
+    h("option", { value: "custom", text: t("Custom") }),
+  ) as HTMLSelectElement;
+  colorMode.value = settings.islandColor ?? "black";
+  const colorPick = h("input", { type: "color", value: settings.islandCustomColor ?? "#1c2433" }) as HTMLInputElement;
+  colorPick.hidden = colorMode.value !== "custom";
+  colorMode.addEventListener("change", () => {
+    settings.islandColor = colorMode.value as typeof settings.islandColor;
+    colorPick.hidden = colorMode.value !== "custom";
+    void save();
+  });
+  colorPick.addEventListener("input", () => {
+    settings.islandCustomColor = colorPick.value;
+    void save();
+  });
+
   const group = (name: string, ...children: HTMLElement[]) =>
     h("section", { class: "general-group" }, h("h2", { text: t(name) }), ...children);
   const info = (description: string) => h("span", {
@@ -1144,6 +1162,7 @@ function generalSection(): HTMLElement {
       setting(N_("Island lives on"), "Choose the display where the island appears.", screen),
       setting(N_("Island position"), "Choose where the island sits on the selected display.", align),
       setting(N_("Island opacity"), "Adjust transparency between 50% and 100%.", opacity, opacityValue),
+      setting(N_("Island color"), N_("Black, a dark tint of your system's accent color, or a color you pick. Colors are kept dark so Mochi stays clearly visible."), colorMode, colorPick),
       setting(N_("Launch at startup"), "Launch Coucou automatically when signing in.",
         toggle(settings.autostart, v => { settings.autostart = v; void save(); }))),
     group("Mochi & music",

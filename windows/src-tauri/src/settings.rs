@@ -33,6 +33,11 @@ pub struct Settings {
     pub beat_output: String,
     /// Opacity percentage of the entire island (20..=100).
     pub island_opacity: u8,
+    /// The island's background: "black", "system" (a dark tint of the system's
+    /// accent colour) or "custom" (island_custom_color). Kept dark either way.
+    pub island_color: String,
+    /// "#rrggbb" for the "custom" island colour.
+    pub island_custom_color: String,
     /// The Claude Code chat shares the user's memory notes (claude_cli.rs).
     pub chat_memory: bool,
     /// Desktop notifications shown in the island (notifications.rs, Linux).
@@ -162,6 +167,8 @@ impl Default for Settings {
             beat_sync: cfg!(windows),
             beat_output: String::new(),
             island_opacity: 100,
+            island_color: "black".into(),
+            island_custom_color: "#1c2433".into(),
             chat_memory: false,
             show_notifications: false,
             muted_notification_apps: Vec::new(),
@@ -545,6 +552,8 @@ mod tests {
   "beatSync": true,
   "beatOutput": "",
   "islandOpacity": 100,
+  "islandColor": "system",
+  "islandCustomColor": "#102030",
   "chatMemory": false,
   "showNotifications": false,
   "mutedNotificationApps": ["Discord", "YourPhone › Snapchat"],
@@ -1065,6 +1074,8 @@ mod tests {
                 "beatSync",
                 "beatOutput",
                 "islandOpacity",
+                "islandColor",
+                "islandCustomColor",
                 "chatMemory",
                 "showNotifications",
                 "mutedNotificationApps",

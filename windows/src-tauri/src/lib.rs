@@ -1,5 +1,6 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
+mod accent;
 mod agent_hooks;
 mod agents;
 mod beat;
@@ -106,6 +107,12 @@ async fn check_for_updates(app: AppHandle) -> String {
         let _ = app;
         "unstamped".into()
     }
+}
+
+/// The system accent colour for the island's "Match system" colour (accent.rs).
+#[tauri::command]
+async fn system_accent() -> Option<String> {
+    accent::system_accent()
 }
 
 /// Apps that notified this session and the muted ones, for Settings → Notifications.
@@ -1029,6 +1036,7 @@ pub fn run() {
             open_notification_target,
             report::log_report_available,
             notification_apps,
+            system_accent,
             check_for_updates,
             report::send_log,
             open_file_in_vscode,

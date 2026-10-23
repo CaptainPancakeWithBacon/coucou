@@ -263,13 +263,50 @@ mod linux {
     use dbus::message::MessageType;
     use dbus::Message;
 
-    const RULE: &str = "type='method_call',interface='org.freedesktop.Notifications',member='Notify'";
+    // Two doors: libnotify's `Notify`, and `org.gtk.Notifications` (what GNOME gets
+    // from sandboxed apps through the portal, such as Flatpak WhatsApp clients, and
+    // from GSConnect's phone mirror). Each notification passes the second one once.
+    const RULES: [&str; 2] = [
+        "type='method_call',interface='org.freedesktop.Notifications',member='Notify'",
+        "type='method_call',interface='org.gtk.Notifications',member='AddNotification'",
+    ];
+
+    /// The last portal notice, so GSConnect re-adding the same one is not shown twice.
+    static LAST_GTK: std::sync::Mutex<Option<Notice>> = std::sync::Mutex::new(None);
+
+    /// "com.ktechpit.whatsie" -> "Whatsie": all a portal call says about its sender.
+    fn app_name(app_id: &str) -> String {
+        let last = app_id.rsplit('.').next().unwrap_or(app_id);
+        let mut c = last.chars();
+        c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+    }
+
+    /// `AddNotification(app_id, id, {title, body, ...})`.
+    fn gtk_notice_of(msg: &Message) -> Option<Notice> {
+        let mut args = msg.iter_init();
+        let app_id: &str = args.read().ok()?;
+        let _id: &str = args.read().ok()?;
+        let props: dbus::arg::PropMap = args.read().ok()?;
+        let text = |k: &str| props.get(k).and_then(|v| v.0.as_str()).unwrap_or("");
+        let notice = clean(&app_name(app_id), text("title"), text("body"), Some(app_id.to_string()))?;
+        let mut last = LAST_GTK.lock().ok()?;
+        if last.as_ref() == Some(&notice) {
+            return None;
+        }
+        *last = Some(notice.clone());
+        Some(notice)
+    }
 
     /// The first five arguments of a `Notify` call, as a notice; `None` for what
     /// the island should not show (empty, or from an ignored app).
     pub(super) fn notice_of(msg: &Message) -> Option<Notice> {
-        if msg.msg_type() != MessageType::MethodCall || &*msg.member()? != "Notify" {
+        if msg.msg_type() != MessageType::MethodCall {
             return None;
+        }
+        match &*msg.member()? {
+            "AddNotification" => return gtk_notice_of(msg),
+            "Notify" => {}
+            _ => return None,
         }
         let mut args = msg.iter_init();
         let app: &str = args.read().ok()?;
@@ -312,7 +349,7 @@ mod linux {
             "BecomeMonitor",
         )
         .map_err(|e| e.to_string())?
-        .append2(vec![RULE], 0u32);
+        .append2(RULES.to_vec(), 0u32);
         channel
             .send_with_reply_and_block(call, Duration::from_secs(5))
             .map_err(|e| format!("BecomeMonitor: {e}"))?;
@@ -678,5 +715,27 @@ mod tests {
         // Too few arguments, or another method: not a notice.
         assert_eq!(linux::notice_of(&call("Notify").append2("Discord", 0u32)), None);
         assert_eq!(linux::notice_of(&call("CloseNotification").append1(7u32)), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn portal_notifications_count_once() {
+        use dbus::arg::{PropMap, RefArg, Variant};
+        use dbus::Message;
+        let add = |id: &str| {
+            let mut props = PropMap::new();
+            props.insert("title".into(), Variant(Box::new("Anna".to_string()) as Box<dyn RefArg>));
+            props.insert("body".into(), Variant(Box::new("hey".to_string()) as Box<dyn RefArg>));
+            Message::new_method_call("org.gtk.Notifications", "/org/gtk/Notifications", "org.gtk.Notifications", "AddNotification")
+                .unwrap()
+                .append2("com.ktechpit.whatsie", id)
+                .append1(props)
+        };
+        assert_eq!(
+            linux::notice_of(&add("whatsie-1")),
+            Some(Notice { app: "Whatsie".into(), summary: "Anna".into(), body: "hey".into(), target: Some("com.ktechpit.whatsie".into()) })
+        );
+        // The same notice added again straight after is not news.
+        assert_eq!(linux::notice_of(&add("whatsie-1")), None);
     }
 }

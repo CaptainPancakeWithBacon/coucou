@@ -5090,6 +5090,58 @@
    "id": "Versi terbaru, masing-masing dalam beberapa baris.",
    "de": "Die neuesten Versionen, je in wenigen Zeilen.",
    "tr": "En son sürümler, her biri birkaç satırda."
+  },
+  "Island color": {
+   "zh-Hans": "岛屿颜色",
+   "hi": "आइलैंड का रंग",
+   "es": "Color de la isla",
+   "ar": "لون الجزيرة",
+   "fr": "Couleur de l’îlot",
+   "bn": "আইল্যান্ডের রং",
+   "pt-BR": "Cor da ilha",
+   "ru": "Цвет островка",
+   "id": "Warna pulau",
+   "de": "Farbe der Insel",
+   "tr": "Ada rengi"
+  },
+  "Black": {
+   "zh-Hans": "黑色",
+   "hi": "काला",
+   "es": "Negro",
+   "ar": "أسود",
+   "fr": "Noir",
+   "bn": "কালো",
+   "pt-BR": "Preto",
+   "ru": "Чёрный",
+   "id": "Hitam",
+   "de": "Schwarz",
+   "tr": "Siyah"
+  },
+  "Match system": {
+   "zh-Hans": "跟随系统",
+   "hi": "सिस्टम के अनुसार",
+   "es": "Igual que el sistema",
+   "ar": "مطابقة النظام",
+   "fr": "Comme le système",
+   "bn": "সিস্টেম অনুযায়ী",
+   "pt-BR": "Igual ao sistema",
+   "ru": "Как в системе",
+   "id": "Ikuti sistem",
+   "de": "Wie das System",
+   "tr": "Sistemi izle"
+  },
+  "Black, a dark tint of your system's accent color, or a color you pick. Colors are kept dark so Mochi stays clearly visible.": {
+   "zh-Hans": "黑色、系统强调色的深色调，或你选择的颜色。颜色会保持较深，让 Mochi 始终清晰可见。",
+   "hi": "काला, आपके सिस्टम के एक्सेंट रंग का गहरा शेड, या आपका चुना हुआ रंग। रंग गहरे रखे जाते हैं ताकि Mochi साफ़ दिखता रहे।",
+   "es": "Negro, un tono oscuro del color de acento del sistema o un color que elijas. Los colores se mantienen oscuros para que Mochi se vea con claridad.",
+   "ar": "الأسود، أو درجة داكنة من لون التمييز في نظامك، أو لون تختاره. تبقى الألوان داكنة ليظل Mochi واضحًا.",
+   "fr": "Noir, une teinte sombre de la couleur d'accent du système, ou une couleur de votre choix. Les couleurs restent sombres pour que Mochi reste bien visible.",
+   "bn": "কালো, আপনার সিস্টেমের অ্যাকসেন্ট রঙের গাঢ় ছায়া, অথবা আপনার বাছা রং। রংগুলো গাঢ় রাখা হয় যাতে Mochi স্পষ্ট দেখা যায়।",
+   "pt-BR": "Preto, um tom escuro da cor de destaque do sistema ou uma cor que você escolher. As cores ficam escuras para o Mochi continuar bem visível.",
+   "ru": "Чёрный, тёмный оттенок акцентного цвета системы или выбранный вами цвет. Цвета остаются тёмными, чтобы Mochi было хорошо видно.",
+   "id": "Hitam, nuansa gelap dari warna aksen sistem, atau warna pilihanmu. Warna selalu dijaga gelap agar Mochi tetap terlihat jelas.",
+   "de": "Schwarz, ein dunkler Farbton deiner Systemakzentfarbe oder eine Farbe deiner Wahl. Die Farben bleiben dunkel, damit Mochi gut sichtbar bleibt.",
+   "tr": "Siyah, sistem vurgu renginin koyu bir tonu ya da seçtiğin bir renk. Renkler koyu tutulur, böylece Mochi net görünür."
   }
  }
 }

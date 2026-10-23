@@ -469,3 +469,7 @@ html[dir="rtl"] :is(.diff, .path, .keycap, input[type="password"], input[type="t
 .phone-group input[type="checkbox"] { accent-color:var(--green); }
 .phone-group .row:has(input[type="checkbox"]) { padding:3px 0; }
 @media(max-width:620px) { .phone-setting { grid-template-columns:minmax(0,1fr) auto; gap:10px; } .phone-group { padding:13px; } }
+
+input[type="color"][hidden] {
+  display: none;
+}

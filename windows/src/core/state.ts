@@ -118,6 +118,8 @@ export interface Settings {
   beatOutput: string;
   /** Opacity of the entire island, as percent. */
   islandOpacity: number;
+  islandColor: "black" | "system" | "custom";
+  islandCustomColor: string;
   /** The Claude Code chat shares the user's memory notes (Linux; claude_cli.rs). */
   chatMemory: boolean;
   /** Desktop notifications shown in the island (Linux; notifications.rs). */
@@ -203,6 +205,8 @@ export const DEFAULT_SETTINGS: Settings = {
   beatSync: HOST_OS === "windows",
   beatOutput: "",
   islandOpacity: 100,
+  islandColor: "black",
+  islandCustomColor: "#1c2433",
   chatMemory: false,
   showNotifications: false,
   mutedNotificationApps: [],
