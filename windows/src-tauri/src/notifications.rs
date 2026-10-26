@@ -207,6 +207,24 @@ fn mute_key(app: &str, summary: &str) -> String {
     }
 }
 
+/// What GSConnect (the phone mirror on GNOME) notifications are muted under. Its id is
+/// "<device>|<Android key>", the key being "user|package|id|tag|uid". An ordinary
+/// phone notification has the app's name as its title, like Phone Link's toasts; a
+/// text or a missed call has a contact there instead, so those go under one name each.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn gsconnect_app(id: &str, title: &str) -> String {
+    let package = id.split('|').nth(2).unwrap_or("").to_lowercase();
+    if id.contains("MissedCall") {
+        "Calls".into()
+    } else if ["messag", "mms", "sms"].iter().any(|k| package.contains(k)) {
+        "SMS".into()
+    } else if !title.trim().is_empty() {
+        title.trim().into()
+    } else {
+        "Phone".into()
+    }
+}
+
 /// Whether `key` is on the muted list (names compare without regard to case);
 /// muting "YourPhone" itself mutes every phone app.
 fn is_muted(muted: &[String], key: &str) -> bool {
@@ -285,10 +303,16 @@ mod linux {
     fn gtk_notice_of(msg: &Message) -> Option<Notice> {
         let mut args = msg.iter_init();
         let app_id: &str = args.read().ok()?;
-        let _id: &str = args.read().ok()?;
+        let id: &str = args.read().ok()?;
         let props: dbus::arg::PropMap = args.read().ok()?;
         let text = |k: &str| props.get(k).and_then(|v| v.0.as_str()).unwrap_or("");
-        let notice = clean(&app_name(app_id), text("title"), text("body"), Some(app_id.to_string()))?;
+        // One entry per phone app in Settings, as for Phone Link: "GSConnect › WhatsApp".
+        let app = if app_id == "org.gnome.Shell.Extensions.GSConnect" {
+            format!("GSConnect › {}", gsconnect_app(id, text("title")))
+        } else {
+            app_name(app_id)
+        };
+        let notice = clean(&app, text("title"), text("body"), Some(app_id.to_string()))?;
         let mut last = LAST_GTK.lock().ok()?;
         if last.as_ref() == Some(&notice) {
             return None;
@@ -585,6 +609,20 @@ mod tests {
         assert!(is_muted(&["YourPhone".to_string()], "YourPhone › Mail"));
         assert!(!is_muted(&muted, "Slack"));
         assert!(apps(&muted).iter().any(|a| a == "Discord"));
+    }
+
+    #[test]
+    fn gsconnect_notifications_are_muted_per_phone_app() {
+        let id = |pkg: &str| format!("dd1e23a0b97c4b588a7c4b38ad040684|0|{pkg}|1|tag|10358");
+        assert_eq!(gsconnect_app(&id("com.whatsapp"), " WhatsApp "), "WhatsApp");
+        // A text has the contact as its title: one name for all of them.
+        assert_eq!(gsconnect_app(&id("com.google.android.apps.messaging"), "Anna"), "SMS");
+        assert_eq!(gsconnect_app("dd1e|MissedCall|+31612345678", "Anna"), "Calls");
+        assert_eq!(gsconnect_app(&id("com.x"), "  "), "Phone");
+        // And the list Settings keeps: muting "GSConnect" mutes every phone app.
+        assert!(is_muted(&["GSConnect › WhatsApp".to_string()], "GSConnect › whatsapp"));
+        assert!(!is_muted(&["GSConnect › WhatsApp".to_string()], "GSConnect › Snapchat"));
+        assert!(is_muted(&["GSConnect".to_string()], "GSConnect › Snapchat"));
     }
 
     #[test]
