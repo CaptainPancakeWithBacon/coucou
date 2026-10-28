@@ -5142,6 +5142,32 @@
    "id": "Hitam, nuansa gelap dari warna aksen sistem, atau warna pilihanmu. Warna selalu dijaga gelap agar Mochi tetap terlihat jelas.",
    "de": "Schwarz, ein dunkler Farbton deiner Systemakzentfarbe oder eine Farbe deiner Wahl. Die Farben bleiben dunkel, damit Mochi gut sichtbar bleibt.",
    "tr": "Siyah, sistem vurgu renginin koyu bir tonu ya da seçtiğin bir renk. Renkler koyu tutulur, böylece Mochi net görünür."
+  },
+  "Drag Mochi out of the island": {
+   "zh-Hans": "将 Mochi 拖出岛屿",
+   "hi": "Mochi को आइलैंड से बाहर खींचें",
+   "es": "Arrastrar a Mochi fuera de la isla",
+   "ar": "اسحب Mochi خارج الجزيرة",
+   "fr": "Faire glisser Mochi hors de l’îlot",
+   "bn": "Mochi-কে আইল্যান্ড থেকে বাইরে টেনে আনুন",
+   "pt-BR": "Arrastar o Mochi para fora da ilha",
+   "ru": "Вытаскивать Mochi из островка",
+   "id": "Seret Mochi keluar dari pulau",
+   "de": "Mochi aus der Insel ziehen",
+   "tr": "Mochi’yi adadan dışarı sürükle"
+  },
+  "Dragging Mochi out of the island puts him on the desktop. On Linux he becomes a separate window, which can be laggy, so it is off by default there. The desktop shortcut still works.": {
+   "zh-Hans": "把 Mochi 拖出岛屿会让他来到桌面。在 Linux 上他会变成一个单独的窗口，可能会卡顿，因此默认关闭。桌面快捷键仍然可用。",
+   "hi": "Mochi को आइलैंड से बाहर खींचने पर वह डेस्कटॉप पर आ जाता है। Linux पर वह एक अलग विंडो बन जाता है, जो अटक सकती है, इसलिए वहाँ यह डिफ़ॉल्ट रूप से बंद है। डेस्कटॉप शॉर्टकट फिर भी काम करता है।",
+   "es": "Al arrastrar a Mochi fuera de la isla, pasa al escritorio. En Linux se convierte en una ventana aparte, que puede ir a tirones, por eso allí viene desactivado. El atajo del escritorio sigue funcionando.",
+   "ar": "سحب Mochi خارج الجزيرة ينقله إلى سطح المكتب. على Linux يصبح نافذة منفصلة قد تتقطع، لذلك يكون هذا الخيار معطّلًا افتراضيًا هناك. يظل اختصار سطح المكتب يعمل.",
+   "fr": "Faire glisser Mochi hors de l’îlot le pose sur le bureau. Sous Linux, il devient une fenêtre à part, qui peut saccader : c’est donc désactivé par défaut. Le raccourci du bureau fonctionne toujours.",
+   "bn": "Mochi-কে আইল্যান্ডের বাইরে টেনে আনলে সে ডেস্কটপে চলে আসে। Linux-এ সে আলাদা একটি উইন্ডো হয়ে যায়, যা আটকে আটকে চলতে পারে, তাই সেখানে এটি ডিফল্টভাবে বন্ধ। ডেস্কটপ শর্টকাট আগের মতোই কাজ করে।",
+   "pt-BR": "Arrastar o Mochi para fora da ilha o leva para a área de trabalho. No Linux ele vira uma janela separada, que pode travar, por isso lá vem desativado. O atalho da área de trabalho continua funcionando.",
+   "ru": "Если вытащить Mochi из островка, он окажется на рабочем столе. В Linux он становится отдельным окном, которое может тормозить, поэтому там это выключено по умолчанию. Сочетание клавиш для рабочего стола по-прежнему работает.",
+   "id": "Menyeret Mochi keluar dari pulau menaruhnya di desktop. Di Linux ia menjadi jendela terpisah yang bisa tersendat, jadi di sana opsi ini mati secara bawaan. Pintasan desktop tetap berfungsi.",
+   "de": "Wenn du Mochi aus der Insel ziehst, landet er auf dem Desktop. Unter Linux wird er dabei zu einem eigenen Fenster, das ruckeln kann, deshalb ist das dort standardmäßig aus. Das Desktop-Tastenkürzel funktioniert weiterhin.",
+   "tr": "Mochi’yi adadan dışarı sürüklemek onu masaüstüne koyar. Linux’ta ayrı bir pencereye dönüşür ve takılabilir, bu yüzden orada varsayılan olarak kapalıdır. Masaüstü kısayolu yine çalışır."
   }
  }
 }

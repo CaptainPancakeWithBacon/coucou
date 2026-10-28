@@ -981,7 +981,7 @@ export class Island {
 
   /** The greeting and the drop sequence draw a Mochi of their own: not that one. */
   private canDragOut(): boolean {
-    if (State.mode === "hidden" || !this.desktop.canPickUp()) return false;
+    if (!State.settings.desktopDragOut || State.mode === "hidden" || !this.desktop.canPickUp()) return false;
     return !(State.mode === "expanded" && (State.view === "greeting" || this.uploadActive));
   }
 

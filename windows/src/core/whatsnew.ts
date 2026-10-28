@@ -15,6 +15,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     items: [
       "Een toestemmingskaart beantwoord je nu met de toets Y (toestaan) of N (weigeren), zodra het eiland het toetsenbord heeft: klik op de kaart, of druk Ctrl+Alt+A om hem te openen. Zonder dat doet een losse Y of N niets, zodat er nooit per ongeluk iets wordt goedgekeurd.",
       "Linux: meldingen van je telefoon via GSConnect kun je nu per telefoon-app dempen, onder Instellingen, Meldingen. Zo laat je WhatsApp wel door en Snapchat niet, net als bij Phone Link.",
+      "Linux: Mochi uit het eiland slepen staat nu standaard uit, want hij werd dan een los venster dat haperde. Zet het aan bij Instellingen, Algemeen, Mochi uit het eiland slepen. De sneltoets Ctrl+Alt+D werkt gewoon.",
     ],
   },
   {

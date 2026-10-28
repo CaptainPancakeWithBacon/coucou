@@ -117,6 +117,7 @@ export interface Settings {
   /** Output used for Spotify beat analysis; empty follows the default device. */
   beatOutput: string;
   /** Opacity of the entire island, as percent. */
+  desktopDragOut: boolean;
   islandOpacity: number;
   islandColor: "black" | "system" | "custom";
   islandCustomColor: string;
@@ -204,6 +205,7 @@ export const DEFAULT_SETTINGS: Settings = {
   claudeDesktopChatWatch: false,
   beatSync: HOST_OS === "windows",
   beatOutput: "",
+  desktopDragOut: HOST_OS === "windows",
   islandOpacity: 100,
   islandColor: "black",
   islandCustomColor: "#1c2433",

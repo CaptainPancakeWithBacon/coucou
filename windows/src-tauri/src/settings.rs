@@ -31,6 +31,10 @@ pub struct Settings {
     pub beat_sync: bool,
     /// Audio output to monitor for the dance; empty means system default.
     pub beat_output: String,
+    /// Dragging Mochi out of the island puts him on the desktop. Off by default on
+    /// Linux, where he becomes a separate window that stutters; the desktop
+    /// shortcut sends him out either way.
+    pub desktop_drag_out: bool,
     /// Opacity percentage of the entire island (20..=100).
     pub island_opacity: u8,
     /// The island's background: "black", "system" (a dark tint of the system's
@@ -166,6 +170,7 @@ impl Default for Settings {
             claude_desktop_chat_watch: false,
             beat_sync: cfg!(windows),
             beat_output: String::new(),
+            desktop_drag_out: cfg!(windows),
             island_opacity: 100,
             island_color: "black".into(),
             island_custom_color: "#1c2433".into(),
@@ -551,6 +556,7 @@ mod tests {
   "claudeDesktopChatWatch": true,
   "beatSync": true,
   "beatOutput": "",
+  "desktopDragOut": true,
   "islandOpacity": 100,
   "islandColor": "system",
   "islandCustomColor": "#102030",
@@ -1073,6 +1079,7 @@ mod tests {
                 "claudeDesktopChatWatch",
                 "beatSync",
                 "beatOutput",
+                "desktopDragOut",
                 "islandOpacity",
                 "islandColor",
                 "islandCustomColor",
