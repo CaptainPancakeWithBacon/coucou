@@ -47,6 +47,7 @@ test("the catalog holds the Mac's pills with the Claude Code label for Windows a
     ["integration_music", "Apple Music", "#FA2D48", "service", "Integration"],
     ["integration_spotify", "Spotify", "#1DB954", "service", "Integration"],
     ["agent_notifications", "Notification", "#5AC8FA", "service", "Integration"],
+    ["integration_whatsapp", "WhatsApp", "#25D366", "service", "Integration"],
   ];
   assert.deepEqual(
     PILL_CATALOG.filter((p) => !["integration_gitlab", "integration_gitea"].includes(p.id))
