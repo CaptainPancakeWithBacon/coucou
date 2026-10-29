@@ -74,12 +74,13 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
       phoneGroup("Connection",
         h("div", { class: "phone-connection-status" }, clients,
           h("span", { class: "hint", text: t("The phone connects to {address}", { address }) }),
-          phoneHelp("Both devices must be on the same Wi-Fi. Allow Coucou through the private network firewall. Guest networks may block discovery.")),
+          phoneHelp("Both devices must be on the same Wi-Fi. Allow Coucou through the private network firewall. Guest networks may block discovery."),
+          phoneHelp("Your phone finds this computer again by itself when the network changes. It is announced on your local network only while this switch is on. Some hotspots and guest networks block this.")),
         h("div", { class: "row" }, show),
         pairingBox,
         ...(SHOW_RELAY_SETTINGS ? [relayBlock(makeToggle, () => void refreshPairing())] : [])),
       phoneGroup("Sessions & approvals", detailsBlock(makeToggle), answersBlock(makeToggle), diffsBlock(makeToggle)),
-      phoneGroup("Usage & services", usageBlock(makeToggle), servicesBlock()),
+      phoneGroup("Usage & services", usageBlock(makeToggle), recapBlock(makeToggle), servicesBlock()),
       phoneGroup("AI chat", chatBlock(makeToggle, settings)),
     );
   };
@@ -347,6 +348,39 @@ function usageBlock(makeToggle: Toggle): HTMLElement {
     "div",
     {},
     phoneSetting(N_("Show my plan usage on the phone"), "Only plan usage percentages and reset times are shared.", switchEl),
+    note,
+  );
+}
+
+/**
+ * Last week's recap on the phone: off until the user turns it on. Only counts (minutes, sessions, files, lines, commands, permissions) and the
+ * name of the busiest agent; the project's folder name only reaches a phone that also shows session details. Rust re-reads this switch for every
+ * connection.
+ */
+function recapBlock(makeToggle: Toggle): HTMLElement {
+  const note = h("div", { class: "hint" });
+  const switchEl = makeToggle(false, (next) => {
+    void (async () => {
+      note.textContent = "";
+      try {
+        await Bridge.phoneRecapSetEnabled(next);
+      } catch (err) {
+        switchEl.classList.remove("on");
+        switchEl.setAttribute("aria-pressed", "false");
+        note.textContent = String(err);
+      }
+    })();
+  });
+  void Bridge.phoneRecapStatus().then((status) => {
+    if (!status) return;
+    switchEl.classList.toggle("on", status.enabled);
+    switchEl.setAttribute("aria-pressed", String(status.enabled));
+  });
+  return h(
+    "div",
+    {},
+    h("div", { class: "row" }, h("label", { text: t("Show my weekly recap on the phone") }), switchEl),
+    h("div", { class: "hint", text: t("The phone shows last week's recap: time coding, sessions, files, lines, commands, permissions and the agent you used most. Counts only. The project's name is added only if you also show session details.") }),
     note,
   );
 }
