@@ -46,6 +46,7 @@ object Pills {
         PillDefinition("integration_stripe", "Stripe", "#0570DE", PillCategory.SERVICE),
         PillDefinition("integration_spotify", "Spotify", "#1DB954", PillCategory.SERVICE),
         PillDefinition("agent_notifications", "Notification", "#5AC8FA", PillCategory.SERVICE),
+        PillDefinition("integration_mail", "Mail", "#2F8CFF", PillCategory.SERVICE),
         PillDefinition("integration_whatsapp", "WhatsApp", "#25D366", PillCategory.SERVICE),
     )
 
