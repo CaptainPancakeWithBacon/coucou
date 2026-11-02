@@ -5,7 +5,9 @@ name: Lockfile
 # Nothing is built or published.
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [sync-upstream-4]
+    paths: ['.github/workflows/lock.yml']
 
 permissions:
   contents: read
