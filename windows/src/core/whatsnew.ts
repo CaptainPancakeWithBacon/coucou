@@ -10,6 +10,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    title: "De tweede grote upstream-update",
+    date: "3 november 2026",
+    items: [
+      "Mail (alleen Windows, met het klassieke Outlook): zoeken, filters en automatisch sorteren, met eigen pagina's in het Coucou-venster.",
+      "Je kunt nu zoeken in de instellingen: een zoekbalk in het Coucou-venster.",
+      "De chat werkt ook zonder API-sleutel, met je eigen Claude Code-abonnement (en Cursor of Copilot). Kijk bij Instellingen, Chat. Op Linux vervangt dit onze oude Claude Code-chat.",
+      "Claude Desktop: goedkeurings- en vraagkaarten op Windows, en de Claude Desktop-pil werkt nu ook op Linux.",
+      "Meerdere toestemmingsvragen tegelijk wachten netjes op hun beurt, in plaats van elkaar te vervangen.",
+      "Het verbruik van je Claude- en Codex-abonnement kun je ook in het kleine eiland zien.",
+      "Windows: het eiland past onder een taakbalk die bovenaan je scherm staat, en Mochi blijft heel als je van scherm wisselt.",
+      "WhatsApp (experimenteel): statusupdates en kanalen komen niet meer als chats binnen.",
+      "Coucou praat nu ook Japans en Koreaans.",
+      "Telefoon: je Android-telefoon kan het weekoverzicht van vorige week laten zien. Staat standaard uit.",
+    ],
+  },
+  {
     title: "Mini-update: Y en N",
     date: "23 oktober 2026",
     items: [
