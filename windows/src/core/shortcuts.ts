@@ -380,6 +380,22 @@ export type IslandKeyAction =
   | { kind: "pin" };
 
 /**
+ * Plain Y or N on a permission card: allow or deny. Only with the island holding
+ * the keyboard (so after the user opened the card themselves, by clicking it or
+ * with the "waiting permission" shortcut), never in a text field, and never
+ * with a modifier held, so a stray key typed elsewhere cannot decide anything.
+ */
+export function approvalKey(
+  e: KeyPress,
+  ctx: { view: string; inTextField: boolean; pending: boolean },
+): "allow" | "deny" | null {
+  if (ctx.view !== "approval" || !ctx.pending || ctx.inTextField) return null;
+  if (e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return null;
+  const letter = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : /^Key([A-Z])$/.exec(e.code)?.[1].toLowerCase();
+  return letter === "y" ? "allow" : letter === "n" ? "deny" : null;
+}
+
+/**
  * A key pressed while the island has the keyboard → what it does, or null to
  * leave it alone. Ctrl stands in for ⌘. In a text field Ctrl+← and Ctrl+→
  * keep moving by word, and Ctrl+↑ and Ctrl+↓ by paragraph.

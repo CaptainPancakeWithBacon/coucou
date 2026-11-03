@@ -5,7 +5,7 @@
 
 import { WHATS_NEW } from "../core/whatsnew";
 import "./settings.css";
-import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport } from "../core/bridge";
+import { Bridge, onEvent, type HookPreview, type HookStatus, type ShortcutsReport, type SubscriptionStatus } from "../core/bridge";
 import { CUSTOM_SERVER_KEY, providerDef, urlExposure } from "../core/providers";
 import {
   ISLAND_SHORTCUTS, SHORTCUTS, SHORTCUT_TEXT, activeKeys, displayKeys, duplicates, effective,
@@ -22,8 +22,11 @@ import {
 import { h, clear } from "../views/dom";
 import { startHub, type PageId } from "../hub/shell";
 import { FLOW_PAGE_RENDERERS } from "../hub/pages";
+import { claudeModelControl } from "./claude-models";
 import { agentsSection } from "./agents";
 import { phoneSection } from "./phone";
+import { whatsappSection } from "./whatsapp";
+import { WHATSAPP_ID } from "../core/whatsapp";
 import { updatesListener } from "./updates";
 import { colorDot } from "./colors";
 import { renderDiff, statusDot } from "./parts";
@@ -333,6 +336,7 @@ const PLAN_SETTINGS_TEXT = {
   get claude() { return t("Shows your Claude plan usage (5-hour and weekly limits) in the island's header. Coucou adds a status line relay in ~/.claude/settings.json. If you already have a status line, it keeps working as before. Pro and Max plans only."); },
   get claudeCli() { return t("The numbers come from the Claude Code command-line tool. The Claude desktop app does not report them, so the gauge stays empty if you only use the desktop app."); },
   get showClaude() { return t("Show in notch"); },
+  get showClaudeCompact() { return t("Show in compact island"); },
   get codex() { return t("Shows your Codex plan usage (weekly limit and free resets left) in the island's header. Coucou asks the Codex CLI (codex app-server) when the pill shows; nothing is installed. Codex must be signed in with ChatGPT."); },
   get showCodex() { return t("Show Codex plan in the notch"); },
 };
@@ -350,7 +354,10 @@ function planSection(status: HookStatus): HTMLElement {
     if (fresh) Object.assign(status, fresh);
     settings.planRelayInstalled = status.planRelayInstalled;
     // Cancelled or failed: a switch that was waiting for the install falls back.
-    if (!status.planRelayInstalled) settings.showPlanInNotch = false;
+    if (!status.planRelayInstalled) {
+      settings.showPlanInNotch = false;
+      settings.showPlanInCompactIsland = false;
+    }
     redraw();
   };
 
@@ -372,6 +379,21 @@ function planSection(status: HookStatus): HTMLElement {
         });
       }
     });
+    const swCompact = toggle(settings.showPlanInCompactIsland, (on) => {
+      if (!on) {
+        settings.showPlanInCompactIsland = false;
+        void save();
+      } else if (status.planRelayInstalled) {
+        settings.showPlanInCompactIsland = true;
+        void save();
+      } else {
+        void reviewChange(body, STATUS_LINE_CHANGE, true, () => void rebuild(), () => {
+          settings.planRelayInstalled = true;
+          settings.showPlanInCompactIsland = true;
+          void save().then(rebuild);
+        });
+      }
+    });
     body.append(
       h("div", {
         class: "hint",
@@ -379,6 +401,7 @@ function planSection(status: HookStatus): HTMLElement {
       }),
       h("div", { class: "hint", text: PLAN_SETTINGS_TEXT.claudeCli }),
       h("div", { class: "row" }, h("label", { text: PLAN_SETTINGS_TEXT.showClaude }), sw),
+      h("div", { class: "row" }, h("label", { text: PLAN_SETTINGS_TEXT.showClaudeCompact }), swCompact),
       h("div", { class: "row" },
         h("label", { text: t("Relay") }),
         statusDot(status.planRelayInstalled),
@@ -411,17 +434,81 @@ function planSection(status: HookStatus): HTMLElement {
   return section;
 }
 
+// ── Your AI subscriptions ─────────────────────────────────────────────────────
+
+/** The plan people know, by provider. */
+const SUBSCRIPTION_NAMES: Record<string, string> = {
+  anthropic: "Claude", google: "Google Gemini", openai: "ChatGPT", cursor: "Cursor", copilot: "GitHub Copilot",
+};
+
+/**
+ * One switch per provider (cli_relay.rs): on, the chat goes through its
+ * official terminal tool, signed in with the user's own account; off, through
+ * its API key. Says whether the tool is installed and how to sign in.
+ */
+function subscriptionsSection(): HTMLElement {
+  const list = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
+  const draw = (rows: SubscriptionStatus[]) => {
+    clear(list);
+    for (const row of rows) {
+      const p = providerDef(row.provider);
+      const sw = toggle(row.on, (on) => {
+        void Bridge.subscriptionSet(row.provider, on).then((next) => {
+          if (next) draw(next);
+        });
+      });
+      const lines: HTMLElement[] = [];
+      if (row.installed) {
+        lines.push(h("div", { class: "hint", style: "color:#22c55e", text: t("{tool} found ✓", { tool: row.tool }) }));
+        lines.push(h("div", {
+          class: "hint",
+          text: t("Not signed in yet? Run this once in a terminal: {command}", { command: row.signIn }),
+        }));
+      } else {
+        lines.push(h("div", { class: "row" },
+          h("span", { class: "hint", text: t("{tool} not found.", { tool: row.tool }) }),
+          h("button", { text: t("Install it"), onclick: () => void Bridge.openUrl(row.installUrl) }),
+        ));
+      }
+      if (!row.subscriptionOnly && !row.on) {
+        lines.push(h("div", { class: "hint", text: t("Off: the chat uses your API key below.") }));
+      }
+      list.append(h("div", {},
+        h("div", { class: "row" },
+          h("i", { class: "dot", style: `background:${p.accent}` }),
+          h("label", { text: SUBSCRIPTION_NAMES[row.provider] ?? p.name }),
+          sw,
+        ),
+        ...lines,
+      ));
+    }
+  };
+  void Bridge.subscriptionStatus().then((rows) => draw(rows ?? []));
+  return h(
+    "section",
+    {},
+    h("h2", { text: t("Your AI subscriptions") }),
+    h("div", {
+      class: "hint",
+      text: t("Chat on the plan you already pay for. Coucou asks your AI's official terminal tool, signed in with your own account: it never sees your password or your key."),
+    }),
+    list,
+  );
+}
+
 // ── Claude API section ────────────────────────────────────────────────────────
 
-const MODELS: [string, string][] = [
-  ["claude-opus-5", "Claude Opus 5"],
-  ["claude-sonnet-5", "Claude Sonnet 5"],
-  ["claude-haiku-4-5", "Claude Haiku 4.5"],
-];
+/** The state line under Claude: the key, else Claude Code (switched on above), else what is missing. */
+function apiState(hasKey: boolean, relay: boolean): string {
+  if (hasKey) return t("Key saved in the {store}.", { store: KEY_STORE });
+  return relay
+    ? t("No key: the chat can go through your Claude subscription above.")
+    : t("No key yet — the chat needs one.");
+}
 
-function apiSection(hasKey: boolean): HTMLElement {
-  const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? t("Key saved in the {store}.", { store: KEY_STORE }) : t("No key yet — the chat needs one.") });
+function apiSection(hasKey: boolean, relay: boolean): HTMLElement {
+  const dot = statusDot(hasKey || relay);
+  const state = h("span", { class: "hint", text: apiState(hasKey, relay) });
 
   const field = h("input", {
     type: "password",
@@ -437,12 +524,12 @@ function apiSection(hasKey: boolean): HTMLElement {
 
   async function refresh() {
     const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-    dot.style.background = present ? "#22c55e" : "#f4505e";
-    state.textContent = present
-      ? t("Key saved in the {store}.", { store: KEY_STORE })
-      : t("No key yet — the chat needs one.");
+    const ready = (await Bridge.claudeReady()) ?? false;
+    dot.style.background = ready ? "#22c55e" : "#f4505e";
+    state.textContent = apiState(present, ready && !present);
     field.placeholder = present ? `••••••••••••  ${t("(stored)")}` : "sk-ant-...";
     clearBtn.style.display = present ? "" : "none";
+    void model.reload(present);
   }
 
   saveBtn.addEventListener("click", async () => {
@@ -470,16 +557,11 @@ function apiSection(hasKey: boolean): HTMLElement {
     }
   });
 
-  const model = h("select", {}) as HTMLSelectElement;
-  for (const [id, label] of MODELS) model.append(h("option", { value: id, text: label }));
-  if (!MODELS.some(([id]) => id === settings.model)) {
-    model.append(h("option", { value: settings.model, text: settings.model }));
-  }
-  model.value = settings.model;
-  model.addEventListener("change", () => {
-    settings.model = model.value;
-    void save();
+  const model = claudeModelControl(() => settings.model, async (value) => {
+    await Bridge.saveSettings({ ...settings, model: value });
+    settings.model = value;
   });
+  void model.reload(hasKey);
 
   clearBtn.style.display = hasKey ? "" : "none";
 
@@ -489,7 +571,7 @@ function apiSection(hasKey: boolean): HTMLElement {
     h("h2", {}, dot, h("span", { text: "Claude" })),
     state,
     h("div", { class: "row" }, h("label", { text: t("API key") }), field, saveBtn, clearBtn),
-    h("div", { class: "row" }, h("label", { text: t("Model") }), model),
+    model.element,
     feedback,
   );
 }
@@ -978,6 +1060,27 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
   return h("section", {}, h("h2", {}, h("span", { text: t("Integrations") })), note, list);
 }
 
+/** WhatsApp (experimental), under the other integrations: its pill is turned on from its own switch. */
+function whatsappSections(): HTMLElement[] {
+  if (!availablePills().some((p) => p.id === WHATSAPP_ID)) return [];
+  return [whatsappSection({
+    toggle,
+    maxPills: MAX_ACTIVE,
+    pillActive: () => settings.activeIntegrations.includes(WHATSAPP_ID),
+    setPill: (on) => {
+      const has = settings.activeIntegrations.includes(WHATSAPP_ID);
+      if (on && !has && settings.activeIntegrations.length < MAX_ACTIVE) {
+        settings.activeIntegrations = [...settings.activeIntegrations, WHATSAPP_ID];
+      } else if (!on && has) {
+        settings.activeIntegrations = settings.activeIntegrations.filter((x) => x !== WHATSAPP_ID);
+      } else {
+        return;
+      }
+      declaredChanged();
+    },
+  })];
+}
+
 // ── General section ───────────────────────────────────────────────────────────
 
 /** The notifications page: the switch for the island's mirror and one switch per app. */
@@ -1152,10 +1255,12 @@ function generalSection(): HTMLElement {
     group("Island behavior",
       setting(N_("Open on hover"), "Hovering opens the island. It closes after your pointer leaves; click inside to keep it open.",
         toggle(settings.openOnHover, v => { settings.openOnHover = v; void save(); })),
-      setting(N_("Show clock in the island"), "The date and the time in the middle of the island when it is compact.",
+      setting(N_("Show clock in the island"), N_("The date and the time in the middle of the island when it is compact."),
         toggle(settings.showClock, v => { settings.showClock = v; void save(); })),
       setting(N_("Open for every pill\u2019s alerts"), "When a pill other than the one shown finishes or fails, the island opens on its card, and the shown pill comes back when it closes. Never over an approval or a question.",
         toggle(settings.alertsFromAllPills, v => { settings.alertsFromAllPills = v; void save(); })),
+      setting(N_("Drag Mochi out of the island"), N_("Dragging Mochi out of the island puts him on the desktop. On Linux he becomes a separate window, which can be laggy, so it is off by default there. The desktop shortcut still works."),
+        toggle(settings.desktopDragOut, v => { settings.desktopDragOut = v; void save(); })),
       setting(N_("Keep Mochi on screen"), "When disabled, the island hides after one minute of inactivity.",
         toggle(settings.keepVisible, v => { settings.keepVisible = v; void save(); })),
       setting(N_("Auto-close"), "Seconds before the island closes after your pointer leaves.", autoClose, h("span", { class: "hint", text: t("seconds") })),
@@ -1168,10 +1273,7 @@ function generalSection(): HTMLElement {
     group("Mochi & music",
       setting(N_("Dance to the beat"), "Mochi follows Spotify's detected beat. Audio is analysed locally, without a microphone.",
         toggle(settings.beatSync, v => { settings.beatSync = v; void save(); })),
-      ...(HOST_OS === "linux" ? [
-        setting(N_("Chat memory"), "Claude Code reads and saves notes in your configured local memory directory.",
-          toggle(settings.chatMemory, v => { settings.chatMemory = v; void save(); })),
-      ] : [])),
+      ),
     group(N_("Updates"), updateRow()),
     group("Privacy & history", ...recapRows().slice(0, 2), sendLogRow()),
     group(N_("Language"), languageRow()),
@@ -1522,6 +1624,7 @@ async function render() {
   const agents = await Bridge.agentHooksList();
 
   const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+  const claudeRelay = !hasKey && ((await Bridge.claudeReady()) ?? false);
   const shortcutReport = await Bridge.shortcutsStatus();
 
   const keys = [
@@ -1536,7 +1639,7 @@ async function render() {
   const connected: Record<string, boolean> = { ...((await Bridge.agentHooksStatus()) ?? {}) };
   for (const def of availablePills()) {
     if (def.connect.kind === "key") {
-      connected[def.id] = present[def.connect.key] ?? (await Bridge.secretPresent(def.connect.key)) ?? false;
+      connected[def.id] = present[def.connect.key] ?? (await Bridge.keyReady(def.connect.key)) ?? false;
     }
   }
   /** A chat provider's key was saved or removed: its pill's row says so at once. */
@@ -1563,8 +1666,8 @@ async function render() {
     notifications: () => [notificationsSection()],
     whatsnew: () => [whatsNewSection()],
     agents: () => [claudeSection(status), agentsSection(agents), planSection(status), ...(HOST_OS === "windows" ? [claudeDesktopChatSection()] : [])],
-    chat: () => [apiSection(hasKey), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
-    integrations: () => [integrationsSection(present)],
+    chat: () => [subscriptionsSection(), apiSection(hasKey, claudeRelay), chatProvidersSection(chatKeys, keyChanged), localSection(customKey)],
+    integrations: () => [integrationsSection(present), ...whatsappSections()],
     phone: () => [phoneSection(settings.phoneLink ?? false, toggle, settings)],
     shortcuts: () => [shortcutsSection(shortcutReport)],
   };

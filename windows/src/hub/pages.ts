@@ -3,5 +3,11 @@
 // the island's settings.
 
 import type { FlowPageRenderer, PageId } from "./shell";
+import { mailBannedPage, mailOverviewPage, mailRulesPage, mailVIPPage } from "./pages/mail";
 
-export const FLOW_PAGE_RENDERERS: Partial<Record<PageId, FlowPageRenderer>> = {};
+export const FLOW_PAGE_RENDERERS: Partial<Record<PageId, FlowPageRenderer>> = {
+  mailOverview: mailOverviewPage,
+  mailRules: mailRulesPage,
+  mailBanned: mailBannedPage,
+  mailVIP: mailVIPPage,
+};

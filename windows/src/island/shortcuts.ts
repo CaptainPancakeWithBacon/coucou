@@ -9,7 +9,7 @@
 
 import { Bridge, onEvent } from "../core/bridge";
 import type { BotEmoteName, IslandViewName } from "../core/layout";
-import { cyclePill, islandKeyAction, navigate, pillByNumber, type IslandKeyAction } from "../core/shortcuts";
+import { approvalKey, cyclePill, islandKeyAction, navigate, pillByNumber, type IslandKeyAction } from "../core/shortcuts";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { editorOf } from "../core/pills";
@@ -34,6 +34,8 @@ export interface ShortcutHost {
   flyOutOrHome(): void;
   /** Hands Ctrl+O / Ctrl+E to the view on screen (the Mac posts notifications). */
   viewCommand(command: ViewCommand): void;
+  /** Answers the permission card on screen. */
+  decide(decision: "allow" | "deny"): void;
 }
 
 /** What the open view is asked to do: open the highlighted item, toggle the diff. */
@@ -206,7 +208,15 @@ export function registerShortcutHandlers(host: ShortcutHost, resume: () => void)
     "keydown",
     (e: KeyboardEvent) => {
       if (State.mode !== "expanded") return;
-      const action = islandKeyAction(e, { view: State.view, inTextField: inTextField(e.target) });
+      const typing = inTextField(e.target);
+      const decision = approvalKey(e, { view: State.view, inTextField: typing, pending: State.pendingApproval != null });
+      if (decision) {
+        e.preventDefault();
+        e.stopPropagation();
+        host.decide(decision);
+        return;
+      }
+      const action = islandKeyAction(e, { view: State.view, inTextField: typing });
       if (!action) return;
       e.preventDefault();
       e.stopPropagation();

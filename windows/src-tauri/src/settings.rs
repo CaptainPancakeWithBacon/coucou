@@ -31,6 +31,10 @@ pub struct Settings {
     pub beat_sync: bool,
     /// Audio output to monitor for the dance; empty means system default.
     pub beat_output: String,
+    /// Dragging Mochi out of the island puts him on the desktop. Off by default on
+    /// Linux, where he becomes a separate window that stutters; the desktop
+    /// shortcut sends him out either way.
+    pub desktop_drag_out: bool,
     /// Opacity percentage of the entire island (20..=100).
     pub island_opacity: u8,
     /// The island's background: "black", "system" (a dark tint of the system's
@@ -38,8 +42,6 @@ pub struct Settings {
     pub island_color: String,
     /// "#rrggbb" for the "custom" island colour.
     pub island_custom_color: String,
-    /// The Claude Code chat shares the user's memory notes (claude_cli.rs).
-    pub chat_memory: bool,
     /// Desktop notifications shown in the island (notifications.rs, Linux).
     pub show_notifications: bool,
     /// Apps whose notifications stay out of the island (notifications.rs), by the
@@ -64,6 +66,8 @@ pub struct Settings {
     /// Show the Claude plan pill (5 h and weekly limits) in the island's header.
     /// Off until the user turns it on, so the header stays as it shipped.
     pub show_plan_in_notch: bool,
+    /// Show the Claude plan percentage in the compact island next to the agent dots.
+    pub show_plan_in_compact_island: bool,
     /// Coucou's status line relay is the one in Claude Code's settings.json.
     /// Like `hooks_installed`, the real state wins at launch over what was stored.
     pub plan_relay_installed: bool,
@@ -77,6 +81,10 @@ pub struct Settings {
     /// The model picked for each provider other than Anthropic (whose model is
     /// `model`), by provider id.
     pub chat_models: BTreeMap<String, String>,
+    /// Settings → Chat → Your AI subscriptions: the switch of each provider
+    /// that can answer through its own terminal tool (cli_relay.rs). A
+    /// provider not in it was never switched: see cli_relay::uses_subscription.
+    pub chat_subscriptions: BTreeMap<String, bool>,
     /// Addresses of the model servers once connected; empty means not connected.
     pub ollama_url: String,
     pub lmstudio_url: String,
@@ -121,6 +129,8 @@ pub struct Settings {
     pub phone_diffs: bool,
     /// Show the Claude and Codex plan usage on the phone (cap `usage`). Off by default; owned by Rust like the other phone switches.
     pub phone_usage: bool,
+    /// Show last week's recap (counts only) on the phone (cap `recap`). Off by default; owned by Rust like the other phone switches.
+    pub phone_recap: bool,
     /// The service pills whose cards the phone may see, by pill id (cap `services`). None by default; owned by Rust like the other phone switches.
     pub phone_services: Vec<String>,
     /// Reach the phone through the user's own relay when it is not on this network (phone_link/relay_client.rs).
@@ -166,10 +176,10 @@ impl Default for Settings {
             claude_desktop_chat_watch: false,
             beat_sync: cfg!(windows),
             beat_output: String::new(),
+            desktop_drag_out: cfg!(windows),
             island_opacity: 100,
             island_color: "black".into(),
             island_custom_color: "#1c2433".into(),
-            chat_memory: false,
             show_notifications: false,
             muted_notification_apps: Vec::new(),
             do_not_disturb: false,
@@ -188,10 +198,12 @@ impl Default for Settings {
             hooks_installed: false,
             model: default_model(),
             show_plan_in_notch: false,
+            show_plan_in_compact_island: false,
             plan_relay_installed: false,
             show_codex_plan_in_notch: false,
-            chat_provider: crate::claude_cli::ID.into(),
+            chat_provider: crate::chat::ANTHROPIC.into(),
             chat_models: BTreeMap::new(),
+            chat_subscriptions: BTreeMap::new(),
             ollama_url: String::new(),
             lmstudio_url: String::new(),
             custom_url: String::new(),
@@ -207,6 +219,7 @@ impl Default for Settings {
             phone_answers: false,
             phone_diffs: false,
             phone_usage: false,
+            phone_recap: false,
             phone_services: Vec::new(),
             phone_relay: false,
             phone_relay_url: String::new(),
@@ -286,6 +299,14 @@ static NOT_LOADED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 fn not_loaded() -> MutexGuard<'static, Vec<PathBuf>> {
     NOT_LOADED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Serializes saves across all threads so concurrent writes do not collide on
+/// the temporary file or interleave file renames.
+static SAVE_LOCK: Mutex<()> = Mutex::new(());
+
+fn save_lock() -> MutexGuard<'static, ()> {
+    SAVE_LOCK.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// One line in coucou.log. Tests must never write to the real one.
@@ -473,6 +494,7 @@ fn write_whole(file: &mut std::fs::File, bytes: &[u8]) -> std::io::Result<()> {
 
 /// `save`, for the file at `path`, whose directory already exists.
 fn save_to(path: &Path, settings: &Settings) -> std::io::Result<()> {
+    let _lock = save_lock();
     keep_what_was_not_loaded(path)?;
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
@@ -551,10 +573,10 @@ mod tests {
   "claudeDesktopChatWatch": true,
   "beatSync": true,
   "beatOutput": "",
+  "desktopDragOut": true,
   "islandOpacity": 100,
   "islandColor": "system",
   "islandCustomColor": "#102030",
-  "chatMemory": false,
   "showNotifications": false,
   "mutedNotificationApps": ["Discord", "YourPhone › Snapchat"],
   "doNotDisturb": true,
@@ -568,10 +590,12 @@ mod tests {
   "hooksInstalled": true,
   "model": "some-model",
   "showPlanInNotch": true,
+  "showPlanInCompactIsland": true,
   "planRelayInstalled": true,
   "showCodexPlanInNotch": true,
   "chatProvider": "ollama",
   "chatModels": { "ollama": "llama3.2", "openai": "gpt-x" },
+  "chatSubscriptions": { "google": true, "anthropic": false },
   "ollamaUrl": "http://127.0.0.1:11434",
   "lmstudioUrl": "http://127.0.0.1:1234",
   "customUrl": "https://llm.example.com",
@@ -587,6 +611,7 @@ mod tests {
   "phoneAnswers": true,
   "phoneDiffs": true,
   "phoneUsage": true,
+  "phoneRecap": true,
   "phoneServices": ["integration_stripe"],
   "phoneRelay": true,
   "phoneRelayUrl": "wss://relay.example.workers.dev",
@@ -757,6 +782,15 @@ mod tests {
         assert!(!parse(&custom_with("phoneUsage", None)).unwrap().phone_usage);
         assert!(parse(&custom_with("phoneUsage", Some(serde_json::json!(true)))).unwrap().phone_usage);
         assert!(!parse(&custom_with("phoneUsage", Some(serde_json::json!("yes")))).unwrap().phone_usage, "a wrong type does not switch it on");
+    }
+
+    #[test]
+    fn a_file_from_before_the_weekly_recap_on_the_phone_keeps_it_off() {
+        // Sending last week's numbers to the phone is never on by default; an older file is not consent.
+        assert!(!Settings::default().phone_recap);
+        assert!(!parse(&custom_with("phoneRecap", None)).unwrap().phone_recap);
+        assert!(parse(&custom_with("phoneRecap", Some(serde_json::json!(true)))).unwrap().phone_recap);
+        assert!(!parse(&custom_with("phoneRecap", Some(serde_json::json!("yes")))).unwrap().phone_recap, "a wrong type does not switch it on");
     }
 
     #[test]
@@ -1073,10 +1107,10 @@ mod tests {
                 "claudeDesktopChatWatch",
                 "beatSync",
                 "beatOutput",
+                "desktopDragOut",
                 "islandOpacity",
                 "islandColor",
                 "islandCustomColor",
-                "chatMemory",
                 "showNotifications",
                 "mutedNotificationApps",
                 "doNotDisturb",
@@ -1090,10 +1124,12 @@ mod tests {
                 "hooksInstalled",
                 "model",
                 "showPlanInNotch",
+                "showPlanInCompactIsland",
                 "planRelayInstalled",
                 "showCodexPlanInNotch",
                 "chatProvider",
                 "chatModels",
+                "chatSubscriptions",
                 "ollamaUrl",
                 "lmstudioUrl",
                 "customUrl",
@@ -1109,6 +1145,7 @@ mod tests {
                 "phoneAnswers",
                 "phoneDiffs",
                 "phoneUsage",
+                "phoneRecap",
                 "phoneServices",
                 "phoneRelay",
                 "phoneRelayUrl",
@@ -1147,6 +1184,30 @@ mod tests {
 
         assert!(save_to(&file, &Settings::default()).is_err());
         assert_eq!(std::fs::read(&file).unwrap(), CUSTOM.as_bytes());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_saves_never_collide() {
+        let (dir, file) = scratch("concurrent");
+        let handles: Vec<_> = (0..20)
+            .map(|i| {
+                let path = file.clone();
+                std::thread::spawn(move || {
+                    let mut s = Settings::default();
+                    s.sound_volume = (i as f64) * 0.05;
+                    save_to(&path, &s)
+                })
+            })
+            .collect();
+
+        for h in handles {
+            assert!(h.join().unwrap().is_ok());
+        }
+
+        // Must still be valid settings that load cleanly without corruption
+        let loaded = load_from(&file);
+        assert!(loaded.sound_volume >= 0.0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
