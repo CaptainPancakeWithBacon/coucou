@@ -5,15 +5,17 @@
 
 import "./hub.css";
 import { h, clear } from "../views/dom";
-import { t } from "../i18n/i18n";
+import { t, onLanguageChange } from "../i18n/i18n";
 import { onEvent } from "../core/bridge";
 import { FlowBridge, type FlowPrefs, type FlowStatus } from "../core/flow";
 import { hero, liveMochi, setWindowShown } from "./hero";
 import { icon } from "./ui";
+import { searchSettings, type SettingsSearchHit } from "./search";
 
 export type PageId =
   | "dictation" | "notes" | "insights" | "dictionary" | "snippets" | "styles" | "flowsettings"
-  | "general" | "pills" | "agents" | "chat" | "voice" | "notifications" | "whatsnew" | "integrations" | "phone" | "shortcuts";
+  | "general" | "pills" | "agents" | "chat" | "voice" | "notifications" | "whatsnew" | "integrations" | "phone" | "shortcuts"
+  | "mailOverview" | "mailRules" | "mailBanned" | "mailVIP";
 
 interface PageDef {
   id: PageId;
@@ -38,7 +40,15 @@ export const NOTCH_PAGES: PageDef[] = [
   { id: "whatsnew", icon: "book", title: () => t("What's changed?"), subtitle: () => t("The latest versions, in a few lines each.") },
 ];
 
-const ALL = [...FLOW_PAGES, ...NOTCH_PAGES];
+/** Mail (classic Outlook): Windows only, Linux has no Outlook. */
+export const MAIL_PAGES: PageDef[] = [
+  { id: "mailOverview", icon: "tray", title: () => t("Overview") },
+  { id: "mailRules", icon: "filter", title: () => t("Rules") },
+  { id: "mailBanned", icon: "nosign", title: () => t("Banned words") },
+  { id: "mailVIP", icon: "star", title: () => t("VIP") },
+];
+
+const ALL = [...FLOW_PAGES, ...NOTCH_PAGES, ...MAIL_PAGES];
 
 /** What a page gets to draw itself and reach the rest of the window. */
 export interface HubContext {
@@ -84,8 +94,12 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
   const shown = await FlowBridge.hubShown();
   if (shown !== null) setWindowShown(shown);
   let current: PageId = "general";
+  let activeAnchor: string | null = null;
+  let searchHits: SettingsSearchHit[] = [];
   const status: FlowStatus = DEFAULT_STATUS;
   const items = new Map<PageId, HTMLElement>();
+  const labels = new Map<PageId, HTMLElement>();
+  const searchRows = new Map<string, HTMLElement>();
   const scroll = h("div", { class: "hub-scroll" });
   let rendering = 0;
 
@@ -99,12 +113,20 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
     hero: (page, title, subtitle, actions = [], compact = false) => hero(page, title, subtitle, actions, compact),
   };
 
-  async function show(page: PageId) {
+  function updateSearchRowHighlights() {
+    for (const [id, rowEl] of searchRows) {
+      rowEl.classList.toggle("on", id === activeAnchor);
+    }
+  }
+
+  async function show(page: PageId, targetAnchor?: string) {
     const def = ALL.find((p) => p.id === page) ?? NOTCH_PAGES[0];
     ctx.onLeave?.();
     ctx.onLeave = undefined;
     current = def.id;
+    activeAnchor = targetAnchor ?? null;
     for (const [id, el] of items) el.classList.toggle("on", id === current);
+    updateSearchRowHighlights();
     const token = ++rendering;
     const page_ = h("div", { class: "hub-page" });
     const renderer = opts.flowPages[def.id];
@@ -119,7 +141,19 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
     if (token !== rendering) return;
     clear(scroll);
     scroll.append(page_);
-    scroll.scrollTop = 0;
+    if (targetAnchor) {
+      const el = page_.querySelector(`[data-anchor="${targetAnchor}"]`) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.remove("hub-card-glowing");
+        void el.offsetWidth;
+        el.classList.add("hub-card-glowing");
+      } else {
+        scroll.scrollTop = 0;
+      }
+    } else {
+      scroll.scrollTop = 0;
+    }
   }
 
   // ── The sidebar ──
@@ -127,16 +161,117 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
   const logo = h("canvas", {});
   side.append(h("div", { class: "hub-brand" }, logo, h("span", { text: "Coucou" })));
   liveMochi(logo as HTMLCanvasElement);
+
+  // Settings search field
+  const searchInput = h("input", {
+    class: "hub-search-input",
+    type: "text",
+    placeholder: t("Search settings"),
+    spellcheck: "false",
+  }) as HTMLInputElement;
+
+  const searchClear = h("button", {
+    class: "hub-search-clear",
+    title: t("Close"),
+    style: "display:none",
+  }, icon("x"));
+
+  const searchBox = h("div", { class: "hub-search" },
+    icon("search"),
+    searchInput,
+    searchClear,
+  );
+  searchBox.querySelector("svg")?.classList.add("hub-search-icon");
+  side.append(searchBox);
+
+  const groupsContainer = h("div", { class: "hub-groups" });
+  const resultsContainer = h("div", { class: "hub-search-results", style: "display:none" });
+  side.append(groupsContainer, resultsContainer);
+
   const group = (title: string, pages: PageDef[]) => {
-    side.append(h("div", { class: "hub-group", text: title }));
+    const heading = h("div", { class: "hub-group", text: title });
+    groupsContainer.append(heading);
     for (const p of pages) {
       const b = h("button", { class: "hub-item", onclick: () => void show(p.id) });
-      b.append(icon(p.icon), h("span", { text: p.title() }));
+      const label = h("span", { text: p.title() });
+      b.append(icon(p.icon), label);
       items.set(p.id, b);
-      side.append(b);
+      labels.set(p.id, label);
+      groupsContainer.append(b);
     }
+    return heading;
   };
-  group(t("Notch"), NOTCH_PAGES);
+  const notchGroup = group(t("Notch"), NOTCH_PAGES);
+  if (status.platform === "windows") group("Mail", MAIL_PAGES);
+
+  function renderSearchResults() {
+    clear(resultsContainer);
+    searchRows.clear();
+    const query = searchInput.value.trim();
+    if (!query) {
+      searchClear.style.display = "none";
+      resultsContainer.style.display = "none";
+      groupsContainer.style.display = "";
+      searchHits = [];
+      return;
+    }
+    searchClear.style.display = "";
+    groupsContainer.style.display = "none";
+    resultsContainer.style.display = "";
+    searchHits = searchSettings(query, (pageId) => ALL.find((p) => p.id === pageId)?.title() ?? pageId)
+      .filter((hit) => ALL.some((p) => p.id === hit.entry.page));
+    if (searchHits.length === 0) {
+      resultsContainer.append(h("div", { class: "hub-search-empty", text: t("No setting found") }));
+      return;
+    }
+    for (const hit of searchHits) {
+      const pageDef = ALL.find((p) => p.id === hit.entry.page);
+      const row = h("button", { class: "hub-search-row" });
+      if (activeAnchor === hit.entry.id && current === hit.entry.page) {
+        row.classList.add("on");
+      }
+      row.append(icon(pageDef?.icon ?? "sliders"));
+      const textContainer = h("div", { class: "hub-search-row-text" });
+      const rowTitle = h("div", { class: "hub-search-row-title", text: hit.label ?? t(hit.entry.title) });
+      const rowSubtitle = h("div", {
+        class: "hub-search-row-subtitle",
+        text: hit.label
+          ? `${pageDef?.title() ?? ""} › ${t(hit.entry.title)}`
+          : (pageDef?.title() ?? ""),
+      });
+      textContainer.append(rowTitle, rowSubtitle);
+      row.append(textContainer);
+      row.addEventListener("click", () => {
+        void show(hit.entry.page, hit.entry.id);
+      });
+      searchRows.set(hit.entry.id, row);
+      resultsContainer.append(row);
+    }
+  }
+
+  searchInput.addEventListener("input", renderSearchResults);
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      searchInput.value = "";
+      renderSearchResults();
+    } else if (e.key === "Enter") {
+      if (searchHits.length > 0) {
+        void show(searchHits[0].entry.page, searchHits[0].entry.id);
+      }
+    }
+  });
+
+  searchClear.addEventListener("click", () => {
+    searchInput.value = "";
+    renderSearchResults();
+    searchInput.focus();
+  });
+
+  onLanguageChange(() => {
+    searchInput.placeholder = t("Search settings");
+    if (searchInput.value.trim()) renderSearchResults();
+  });
+
   side.append(h("div", { class: "spacer" }), h("div", { class: "hub-version", text: `Coucou ${opts.version}` }));
 
   clear(root);
@@ -148,7 +283,14 @@ export async function startHub(root: HTMLElement, opts: HubOptions) {
     if (ALL.some((p) => p.id === id)) void show(id);
   });
   return {
-    redraw: () => void show(current),
+    redraw: () => {
+      for (const p of ALL) {
+        const label = labels.get(p.id);
+        if (label) label.textContent = p.title();
+      }
+      notchGroup.textContent = t("Notch");
+      void show(current);
+    },
     current: () => current,
   };
 }

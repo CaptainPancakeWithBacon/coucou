@@ -47,6 +47,7 @@ test("the catalog holds the Mac's pills with the Claude Code label for Windows a
     ["integration_music", "Apple Music", "#FA2D48", "service", "Integration"],
     ["integration_spotify", "Spotify", "#1DB954", "service", "Integration"],
     ["agent_notifications", "Notification", "#5AC8FA", "service", "Integration"],
+    ["integration_mail", "Mail", "#2F8CFF", "service", "Integration"],
     ["integration_whatsapp", "WhatsApp", "#25D366", "service", "Integration"],
   ];
   assert.deepEqual(
@@ -96,7 +97,7 @@ test("IDs are unique", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test("this build leaves out what only macOS has and Claude Desktop on Linux", () => {
+test("this build leaves out what only macOS has", () => {
   const windows = availablePills("windows").map((p) => p.id);
   const linux = availablePills("linux").map((p) => p.id);
   for (const id of ["integration_music"]) {
@@ -110,11 +111,14 @@ test("this build leaves out what only macOS has and Claude Desktop on Linux", ()
     assert.ok(linux.includes(id), id);
   }
   assert.ok(windows.includes("agent_claude-desktop"));
-  assert.ok(!linux.includes("agent_claude-desktop"));
-  // The media pill is read over MPRIS on Linux and from the system media controls on Windows.
+  assert.ok(linux.includes("agent_claude-desktop"));
+  // Mail is Outlook's, and Outlook is a Windows program.
+  assert.ok(windows.includes("integration_mail"));
+  assert.ok(!linux.includes("integration_mail"));
+  // Spotify: MPRIS on Linux, the system media controls on Windows.
   assert.ok(linux.includes("integration_spotify"));
   assert.ok(windows.includes("integration_spotify"));
-  assert.deepEqual(linux, windows.filter((id) => id !== "agent_claude-desktop"));
+  assert.deepEqual(linux, windows.filter((id) => id !== "integration_mail"));
 });
 
 test("Spotify: a service with nothing to set up, on both systems", () => {
@@ -128,15 +132,15 @@ test("Spotify: a service with nothing to set up, on both systems", () => {
   assert.ok(!mainPillChoices("windows").some((p) => p.id === "integration_spotify"));
 });
 
-test("a pill of one system only is dropped on the other", () => {
-  const d = { mainPill: "integration_claude", activeIntegrations: ["agent_claude-desktop", "integration_n8n"] };
-  assert.deepEqual(sanitizeDeclared(d, "windows").activeIntegrations, ["agent_claude-desktop", "integration_n8n"]);
-  assert.deepEqual(sanitizeDeclared(d, "linux").activeIntegrations, ["integration_n8n"]);
+test("Spotify and Claude Desktop can be declared on both systems", () => {
+  const d = { mainPill: "integration_claude", activeIntegrations: ["integration_spotify", "integration_n8n"] };
+  assert.deepEqual(sanitizeDeclared(d, "linux").activeIntegrations, ["integration_spotify", "integration_n8n"]);
+  assert.deepEqual(sanitizeDeclared(d, "windows").activeIntegrations, ["integration_spotify", "integration_n8n"]);
   const empty = { mainPill: "integration_claude", activeIntegrations: [] };
   assert.deepEqual(toggleDeclared(empty, "integration_spotify", "linux"), ["integration_spotify"]);
   assert.deepEqual(toggleDeclared(empty, "integration_spotify", "windows"), ["integration_spotify"]);
-  // Claude Desktop stays Windows only.
-  assert.equal(toggleDeclared(empty, "agent_claude-desktop", "linux"), null);
+  // Claude Desktop is available on both Linux and Windows.
+  assert.deepEqual(toggleDeclared(empty, "agent_claude-desktop", "linux"), ["agent_claude-desktop"]);
   assert.deepEqual(toggleDeclared(empty, "agent_claude-desktop", "windows"), ["agent_claude-desktop"]);
 });
 
@@ -206,7 +210,7 @@ test("up to eight pills next to the main one, never the main one itself", () => 
   assert.equal(toggleDeclared({ ...d, activeIntegrations: eight }, "ai_anthropic", "linux"), null);
   assert.equal(toggleDeclared(d, "integration_claude", "linux"), null);
   assert.equal(toggleDeclared(d, "integration_music", "linux"), null);
-  assert.equal(toggleDeclared(d, "agent_claude-desktop", "linux"), null);
+  assert.ok(toggleDeclared(d, "agent_claude-desktop", "linux").includes("agent_claude-desktop"));
   assert.ok(toggleDeclared(d, "agent_claude-desktop", "windows").includes("agent_claude-desktop"));
   assert.deepEqual(toggleDeclared(d, "integration_github", "linux"), ["integration_n8n", "integration_stripe"]);
   // Every chat provider can be declared now that the chat talks to it.

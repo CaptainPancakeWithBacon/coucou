@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use crate::settings::Settings;
-use crate::{claude, claude_cli, local_chat, openai_compat, secrets};
+use crate::{claude, cli_relay, local_chat, openai_compat, secrets};
 
 pub const ANTHROPIC: &str = "anthropic";
 
@@ -126,7 +126,12 @@ impl Chat {
 /// has one worth using (identity.rs), and only claims web search where the
 /// provider runs it (Claude).
 pub fn system_prompt(web_search: bool) -> String {
-    system_prompt_for(crate::identity::first_name(), web_search)
+    let base = system_prompt_for(crate::identity::first_name(), web_search);
+    // The chat's Mail switch is on for this turn: how to write a mail plan.
+    if crate::mail::MAIL_TURN.load(std::sync::atomic::Ordering::Relaxed) {
+        return base + crate::mail::plan::INSTRUCTIONS;
+    }
+    base
 }
 
 fn system_prompt_for(first_name: Option<&str>, web_search: bool) -> String {
@@ -170,14 +175,6 @@ pub fn plain_question(first: bool, context: Option<&ChatContext>, query: &str) -
 
 /// The model chosen for `provider`, or its default.
 pub fn model_for(settings: &Settings, provider: &str) -> String {
-    if provider == claude_cli::ID {
-        return settings
-            .chat_models
-            .get(provider)
-            .map(|m| m.trim().to_string())
-            .filter(|m| !m.is_empty())
-            .unwrap_or_else(|| claude_cli::DEFAULT_MODEL.to_string());
-    }
     if provider == ANTHROPIC {
         let m = settings.model.trim();
         return if m.is_empty() { claude::DEFAULT_MODEL.to_string() } else { m.to_string() };
@@ -229,8 +226,8 @@ pub async fn send(
     }
     let provider = settings.chat_provider.as_str();
     let model = model_for(settings, provider);
-    if provider == claude_cli::ID {
-        return claude_cli::send(app, chat, &model, settings.chat_memory, query, context).await;
+    if cli_relay::uses_subscription(settings, provider) {
+        return cli_relay::send(chat, provider, &model, query, context).await;
     }
     if provider == ANTHROPIC || provider.is_empty() {
         return claude::send(chat, &model, query, context).await;
@@ -255,6 +252,9 @@ pub async fn send_for_phone(
     query: String,
     on_delta: impl FnMut(String),
 ) -> Result<ChatReply, String> {
+    if cli_relay::uses_subscription(settings, provider) {
+        return cli_relay::send(chat, provider, model, query, None).await;
+    }
     if provider == ANTHROPIC {
         return claude::send(chat, model, query, None).await;
     }
@@ -272,12 +272,11 @@ pub async fn send_for_phone(
 /// address): nothing is sent anywhere before that.
 pub async fn models(settings: &Settings, provider: &str) -> Result<Vec<ModelInfo>, String> {
     let no_key = || crate::i18n::t("No API key — add it in Settings.");
-    if provider == claude_cli::ID {
-        return Ok(claude_cli::models());
+    if cli_relay::uses_subscription(settings, provider) {
+        return Ok(cli_relay::models(provider));
     }
     if provider == ANTHROPIC {
-        let key = secrets::get(claude::KEY).ok_or_else(no_key)?;
-        return claude::models(&key).await;
+        return claude::available_models().await;
     }
     if let Some(p) = openai_compat::provider(provider) {
         let key = secrets::get(p.key).ok_or_else(no_key)?;
