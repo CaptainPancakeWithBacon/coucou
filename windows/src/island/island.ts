@@ -1,4 +1,4 @@
-import { responsiveFrame } from "../core/frame-clock";
+import { PACE_MS, fastest, maxDt, pacedFrame, responsiveFrame, type Pace } from "../core/frame-clock";
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
@@ -1141,7 +1141,9 @@ export class Island {
    * itself until frames flow again.
    */
   private watchFrames() {
-    if (!this.running || performance.now() - this.lastFrame < STALLED_MS) return;
+    // A throttled loop has longer gaps between frames by design; only a gap well beyond its own pace is a stall.
+    const gap = Math.max(STALLED_MS, (this.pace === "none" ? 0 : PACE_MS[this.pace]) * 2 + 40);
+    if (!this.running || performance.now() - this.lastFrame < gap) return;
     // The non-activating transparent window can have its rAF throttled off-hover.
     // A queued rAF must not cancel/restart the watchdog frame mid-render.
     this.frame(performance.now());
@@ -1166,6 +1168,9 @@ export class Island {
   };
 
   private loggedErrors = new Set<string>();
+  /** How fast the loop was asked to run when it scheduled the frame now drawing (see frame-clock.ts). */
+  private pace: Pace = "full";
+  private lastOpacity = -1;
 
   /** Paints the island's background from the settings: black, a tint of the system accent, or the pick. */
   private applyColor() {
@@ -1192,10 +1197,13 @@ export class Island {
     // Apply opacity to the complete island (content, Mochi, borders, shadows).
     // Never dim the transparent window container or its hit-testing region.
     const opacity = Math.max(50, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
-    this.islandEl.style.opacity = String(opacity);
+    if (opacity !== this.lastOpacity) {
+      this.lastOpacity = opacity;
+      this.islandEl.style.opacity = String(opacity);
+    }
     // One chain only: a frame forced by the watchdog replaces the pending one.
     this.cancelFrame();
-    const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
+    const dt = Math.min(maxDt(this.pace), (nowMs - this.lastFrame) / 1000);
     this.lastFrame = nowMs;
 
     this.width.step(dt, nowMs);
@@ -1250,16 +1258,21 @@ export class Island {
     // spends most of its life in. Geometry still has to finish retracting.
     const settling =
       this.width.animating || this.height.animating || this.radius.animating;
-    const busy = State.mode === "hidden"
-      ? settling
-      : settling ||
-        !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || UploadSeq.isActive || viewAnimating;
+    // Motion on its way somewhere needs every frame. A loop (breathing, dancing, a scrolling title) only needs enough of them to look
+    // alive: the island stays visible, so drawing it at the display rate for ever costs about half a core of software painting.
+    const moving = settling ||
+      !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
+      greetingActive || UploadSeq.isActive;
+    const pace: Pace = State.mode === "hidden"
+      ? (settling ? "full" : "none")
+      : fastest(moving ? "full" : "none", this.engine.activity, viewAnimating ? "smooth" : "none");
 
-    if (busy) {
-      this.cancelFrame = responsiveFrame(this.frame);
+    if (pace !== "none") {
+      this.pace = pace;
+      this.cancelFrame = pacedFrame(this.frame, pace, nowMs);
     } else {
       this.running = false;
+      this.pace = "full";
       Sound.idle();
     }
   };
