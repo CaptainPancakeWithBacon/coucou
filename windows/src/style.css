@@ -176,11 +176,11 @@ body {
   transition: opacity 0.25s ease-in-out;
 }
 
-/* A still note beside Mochi while music plays in power-saver, when he does not dance. */
+/* A still note right beside Mochi (compact: centre 40, body 20 wide, so his edge is at 50) while music plays in power-saver, when he does not dance. */
 #music-hint {
   position: absolute;
-  left: 36px;
-  top: 50%;
+  left: 52px;
+  top: 16px;
   transform: translateY(-50%);
   font: 600 13px var(--font);
   line-height: 1;

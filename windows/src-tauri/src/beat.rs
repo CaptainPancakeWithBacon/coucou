@@ -301,7 +301,7 @@ pub fn beat_enable(_on: bool) -> bool {
 #[tauri::command]
 pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: State<'_, Listener>, on: bool) -> bool {
     let config = shared.settings.lock().unwrap().clone();
-    let allowed = config.beat_sync;
+    let allowed = config.beat_sync && !crate::power::saver();
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
         // Join the old analysis before resetting both renderer clocks.
