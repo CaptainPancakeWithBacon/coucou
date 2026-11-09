@@ -98,7 +98,9 @@ impl BeatTracker {
         self.heard += samples.len();
         while self.history.len() > RATE * 12 { self.history.pop_front(); }
         let early = self.heard < RATE * 6;
-        let interval = if early { RATE / 2 } else { RATE };
+        // Once the tempo is locked a beat grid every 2 s is plenty: the island counts on from the last beat
+        // between reports, and each analysis costs ~100 ms of one core.
+        let interval = if early { RATE / 2 } else { RATE * 2 };
         if self.history.len() < RATE * 5 / 2 || self.since_estimate < interval { return None; }
         self.since_estimate = 0;
         // No stale beat reports through a silent pause or disconnected stream.
