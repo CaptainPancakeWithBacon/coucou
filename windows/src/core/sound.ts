@@ -43,6 +43,8 @@ class SoundEngine {
       master.connect(ctx.destination);
       this.master = master;
       await this.loadAll(ctx);
+      // Nothing plays yet, and a running context costs an audio thread for as long as the window lives; play() wakes it.
+      this.idle();
     })();
     return this.loading;
   }

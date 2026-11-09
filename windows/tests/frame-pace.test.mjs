@@ -90,6 +90,8 @@ let fakeNow = 1000;
 const realNow = globalThis.performance.now.bind(globalThis.performance);
 const withClock = (fn) => {
   mock.method(globalThis.performance, "now", () => fakeNow);
+  // The engine rolls dice for blinks, sparkle drift and the like; a fixed roll keeps these tests from depending on luck.
+  mock.method(Math, "random", () => 0.5);
   try { fn(); } finally { mock.restoreAll(); }
 };
 const settle = (engine, seconds = 6) => { for (let i = 0; i < seconds * 60; i++) { fakeNow += 1000 / 60; engine.update(1 / 60); } };
