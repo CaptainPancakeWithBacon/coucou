@@ -1267,13 +1267,14 @@ export class Island {
       ? (settling ? "full" : "none")
       : fastest(moving ? "full" : "none", this.engine.activity, viewAnimating ? "smooth" : "none");
 
+    // A running AudioContext costs an audio thread even when silent, and with music playing this loop never stops.
+    Sound.idle();
     if (pace !== "none") {
       this.pace = pace;
       this.cancelFrame = pacedFrame(this.frame, pace, nowMs);
     } else {
       this.running = false;
       this.pace = "full";
-      Sound.idle();
     }
   };
 

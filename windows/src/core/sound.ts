@@ -104,6 +104,8 @@ class SoundEngine {
     if (!this.ctx || this.ctx.state !== "running" || this.idleTimer != null) return;
     this.idleTimer = window.setTimeout(() => {
       this.idleTimer = null;
+      // Asked on every frame while the island is up, so a sound still playing (the greeting) is waited out, not cut.
+      if ([...this.playing.values()].some((voices) => voices.size > 0)) return this.idle();
       void this.ctx?.suspend();
     }, 1500);
   }
