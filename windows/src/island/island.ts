@@ -17,7 +17,7 @@ import { State } from "../core/state";
 import { islandPalette } from "../core/islandcolor";
 import { editorOf } from "../core/pills";
 import { openNoticeTarget } from "./notifications";
-import { SPOTIFY_ID, Spotify, islandDances } from "../core/spotify";
+import { SPOTIFY_ID, Spotify, islandDances, musicHint } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
@@ -79,6 +79,7 @@ export class Island {
   private botGlow!: HTMLElement;
   private greetingCanvas!: HTMLCanvasElement;
   private miniGrid!: HTMLElement;
+  private musicHintEl!: HTMLElement;
   private clockEl!: HTMLElement;
   private clockTimer?: number;
   private countdown!: HTMLElement;
@@ -151,7 +152,10 @@ export class Island {
     this.root = root;
     window.setInterval(() => this.watchFrames(), STALLED_MS);
     // The laptop's power profile: in power-saver Mochi dances slowly and does not listen for the beat (Linux; false elsewhere).
-    const readPower = () => void Bridge.powerSaver().then((saver) => { State.powerSaver = saver === true; }).catch(() => {});
+    const readPower = () => void Bridge.powerSaver().then((saver) => {
+      State.powerSaver = saver === true;
+      this.syncMusicHint();
+    }).catch(() => {});
     readPower();
     window.setInterval(readPower, 5000);
     this.desktop = new DesktopLink({
@@ -342,6 +346,7 @@ export class Island {
     this.botCanvas = h("canvas", { id: "bot-canvas" });
     this.greetingCanvas = h("canvas", { id: "greeting-canvas" });
     this.miniGrid = h("div", { id: "mini-grid" });
+    this.musicHintEl = h("span", { id: "music-hint" }, "♪");
     this.clockEl = h("div", { id: "island-clock" });
     this.countdown = h("div", { id: "countdown" });
     this.compactPlanDot = h("i", { class: "compact-plan-dot" });
@@ -396,6 +401,7 @@ export class Island {
       this.botGlow,
       this.botCanvas,
       this.miniGrid,
+      this.musicHintEl,
       this.compactPlan,
       this.clockEl,
       this.countdown,
@@ -1367,7 +1373,7 @@ export class Island {
     // Dances while music plays: always in the compact island, expanded only on
     // the music pill's card (BotCanvasView, macOS). Asked every frame.
     this.engine.setDancing(islandDances({
-      music: State.spotifyPlaying,
+      music: State.spotifyPlaying && !State.powerSaver,
       state: State.effectiveState,
       mode: State.mode,
       view: State.view,
@@ -1415,6 +1421,10 @@ export class Island {
     const remaining = (dueAt - nowMs) / 1000;
     this.countdown.style.width =
       remaining < windowS ? `${Math.max(0, clamp(remaining / windowS, 0, 1) * 160)}px` : "0px";
+  }
+
+  private syncMusicHint() {
+    this.musicHintEl.style.opacity = musicHint(State.powerSaver, State.spotifyPlaying, State.mode) ? "1" : "0";
   }
 
   // ── DOM sync ────────────────────────────────────────────────────────────────
@@ -1487,6 +1497,7 @@ export class Island {
     }
 
     this.updateClock();
+    this.syncMusicHint();
 
     syncMiniBotStates(State.tasks);
     this.engine.setState(State.effectiveState);
