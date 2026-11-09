@@ -211,7 +211,8 @@ fn now_ms() -> f64 {
 #[tauri::command]
 pub fn beat_enable(app: AppHandle, shared: State<'_, crate::Shared>, listener: State<'_, Listener>, on: bool) -> bool {
     let config = shared.settings.lock().unwrap().clone();
-    let allowed = config.beat_sync;
+    // Power-saver: no capture and no analysis (the island stops asking too, this holds if a page still does).
+    let allowed = config.beat_sync && !crate::power::saver();
     let mut slot = listener.run.lock().unwrap();
     if !(on && allowed) {
         if let Some(running) = slot.take() {

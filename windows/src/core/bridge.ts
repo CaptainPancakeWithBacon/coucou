@@ -469,6 +469,8 @@ export const Bridge = {
   /** Listens to the speakers' output for the beat, or stops. False when it cannot (or the setting is off). */
   beatEnable: (on: boolean) => call<boolean>("beat_enable", { on }),
   beatReview: () => call<void>("beat_review"),
+  /** True while the system power profile is power-saver (power-profiles-daemon, Linux); false anywhere else. */
+  powerSaver: () => call<boolean>("power_saver"),
   // ── Spotify (src-tauri/src/spotify.rs) ─────────────────────────────
   /** Reads the player again (the card came on screen) and reports it. */
   spotifyRefresh: () => call<SpotifyState | null>("spotify_refresh"),

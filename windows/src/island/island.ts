@@ -1,4 +1,4 @@
-import { PACE_MS, fastest, maxDt, pacedFrame, responsiveFrame, type Pace } from "../core/frame-clock";
+import { PACE_MS, fastest, maxDt, pacedFrame, responsiveFrame, saverPace, type Pace } from "../core/frame-clock";
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
@@ -150,6 +150,10 @@ export class Island {
   constructor(root: HTMLElement) {
     this.root = root;
     window.setInterval(() => this.watchFrames(), STALLED_MS);
+    // The laptop's power profile: in power-saver Mochi dances slowly and does not listen for the beat (Linux; false elsewhere).
+    const readPower = () => void Bridge.powerSaver().then((saver) => { State.powerSaver = saver === true; }).catch(() => {});
+    readPower();
+    window.setInterval(readPower, 5000);
     this.desktop = new DesktopLink({
       reveal: () => this.reveal(),
       wardrobeFromDesktop: () => this.wardrobeFromDesktop(),
@@ -1265,7 +1269,7 @@ export class Island {
       greetingActive || UploadSeq.isActive;
     const pace: Pace = State.mode === "hidden"
       ? (settling ? "full" : "none")
-      : fastest(moving ? "full" : "none", this.engine.activity, viewAnimating ? "smooth" : "none");
+      : saverPace(fastest(moving ? "full" : "none", this.engine.activity, viewAnimating ? "smooth" : "none"), State.powerSaver);
 
     // A running AudioContext costs an audio thread even when silent, and with music playing this loop never stops.
     Sound.idle();
@@ -1368,9 +1372,9 @@ export class Island {
       mode: State.mode,
       view: State.view,
       focusId: State.focusTask?.id,
-    }), State.settings.beatSync);
+    }), State.settings.beatSync && !State.powerSaver);
 
-    this.syncBeat(State.settings.beatSync && State.spotifyPlaying);
+    this.syncBeat(State.settings.beatSync && State.spotifyPlaying && !State.powerSaver);
 
     this.engine.update(dt);
     // Cleared in device pixels, the whole canvas. At a fractional scale (150 %)

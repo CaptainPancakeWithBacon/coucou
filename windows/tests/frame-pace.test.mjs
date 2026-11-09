@@ -1,6 +1,6 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { PACE_MS, fastest, maxDt, pacedFrame } from "../src/core/frame-clock.ts";
+import { PACE_MS, fastest, maxDt, pacedFrame, saverPace } from "../src/core/frame-clock.ts";
 import { BotEngine } from "../src/mochi/engine.ts";
 
 // ── How often a loop draws, by how much it needs to ────────────────────────────
@@ -23,6 +23,18 @@ test("a slower pace may take a longer time step, so the animation keeps its spee
   assert.equal(maxDt("full"), 0.05, "the old limit is untouched at full speed");
   assert.ok(maxDt("smooth") >= 0.05);
   assert.ok(maxDt("ambient") >= PACE_MS.ambient * 1.5 / 1000, "a 15 fps frame fits in one step");
+});
+
+test("power-saver slows a loop to about 8 fps and leaves everything else alone", () => {
+  assert.ok(PACE_MS.slow >= 110 && PACE_MS.slow <= 140, "slow is about 8 fps");
+  assert.equal(saverPace("smooth", true), "slow");
+  assert.equal(saverPace("ambient", true), "slow");
+  assert.equal(saverPace("full", true), "full", "a state change or a tween still gets every frame");
+  assert.equal(saverPace("none", true), "none");
+  for (const pace of ["full", "smooth", "ambient", "slow", "none"]) assert.equal(saverPace(pace, false), pace, `${pace} off power-saver`);
+  assert.equal(fastest("slow", "none"), "slow");
+  assert.equal(fastest("slow", "ambient"), "ambient");
+  assert.ok(maxDt("slow") >= PACE_MS.slow * 1.5 / 1000, "an 8 fps frame fits in one step");
 });
 
 function withTimers(fn) {

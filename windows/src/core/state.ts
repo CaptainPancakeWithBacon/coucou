@@ -251,6 +251,8 @@ export const DIFF_TTL_MS = 3_600_000;
 
 class AppState {
   mode: IslandMode = "hidden";
+  /** The laptop is in power-saver: Mochi dances slowly and does not listen for the beat. */
+  powerSaver = false;
   view: IslandViewName = "overview";
 
   tasks: AgentTask[] = [];
