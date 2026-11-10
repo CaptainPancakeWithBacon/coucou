@@ -4,6 +4,7 @@
 // (design/prototype/notch-buddy.html, the visual source of truth) — the Swift
 // arc angles produce a different shape.
 
+import type { Pace } from "../core/frame-clock";
 import { Ease, lerp, type EaseFn } from "../core/anim";
 import { beatPosition, danceCalm, beatPresentation, beatEpisode } from "./beat";
 import { Sound } from "../core/sound";
@@ -606,26 +607,36 @@ export class BotEngine {
     return !this.isMini && this.outfit !== "none" && this.outfitPresence > 0.05;
   }
 
-  /** True while anything is still moving — lets the island stop its RAF loop. */
-  get busy(): boolean {
-    return (
+  /**
+   * What the island's frame loop needs from Mochi. "full": something is on its way somewhere (a tween, a spring settling, a colour change,
+   * sparkles). "smooth": looping motion that wants fluid frames (dancing, bounces, scanning, mini bots). "ambient": slow loops (breathing,
+   * sleeping z's, sweat). "none": still. A loop's own side effects (the springs it keeps nudging, the z's it emits) do not count as "on its way".
+   */
+  get activity(): Pace {
+    const dancing = this.isDancing || this.dancingLevel > 0 || this.beatStopping || this.beatQuestionLevel > 0 || this.beatConfusedLevel > 0;
+    const breathing = this.cfg.breathes || this.isMini;   // these drive the squash springs
+    const scanning = this.cfg.scans;
+    const onItsWay =
       this.tweens.size > 0 ||
-      this.particles.length > 0 ||
-      this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat ||
-      this.isMini ||
-      this.isDancing || this.dancingLevel > 0 || this.beatStopping || this.beatQuestionLevel > 0 || this.beatConfusedLevel > 0 ||
-      Math.abs(this.tgYaw - this.yaw) > 0.002 ||
-      Math.abs(this.tgPitch - this.pitch) > 0.002 ||
-      Math.abs(this.tgTilt - this.tilt) > 0.002 ||
-      Math.abs(this.tgSy - this.sy) > 0.002 ||
-      Math.abs(this.tgSx - this.sx) > 0.002 ||
+      this.particles.some((p) => p.type !== "z" && p.type !== "sweat") ||
+      (!scanning && (Math.abs(this.tgYaw - this.yaw) > 0.002 || Math.abs(this.tgPitch - this.pitch) > 0.002)) ||
+      (!dancing && Math.abs(this.tgTilt - this.tilt) > 0.002) ||
+      (!breathing && (Math.abs(this.tgSy - this.sy) > 0.002 || Math.abs(this.tgSx - this.sx) > 0.002)) ||
       Math.abs(this.tgEs - this.es) > 0.002 ||
       this.slotH > 0.001 || Math.abs(this.slotHVel) > 0.001 ||
       Math.abs(this.col[0] - this.colT[0]) > 0.003 ||
       Math.abs(this.col[1] - this.colT[1]) > 0.003 ||
       Math.abs(this.col[2] - this.colT[2]) > 0.003 ||
-      (this.outfit !== "none" && (Math.abs(this.physVx) > 0.01 || Math.abs(this.physVy) > 0.01))
-    );
+      (!dancing && this.outfit !== "none" && (Math.abs(this.physVx) > 0.01 || Math.abs(this.physVy) > 0.01));
+    if (onItsWay) return "full";
+    if (dancing || scanning || this.cfg.bounces || this.isMini) return "smooth";
+    if (this.cfg.breathes || this.cfg.zz || this.cfg.sweat || this.particles.length > 0) return "ambient";
+    return "none";
+  }
+
+  /** True while anything is still moving — lets the island stop its loop. */
+  get busy(): boolean {
+    return this.activity !== "none";
   }
 
   // ── Tweens ──────────────────────────────────────────────────────────────────

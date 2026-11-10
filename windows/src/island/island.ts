@@ -1,4 +1,4 @@
-import { responsiveFrame } from "../core/frame-clock";
+import { PACE_MS, fastest, maxDt, pacedFrame, responsiveFrame, saverPace, type Pace } from "../core/frame-clock";
 // The island: DOM shell, sizing animation, Mochi placement, mouse handling.
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
@@ -17,7 +17,7 @@ import { State } from "../core/state";
 import { islandPalette } from "../core/islandcolor";
 import { editorOf } from "../core/pills";
 import { openNoticeTarget } from "./notifications";
-import { SPOTIFY_ID, Spotify, islandDances } from "../core/spotify";
+import { SPOTIFY_ID, Spotify, islandDances, musicHint } from "../core/spotify";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
@@ -79,6 +79,7 @@ export class Island {
   private botGlow!: HTMLElement;
   private greetingCanvas!: HTMLCanvasElement;
   private miniGrid!: HTMLElement;
+  private musicHintEl!: HTMLElement;
   private clockEl!: HTMLElement;
   private clockTimer?: number;
   private countdown!: HTMLElement;
@@ -150,6 +151,13 @@ export class Island {
   constructor(root: HTMLElement) {
     this.root = root;
     window.setInterval(() => this.watchFrames(), STALLED_MS);
+    // The laptop's power profile: in power-saver Mochi dances slowly and does not listen for the beat (Linux; false elsewhere).
+    const readPower = () => void Bridge.powerSaver().then((saver) => {
+      State.powerSaver = saver === true;
+      this.syncMusicHint();
+    }).catch(() => {});
+    readPower();
+    window.setInterval(readPower, 5000);
     this.desktop = new DesktopLink({
       reveal: () => this.reveal(),
       wardrobeFromDesktop: () => this.wardrobeFromDesktop(),
@@ -338,6 +346,7 @@ export class Island {
     this.botCanvas = h("canvas", { id: "bot-canvas" });
     this.greetingCanvas = h("canvas", { id: "greeting-canvas" });
     this.miniGrid = h("div", { id: "mini-grid" });
+    this.musicHintEl = h("span", { id: "music-hint" }, "♪");
     this.clockEl = h("div", { id: "island-clock" });
     this.countdown = h("div", { id: "countdown" });
     this.compactPlanDot = h("i", { class: "compact-plan-dot" });
@@ -392,6 +401,7 @@ export class Island {
       this.botGlow,
       this.botCanvas,
       this.miniGrid,
+      this.musicHintEl,
       this.compactPlan,
       this.clockEl,
       this.countdown,
@@ -1141,7 +1151,9 @@ export class Island {
    * itself until frames flow again.
    */
   private watchFrames() {
-    if (!this.running || performance.now() - this.lastFrame < STALLED_MS) return;
+    // A throttled loop has longer gaps between frames by design; only a gap well beyond its own pace is a stall.
+    const gap = Math.max(STALLED_MS, (this.pace === "none" ? 0 : PACE_MS[this.pace]) * 2 + 40);
+    if (!this.running || performance.now() - this.lastFrame < gap) return;
     // The non-activating transparent window can have its rAF throttled off-hover.
     // A queued rAF must not cancel/restart the watchdog frame mid-render.
     this.frame(performance.now());
@@ -1166,6 +1178,9 @@ export class Island {
   };
 
   private loggedErrors = new Set<string>();
+  /** How fast the loop was asked to run when it scheduled the frame now drawing (see frame-clock.ts). */
+  private pace: Pace = "full";
+  private lastOpacity = -1;
 
   /** Paints the island's background from the settings: black, a tint of the system accent, or the pick. */
   private applyColor() {
@@ -1192,10 +1207,13 @@ export class Island {
     // Apply opacity to the complete island (content, Mochi, borders, shadows).
     // Never dim the transparent window container or its hit-testing region.
     const opacity = Math.max(50, Math.min(100, State.settings.islandOpacity ?? 100)) / 100;
-    this.islandEl.style.opacity = String(opacity);
+    if (opacity !== this.lastOpacity) {
+      this.lastOpacity = opacity;
+      this.islandEl.style.opacity = String(opacity);
+    }
     // One chain only: a frame forced by the watchdog replaces the pending one.
     this.cancelFrame();
-    const dt = Math.min(0.05, (nowMs - this.lastFrame) / 1000);
+    const dt = Math.min(maxDt(this.pace), (nowMs - this.lastFrame) / 1000);
     this.lastFrame = nowMs;
 
     this.width.step(dt, nowMs);
@@ -1250,17 +1268,23 @@ export class Island {
     // spends most of its life in. Geometry still has to finish retracting.
     const settling =
       this.width.animating || this.height.animating || this.radius.animating;
-    const busy = State.mode === "hidden"
-      ? settling
-      : settling ||
-        !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || UploadSeq.isActive || viewAnimating;
+    // Motion on its way somewhere needs every frame. A loop (breathing, dancing, a scrolling title) only needs enough of them to look
+    // alive: the island stays visible, so drawing it at the display rate for ever costs about half a core of software painting.
+    const moving = settling ||
+      !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
+      greetingActive || UploadSeq.isActive;
+    const pace: Pace = State.mode === "hidden"
+      ? (settling ? "full" : "none")
+      : saverPace(fastest(moving ? "full" : "none", this.engine.activity, viewAnimating ? "smooth" : "none"), State.powerSaver);
 
-    if (busy) {
-      this.cancelFrame = responsiveFrame(this.frame);
+    // A running AudioContext costs an audio thread even when silent, and with music playing this loop never stops.
+    Sound.idle();
+    if (pace !== "none") {
+      this.pace = pace;
+      this.cancelFrame = pacedFrame(this.frame, pace, nowMs);
     } else {
       this.running = false;
-      Sound.idle();
+      this.pace = "full";
     }
   };
 
@@ -1349,14 +1373,14 @@ export class Island {
     // Dances while music plays: always in the compact island, expanded only on
     // the music pill's card (BotCanvasView, macOS). Asked every frame.
     this.engine.setDancing(islandDances({
-      music: State.spotifyPlaying,
+      music: State.spotifyPlaying && !State.powerSaver,
       state: State.effectiveState,
       mode: State.mode,
       view: State.view,
       focusId: State.focusTask?.id,
-    }), State.settings.beatSync);
+    }), State.settings.beatSync && !State.powerSaver);
 
-    this.syncBeat(State.settings.beatSync && State.spotifyPlaying);
+    this.syncBeat(State.settings.beatSync && State.spotifyPlaying && !State.powerSaver);
 
     this.engine.update(dt);
     // Cleared in device pixels, the whole canvas. At a fractional scale (150 %)
@@ -1397,6 +1421,10 @@ export class Island {
     const remaining = (dueAt - nowMs) / 1000;
     this.countdown.style.width =
       remaining < windowS ? `${Math.max(0, clamp(remaining / windowS, 0, 1) * 160)}px` : "0px";
+  }
+
+  private syncMusicHint() {
+    this.musicHintEl.style.opacity = musicHint(State.powerSaver, State.spotifyPlaying, State.mode) ? "1" : "0";
   }
 
   // ── DOM sync ────────────────────────────────────────────────────────────────
@@ -1469,6 +1497,7 @@ export class Island {
     }
 
     this.updateClock();
+    this.syncMusicHint();
 
     syncMiniBotStates(State.tasks);
     this.engine.setState(State.effectiveState);

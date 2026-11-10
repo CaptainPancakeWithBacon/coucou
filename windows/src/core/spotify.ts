@@ -132,6 +132,11 @@ export function islandDances(o: {
   return o.mode === "expanded" && o.view === "overview" && o.focusId === SPOTIFY_ID;
 }
 
+/** In power-saver Mochi does not dance (a dance is 8 frames a second of painting for ever); a small still note says the music is on instead. */
+export function musicHint(powerSaver: boolean, music: boolean, mode: IslandMode): boolean {
+  return powerSaver && music && mode === "compact";
+}
+
 /** Mochi on the desktop: the compact island's rules (DesktopMochi.swift). */
 export function desktopDances(music: boolean, state: BotStateName): boolean {
   return music && DANCE_STATES.has(state);

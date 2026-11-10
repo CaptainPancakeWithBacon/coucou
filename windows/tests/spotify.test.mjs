@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { emit, sent } from "./tauri.mjs";
 import { installFakeDom } from "./fakedom.mjs";
 import {
-  IDLE_SPOTIFY, SPOTIFY_ID, Spotify, currentArtwork, desktopDances, formatTime, isAd, islandDances,
+  IDLE_SPOTIFY, SPOTIFY_ID, Spotify, currentArtwork, desktopDances, formatTime, isAd, islandDances, musicHint,
   musicPlaying, spotifyPosition, volumeLevel, withPlaying, reconcileSpotify,
 } from "../src/core/spotify.ts";
 import { BotEngine, danceTransform, stepDanceLevel, danceEase } from "../src/mochi/engine.ts";
@@ -463,4 +463,12 @@ test("dragging sends the final volume in order and remote readbacks do not move 
     ]);
     mock.timers.tick(120);
   } finally { mock.timers.reset(); }
+});
+
+test("power-saver: Mochi stands still and a small note shows in the compact island while music plays", () => {
+  assert.equal(musicHint(true, true, "compact"), true);
+  assert.equal(musicHint(false, true, "compact"), false, "normal power: he dances instead");
+  assert.equal(musicHint(true, false, "compact"), false, "no music, no note");
+  assert.equal(musicHint(true, true, "expanded"), false, "the open island has the music card");
+  assert.equal(musicHint(true, true, "hidden"), false);
 });

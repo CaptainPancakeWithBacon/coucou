@@ -43,6 +43,8 @@ class SoundEngine {
       master.connect(ctx.destination);
       this.master = master;
       await this.loadAll(ctx);
+      // Nothing plays yet, and a running context costs an audio thread for as long as the window lives; play() wakes it.
+      this.idle();
     })();
     return this.loading;
   }
@@ -104,6 +106,8 @@ class SoundEngine {
     if (!this.ctx || this.ctx.state !== "running" || this.idleTimer != null) return;
     this.idleTimer = window.setTimeout(() => {
       this.idleTimer = null;
+      // Asked on every frame while the island is up, so a sound still playing (the greeting) is waited out, not cut.
+      if ([...this.playing.values()].some((voices) => voices.size > 0)) return this.idle();
       void this.ctx?.suspend();
     }, 1500);
   }

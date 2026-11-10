@@ -4,6 +4,7 @@ mod accent;
 mod agent_hooks;
 mod agents;
 mod beat;
+mod power;
 mod chat;
 mod claude;
 mod claude_code;
@@ -1206,6 +1207,7 @@ pub fn run() {
             sounds::reload_sounds,
             beat::beat_enable,
             beat::beat_review,
+            power::power_saver,
             spotify::spotify_refresh,
             spotify::spotify_control,
             spotify::spotify_open,
